@@ -1,0 +1,57 @@
+{
+  "name": "ador-ui",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@testing-library/jest-dom": "^5.11.4",
+    "@testing-library/react": "^11.1.0",
+    "@testing-library/user-event": "^12.1.10",
+    "antd": "^3.24.2",
+    "dexie": "^3.0.3",
+    "i18next": "^20.2.4",
+    "i18next-http-backend": "^1.4.0",
+    "moment": "^2.29.4",
+    "moment-timezone": "^0.5.43",
+    "mqtt": "^4.2.8",
+    "qrcode": "^1.5.4",
+    "react": "^17.0.1",
+    "react-dom": "^17.0.1",
+    "react-i18next": "^11.8.15",
+    "react-router-dom": "^5.1.2",
+    "react-scripts": "^3.3.0",
+    "reconnecting-websocket": "^4.4.0"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "plainbuild": "react-scripts build",
+    "postbuild": "node ./buildscripts/postbuild/postbuild.js",
+    "test": "react-scripts test",
+    "test:ci": "npm run test -- --testResultsProcessor=\"jest-junit\" --watchAll=false",
+    "eject": "react-scripts eject"
+  },
+  "eslintConfig": {
+    "extends": "react-app"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^8.17.1",
+    "jest-junit": "^14.0.1"
+  },
+  "jest": {
+    "moduleNameMapper": {
+      "react-i18next": "<rootDir>/src/__mocks__/react-i18next.js"
+    }
+  }
+}

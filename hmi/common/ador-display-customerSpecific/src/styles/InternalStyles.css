@@ -1,0 +1,16 @@
+.redbox {
+  width: 93%;
+  background-color: #e62518;
+  border-radius: 0.781vw;
+  border: 0.156vw solid #0070c0;
+  cursor: pointer;
+  display: inline-block;
+  font-size: 1.563vw;
+  padding: 0.391vw 0 0.391vw 1.563vw;
+  text-align: left;
+  text-decoration: none;
+}
+
+button:active:not([disabled]) {
+  transform: scale(0.98);
+}

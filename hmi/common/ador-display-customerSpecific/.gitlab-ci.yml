@@ -1,0 +1,83 @@
+stages:
+  - build
+  - test
+  - compress
+  - package
+  - deploy
+
+build:
+  stage: build
+  image: node:14-alpine
+  script:
+    - yarn
+    - apk update && apk add git
+    - CI=false yarn build
+  artifacts:
+    paths:
+      - build
+
+test:
+  image: node:lts-alpine
+  stage: test
+  artifacts:
+    reports:
+      junit: junit.xml
+  script:
+    - yarn
+    - apk update && apk add git
+    - CI=false yarn test:ci
+
+compress:
+  stage: compress
+  image: alpine
+  artifacts:
+    paths:
+      - display_$(git describe --dirty).tgz
+  script:
+    - apk add --no-cache git
+    - tar czf display_$(git describe --dirty).tgz build
+
+package:
+  image: debian:stable-slim
+  stage: package
+  artifacts:
+    paths:
+      - package/display_$(git describe).deb
+      - package/display_$(git describe)/DEBIAN/control
+  dependencies:
+    - build
+  script:
+    - apt-get update && apt-get install git -y
+    - ./package/package.sh
+
+deploy:docker:
+  retry: 2
+  image: docker:latest
+  services:
+    - docker:dind
+  only:
+    - master
+  stage: deploy
+  before_script:
+    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
+  dependencies:
+    - build
+  script:
+    - docker build -t registry.gitlab.com/ecog/projects/ador-ui:master .
+    - docker push registry.gitlab.com/ecog/projects/ador-ui:master
+
+deploy:docker-dev:
+  retry: 2
+  image: docker:latest
+  services:
+    - docker:dind
+  only:
+    - dev
+  stage: deploy
+  before_script:
+    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
+  dependencies:
+    - build
+  script:
+    - docker build -t registry.gitlab.com/ecog/projects/ador-ui:dev .
+    - docker push registry.gitlab.com/ecog/projects/ador-ui:dev

@@ -1,0 +1,117 @@
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* background: #ECE9E6;  /* fallback for old browsers */
+  /* background: -webkit-linear-gradient(to right, #FFFFFF, #ECE9E6);  /* Chrome 10-25, Safari 5.1-6 */
+  /* background: linear-gradient(to right, #FFFFFF, #ECE9E6); /* W3C, IE 10+/ Edge, Firefox 16+, Chrome 26+, Opera 12+, Safari 7+ */
+}
+
+.container {
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.action-button {
+  height: 40%;
+  /* background: blue; */
+}
+
+.btn-txt {
+  font-size: 1.4rem;
+}
+
+.styled-button {
+  width: 50% !important;
+  height: 100% !important;
+  font-size: 1.4rem;
+}
+
+.display-title {
+  font-size: 3rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-align: center;
+  top: 23px;
+}
+
+#footer-txt {
+  font-size: 2rem;
+  font-weight: 100;
+  letter-spacing: 0.1em;
+  text-align: center;
+}
+
+@keyframes carAnimation {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@-o-keyframes carAnimation {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@-moz-keyframes carAnimation {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@-webkit-keyframes carAnimation {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+.animate-car {
+  -webkit-animation: carAnimation 2.5s infinite;
+  -moz-animation: carAnimation 2.5s infinite;
+  -o-animation: carAnimation 2.5s infinite;
+  animation: carAnimation 2.5s infinite;
+}
+
+.footer {
+  text-align: center;
+  background-color: #2296f3;
+  color: white;
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.footer-txt {
+  margin-left: 5px;
+  color: #fff;
+  font-weight: bold;
+  font-size: 1.5rem;
+  vertical-align: text-bottom;
+}

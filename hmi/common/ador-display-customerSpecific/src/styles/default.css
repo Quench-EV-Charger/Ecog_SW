@@ -1,0 +1,27 @@
+/*
+  EcoG Display CSS definitions 2022-07-27
+  These rules ensure consistent user behavior with a touch screen
+  Please include like <link rel="stylesheet" href="default.css">
+
+  To the maximum extent permitted by applicable law, in no event shall
+  EcoG GmbH or its suppliers be liable for any special, incidental, 
+  indirect, or consequential damages whatsoever (including, but not 
+  limited to, damages for loss of profits, loss of data or other information,
+  for business interruption, for personal injury, loss of privacy arising
+  out of or in any way related to the use of or inability to use the 
+  Application, third-party software and/or third-party hardware used 
+  with the Application, or otherwise in connection with any provision 
+  of this Agreement), even if EcoG GmbH or any supplier has been 
+  advised of the possibility of such damages and even if the remedy
+  fails of its essential purpose.
+*/
+
+html,
+body {
+  overscroll-behavior-x: none;
+  touch-action: none;
+  user-select: none;
+  cursor: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}

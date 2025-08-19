@@ -1,0 +1,69 @@
+{
+  "checkSECC": "10.20.27.100",
+  "comboMode": false,
+  "___POSSIBLE_TIMEZONES___": "https://en.wikipedia.org/wiki/List_of_tz_database_time_zones",
+  "timezone": "Asia/Kolkata",
+  "branding": {
+    "enable": true,
+    "brandingLogo": {
+      "lightTheme": "Maruti_logo.png",
+      "darkTheme": "Maruti_logo.png"
+    }
+  },
+  "chargingBackground": {
+    "images": [
+      "india_1-min.jpg",
+      "india_2-min.jpg",
+      "india_3-min.jpg",
+      "india_4-min.jpg",
+      "india_5-min.jpg",
+      "india_6-min.jpeg",
+      "india_7-min.jpg"
+    ],
+    "changeFreqSec": 4,
+    "changeRandomly": true
+  },
+  "languages": [
+    {
+      "key": "en",
+      "displayValue": "English"
+    }
+  ],
+  "rebootTimeSec": 300,
+  "timeToGoHomeSec": 60,
+  "timeToGoScreensaverSec": 120,
+  "API": "http://localhost:3001",
+  "socketUrl": "ws://localhost:3001",
+  "useAnimation": {
+    "enableOnBoot": false,
+    "onBootTimeSec": 60,
+    "enableOnStartingPage": false,
+    "enableOnRebootScreen": false,
+    "video": "quench-animation.mp4"
+  },
+  "useQAsOutletID": false,
+  "isRfidFlow": false,
+  "screen_resolution": "1280x720",
+  "errorCodes": {
+    "997": {
+      "code": "997",
+      "localizationCode": "ERR_UNDER_VOLTAGE"
+    },
+    "998": {
+      "code": "998",
+      "localizationCode": "ERR_POWER_MODULE_FAILURE"
+    },
+    "999": {
+      "code": "999",
+      "localizationCode": "ERR_OVER_VOLTAGE"
+    }
+  },
+  "uiConfiguration":{
+    "theme": "dark",
+    "otpEnable":false,
+    "qrCode": {
+      "qrCodeEnabled": false,
+      "QRHashStr": "62987db08f88870e6524d06a_GJ0053"
+    }
+  }
+}

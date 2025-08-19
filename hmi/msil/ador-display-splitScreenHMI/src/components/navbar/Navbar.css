@@ -1,0 +1,42 @@
+.futuristic-menu {
+  background: var(--menu-bg) !important;
+  border: 1px solid var(--menu-border);
+  border-radius: 10px;
+}
+
+/* Disabled */
+.ant-dropdown-menu-item-disabled {
+  opacity: 0.2;
+  cursor: not-allowed;
+  color: var(--menu-text-disabled) !important;
+  background: transparent !important;
+}
+
+/* Active items */
+.ant-dropdown-menu-item:not(.ant-dropdown-menu-item-disabled) {
+  color: var(--menu-text) !important;
+  font-weight: 500;
+}
+
+/* Hover for active */
+.ant-dropdown-menu-item:not(.ant-dropdown-menu-item-disabled):hover {
+  background-color: var(--menu-hover-bg);
+  color: var(--menu-text) !important;
+}
+
+/* Selected item */
+.ant-dropdown-menu-item-selected {
+  background-color: var(--menu-selected-bg) !important;
+  color: var(--menu-text) !important;
+  font-weight: 700;
+}
+
+.ant-dropdown-menu-item-selected:hover {
+  background-color: rgba(255, 255, 255, 0.3) !important;
+  color: var(--menu-text) !important;
+}
+
+/* Dropdown container */
+.ant-dropdown {
+  box-shadow: var(--menu-shadow);
+}

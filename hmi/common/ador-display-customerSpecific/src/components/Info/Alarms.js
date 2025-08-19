@@ -81,7 +81,7 @@ class Alarms extends Component {
             "26":"Input Supply",
             "27":"Gun Temp Sensor",
             "30":"Grounding",
-
+            "84":"IMD Resistance Error"
         };
         //console.log(errorCodeList[ec]);
         return errorCodeList[ec]?errorCodeList[ec]:"-";

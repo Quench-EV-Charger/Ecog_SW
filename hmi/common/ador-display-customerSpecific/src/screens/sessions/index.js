@@ -7,6 +7,7 @@ import Navbar from "../../components/navbar";
 import SessionsFooter from "../../components/Sessions/SessionsFooter";
 import EmergencyStop from "../../components/EmergencyStop";
 import PowerFailure from "../../components/PowerFailure";
+import IMDFault from "../../components/IMDFault";
 import Session from "../../components/Sessions/Session";
 import AlertBox from "../../components/AlertBox"
 import { Button } from "antd";

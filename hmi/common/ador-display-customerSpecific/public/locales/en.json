@@ -123,6 +123,7 @@
   "SINGLE_OUTLET_TEMP": "OutletTempHigh",
   "POWER_MODULE_COMM_GUN_A": "PowerModuleCommError - Gun A",
   "POWER_MODULE_COMM_GUN_B": "PowerModuleCommError - Gun B",
+  "IMD_RESISTANCE_ERR": "IMD_ResistanceError",
   "POWER_MODULE_COMM": "PowerModuleCommError",
   "ERR_DC_FUSE": "OutputFuseFail - Gun {{gun}}",
   "BMS_COMMUNICATION_TIMEOUT": "EV disconnected. Please unplug and try again <br/> Gun {{gun}}",

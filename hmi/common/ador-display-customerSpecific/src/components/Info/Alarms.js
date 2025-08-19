@@ -75,7 +75,7 @@ class Alarms extends Component {
             "6":"J11:16 Temp Sensor",
             "18":"Door limit switch",
             "15":"PowerModule",
-            "19":"MCCB",
+            "19":"Input Supply",
             "24":"RFID reader",
             "21":"Input Supply",
             "26":"Input Supply",

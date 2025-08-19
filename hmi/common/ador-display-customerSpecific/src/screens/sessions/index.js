@@ -360,7 +360,16 @@ class Sessions extends Component {
             )}
             <EmergencyStop shown={context.showEStop} />
             <PowerFailure shown={context.errorCode === "powerloss"} />
-            <AlertBox
+            <IMDFault
+                shown={
+                  Boolean(
+                    context?.chargerState?.[0]?.errorObj?.imdResistanceErr_1 ||
+                    context?.chargerState?.[1]?.errorObj?.imdResistanceErr_2
+                  )
+                }
+                gun1HasIMD={Boolean(context?.chargerState?.[0]?.errorObj?.imdResistanceErr_1)}
+                gun2HasIMD={Boolean(context?.chargerState?.[1]?.errorObj?.imdResistanceErr_2)}
+              />            <AlertBox
               iconType="warning"
               display={context.showHandshakeErrorModal && context.selectedState?.pilot > 0}
               onClose={() => context.setShowHandshakeErrorModal(false)}

@@ -102,7 +102,7 @@ const UVTripState = {
 };
 
 var Constants = {
-  OVThresh: 477,
+  OVThresh: 490,
   UVThresh: 320,
   UV_OV_Hysteresis: 5,
   powermoduleundervoltage: 200

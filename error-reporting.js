@@ -842,14 +842,7 @@ let firstUnhealthyIMDData = {
 };
 
 async function checkIMDResistance(states, iostate) {
-  // BEFORE FIX: No protection against concurrent access to firstUnhealthyIMDData
-  // AFTER FIX: Added mutex check to prevent race conditions
-  if (firstUnhealthyIMDData.isProcessing) {
-    return; // Skip if another process is already modifying the data
-  }
-  
   try {
-    firstUnhealthyIMDData.isProcessing = true; // Acquire mutex
     const outlet0 = states[0] || {};
     const outlet1 = states[1] || {};
     const currentTime = Date.now();
@@ -871,6 +864,7 @@ async function checkIMDResistance(states, iostate) {
     // Check if both guns are charging
     const isDualCharging =
       isGunInValidState(outlet0) && isGunInValidState(outlet1);
+    const isSingleCharging = (isGunInValidState(outlet0) && !isGunInValidState(outlet1)) || (!isGunInValidState(outlet0) && isGunInValidState(outlet1));
 
     // Get IMD resistance values for both guns
     const gun1Data = iostate.controller1
@@ -904,13 +898,13 @@ async function checkIMDResistance(states, iostate) {
     // Check unhealthy state for both guns
     if (gun1Data) {
       gun1Data.isUnhealthy =
-        gun1Data.negativeResistance === IMD_CONSTANTS.UNHEALTHY_RESISTANCE ||
-        gun1Data.positiveResistance === IMD_CONSTANTS.UNHEALTHY_RESISTANCE;
+        gun1Data.negativeResistance !== IMD_CONSTANTS.HEALTHY_THRESHOLD ||
+        gun1Data.positiveResistance !== IMD_CONSTANTS.HEALTHY_THRESHOLD;
     }
     if (gun2Data) {
       gun2Data.isUnhealthy =
-        gun2Data.negativeResistance === IMD_CONSTANTS.UNHEALTHY_RESISTANCE ||
-        gun2Data.positiveResistance === IMD_CONSTANTS.UNHEALTHY_RESISTANCE;
+        gun2Data.negativeResistance !== IMD_CONSTANTS.HEALTHY_THRESHOLD ||
+        gun2Data.positiveResistance !== IMD_CONSTANTS.HEALTHY_THRESHOLD;
     }
 
     // Handle dual charging scenario
@@ -918,14 +912,16 @@ async function checkIMDResistance(states, iostate) {
       // If no gun is marked as first unhealthy yet
       if (firstUnhealthyIMDData.gun === null) {
         // Check which gun showed unhealthy first
-        if ((gun1Data && gun1Data.isUnhealthy) && (gun2Data && !gun2Data.isUnhealthy)) {
+        if (gun1Data && gun1Data.isUnhealthy && gun2Data && !gun2Data.isUnhealthy) {
           firstUnhealthyIMDData.gun = 1;
           firstUnhealthyIMDData.timestamp = currentTime;
           console.log(
             "During dual charging - Gun 1 first showed unhealthy IMD at:",
             new Date(currentTime).toISOString()
           );
-        } else if ((gun1Data && !gun1Data.isUnhealthy) && (gun2Data && gun2Data.isUnhealthy)) {
+        }
+
+        if (gun2Data && gun2Data.isUnhealthy && gun1Data && !gun1Data.isUnhealthy) {
           firstUnhealthyIMDData.gun = 2;
           firstUnhealthyIMDData.timestamp = currentTime;
           console.log(
@@ -986,11 +982,11 @@ async function checkIMDResistance(states, iostate) {
             );
             const gun1States = states.filter((state) => state.outlet == 1);
             if (gun1States.length > 0) {
-              // await trip(gun1States, {
-              //   msg: "ERR_IMD_RESISTANCE",
-              //   code: "995",
-              //   stopReason: "IMDResistanceError",
-              // });
+              await trip(gun1States, {
+                msg: "ERR_IMD_RESISTANCE",
+                code: "75",
+                stopReason: "IMDResistanceError",
+              });
               firstUnhealthyIMDData.isTripped = true;
             }
           }
@@ -1010,44 +1006,21 @@ async function checkIMDResistance(states, iostate) {
             );
             const gun2States = states.filter((state) => state.outlet == 2);
             if (gun2States.length > 0) {
-              // await trip(gun2States, {
-              //   msg: "ERR_IMD_RESISTANCE",
-              //   code: "995",
-              //   stopReason: "IMDResistanceError",
-              // });
+              await trip(gun2States, {
+                msg: "ERR_IMD_RESISTANCE",
+                code: "75",
+                stopReason: "IMDResistanceError",
+              });
               firstUnhealthyIMDData.isTripped = true;
             }
-          }
-        }
-        
-        // Reset counters if both guns show healthy resistance during dual charging
-        if (!gun1Data.isUnhealthy && !gun2Data.isUnhealthy) {
-          // Reset gun 1 counter if it was the first unhealthy
-          if (firstUnhealthyIMDData.gun === 1 && !errorObj.imdResistanceErr_1) {
-            errorObjCount.imdResistanceErr_1 = 0;
-          }
-          // Reset gun 2 counter if it was the first unhealthy
-          if (firstUnhealthyIMDData.gun === 2 && !errorObj.imdResistanceErr_2) {
-            errorObjCount.imdResistanceErr_2 = 0;
-          }
-          // Reset tracking data if not already tripped
-          if (!firstUnhealthyIMDData.isTripped) {
-            firstUnhealthyIMDData = {
-              gun: null,
-              timestamp: null,
-              isTripped: false,
-              gpioConfirmed: false,
-            };
           }
         }
       }
     }
     // Handle single gun charging
-    else {
+    else if(isSingleCharging) {
       // Process Gun 1
-      // BEFORE FIX: No null check for gun1Data before accessing isUnhealthy
-      // AFTER FIX: Added null check to prevent potential null reference error
-      if (iostate.controller1 && isGunInValidState(outlet0) && gun1Data) {
+      if (iostate.controller1 && isGunInValidState(outlet0)) {
         if (gun1Data.isUnhealthy) {
           if (firstUnhealthyIMDData.gun === null) {
             firstUnhealthyIMDData.gun = 1;
@@ -1086,34 +1059,18 @@ async function checkIMDResistance(states, iostate) {
               if (gun1States.length > 0) {
                 await trip(gun1States, {
                   msg: "ERR_IMD_RESISTANCE",
-                  code: "995",
+                  code: "75",
                   stopReason: "IMDResistanceError",
                 });
                 firstUnhealthyIMDData.isTripped = true;
               }
             }
           }
-        } else {
-          // Reset counter if resistance returns to healthy while gun is still in valid state
-          if (firstUnhealthyIMDData.gun === 1 && !errorObj.imdResistanceErr_1) {
-            errorObjCount.imdResistanceErr_1 = 0;
-            // Only reset the tracking data if not already tripped
-            if (!firstUnhealthyIMDData.isTripped) {
-              firstUnhealthyIMDData = {
-                gun: null,
-                timestamp: null,
-                isTripped: false,
-                gpioConfirmed: false,
-              };
-            }
-          }
         }
       }
 
       // Process Gun 2
-      // BEFORE FIX: No null check for gun2Data before accessing isUnhealthy
-      // AFTER FIX: Added null check to prevent potential null reference error
-      if (iostate.controller2 && isGunInValidState(outlet1) && gun2Data) {
+      if (iostate.controller2 && isGunInValidState(outlet1)) {
         if (gun2Data.isUnhealthy) {
           if (firstUnhealthyIMDData.gun === null) {
             firstUnhealthyIMDData.gun = 2;
@@ -1152,25 +1109,11 @@ async function checkIMDResistance(states, iostate) {
               if (gun2States.length > 0) {
                 await trip(gun2States, {
                   msg: "ERR_IMD_RESISTANCE",
-                  code: "995",
+                  code: "75",
                   stopReason: "IMDResistanceError",
                 });
                 firstUnhealthyIMDData.isTripped = true;
               }
-            }
-          }
-        } else {
-          // Reset counter if resistance returns to healthy while gun is still in valid state
-          if (firstUnhealthyIMDData.gun === 2 && !errorObj.imdResistanceErr_2) {
-            errorObjCount.imdResistanceErr_2 = 0;
-            // Only reset the tracking data if not already tripped
-            if (!firstUnhealthyIMDData.isTripped) {
-              firstUnhealthyIMDData = {
-                gun: null,
-                timestamp: null,
-                isTripped: false,
-                gpioConfirmed: false,
-              };
             }
           }
         }
@@ -1202,11 +1145,6 @@ async function checkIMDResistance(states, iostate) {
     }
   } catch (err) {
     console.error("Error in checkIMDResistance:", err);
-    // BEFORE FIX: Error not propagated, making debugging difficult
-    // AFTER FIX: Re-throw error after logging for proper error handling
-    throw err;
-  } finally {
-    firstUnhealthyIMDData.isProcessing = false; // Release mutex
   }
 }
 

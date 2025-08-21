@@ -94,6 +94,7 @@
   "AUTHORIZATION_TERMINATION_RFIDFLOW": "If no RFID is provided in a timely manner, the session will be terminated",
   "BLOCKED": "Blocked",
   "POWER_FAILURE": "Power Failure",
+  "IMD_RESISTANCE": "IMD Resistance Fault",
   "OUTLET_TEMP": "Outlet Temperature Is High!",
   "CAB_TEMP": "Cabinet Temperature Is High!",
   "UNPLUG_FAULT": "Charging stops due to internal fault! Unplug EV",

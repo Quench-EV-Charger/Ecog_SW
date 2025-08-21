@@ -261,14 +261,14 @@ const AuthorizeEv = ({ outlet, handleClick }) => {
       const chargingStore = store.getState();
       const { config } = chargingStore.charging;
       const response = await httpGet(`${config.API}/db/config`);
-      setIsAutocharging(response?.autoChargeMode || false);
+      setIsAutocharging(response?.autoChargeMode);
     } catch (error) {
       console.error("Failed to set autocharge:", error);
     }
     setTimeout(() => {
       setIsAutocharging(false);
       setAutochargeauth(false);
-    }, 10000);
+    }, 60000);
   };
 
   useEffect(() => {

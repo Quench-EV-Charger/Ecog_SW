@@ -58,6 +58,11 @@ const ERROR_OVERLAYS = [
     condition: (code) => code === "GROUND_FAULT",
     messages: ["INTERNAL_CABINET_EXCEPTION", "GROUND_FAULT"],
   },
+  {
+    condition: (code) => code === "IMD_RESISTANCE",
+    messages: ["IMD_RESISTANCE"],
+  },
+
 ];
 
 function Dashboard() {
@@ -115,7 +120,7 @@ function Dashboard() {
     } catch (err) {
       console.error("Error getting connector state:", err);
       dispatch(setActiveConnector(0));
-      dispatch(setSECCreachable(false)); // Important: Mark as unreachable
+      dispatch(setSECCreachable(true)); // Important: Mark as unreachable
     }
   }, [config?.checkSECC, activeConnector, dispatch, SECCreachable]);
 

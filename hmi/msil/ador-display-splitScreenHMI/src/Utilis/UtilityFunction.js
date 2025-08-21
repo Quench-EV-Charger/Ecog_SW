@@ -38,6 +38,8 @@ export const getStatusText = (eachOutlet, t) => {
     return t("BLOCKED");
   } else if (reservedOutlets?.includes(eachOutlet?.outlet)) {
     return t("RESERVED");
+  } else if (isImdResistance(eachOutlet)) {
+    return t("IMD_RESISTANCE");
   } else {
     return t("AVAILABLE");
   }
@@ -52,6 +54,11 @@ export const isInoperative = (eachOutlet) => {
   const chargingStore = store.getState().charging;
   return chargingStore.inoperativeOutlets?.includes(eachOutlet?.outlet);
 };
+
+export const isImdResistance = (eachOutlet) => {
+  return eachOutlet.errorObj?.imdResistanceErr_1 || eachOutlet.errorObj?.imdResistanceErr_2;
+};
+
 
 export const isOutletTempHigh = (eachOutlet) => {
   if (eachOutlet.outlet == 1 && eachOutlet.errorObj?.gunTemperatureErr_1) {
@@ -1083,6 +1090,20 @@ export const checkErrors = (chargerState, chargingMode, isComboMode) => {
     isComboMode && chargingMode > 0 && resetCombo(API);
     return errorObjReturn;
   }
+
+  const imdResistanceError =
+    chargerState &&
+    Array.isArray(chargerState) &&
+    chargerState[0] &&
+    (chargerState[0].errorObj?.imdResistanceErr_1 ||
+    chargerState[0].errorObj?.imdResistanceErr_2);
+
+    if (imdResistanceError) {
+      errorObjReturn = { showAlert: true, showEStop: false, errorCode: "IMD_RESISTANCE" }; // prettier-ignore
+      return errorObjReturn;
+    }
+
+
   return errorObjReturn;
 };
 

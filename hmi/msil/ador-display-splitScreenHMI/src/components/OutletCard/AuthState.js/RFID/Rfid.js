@@ -18,6 +18,7 @@ function Rfid({ handleClick, eachOutlet }) {
   const timerRef = useRef(null);
   const [initialized, setInitialized] = useState(false);
   const [countdown, setCountdown] = useState(60);
+  const [isScanning, setIsScanning] = useState(false);
   const { theme, toggleTheme } = useContext(ThemeContext);
 
 
@@ -47,21 +48,30 @@ function Rfid({ handleClick, eachOutlet }) {
       socket.onmessage = (event) => {
         const rfid = event.data;
         console.log("RFID Scanned:", rfid);
+        
+        // Show loading state when RFID is scanned
+        setIsScanning(true);
 
         const outlet = eachOutletRef.current;
 
-        const activeSession =
-          outlet?.user === rfid &&
-          outlet?.pilot >= 3 &&
-          outlet?.pilot <= 4 &&
-          outlet?.phs >= 3;
+        // Simulate processing time for better UX
+        setTimeout(() => {
+          const activeSession =
+            outlet?.user === rfid &&
+            outlet?.pilot >= 3 &&
+            outlet?.pilot <= 4 &&
+            outlet?.phs >= 3;
 
-        if (activeSession) {
-          localStorage.setItem("selectedOutlet", outlet.outlet);
-          localStorage.setItem("user", outlet.user);
-          dispatch(setSelectedState(outlet));
-          handleClick("checkpoint");
-        }
+          if (activeSession) {
+            localStorage.setItem("selectedOutlet", outlet.outlet);
+            localStorage.setItem("user", outlet.user);
+            dispatch(setSelectedState(outlet));
+            handleClick("checkpoint");
+          } else {
+            // Hide loading state if authentication fails
+            setIsScanning(false);
+          }
+        }, 1500); // 1.5 second delay for processing
       };
 
       return () => {
@@ -96,6 +106,45 @@ function Rfid({ handleClick, eachOutlet }) {
 
   return (
     <div style={{ position: "relative" }}>
+      {isScanning && (
+        <div style={{
+          position: "absolute",
+          top: "50%",
+
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(0, 0, 0, 0.7)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1000,
+          borderRadius: "10px"
+        }}>
+          <div style={{
+            width: "50px",
+            height: "50px",
+            border: "4px solid #f3f3f3",
+            borderTop: "4px solid #FFA500",
+            borderRadius: "50%",
+            animation: "spin 1s linear infinite",
+            marginBottom: "20px"
+          }} />
+          <div style={{
+            color: "#FFA500",
+            fontSize: "18px",
+            fontWeight: "bold",
+            textAlign: "center"
+          }}>
+            Processing RFID...
+            <br />
+            <span style={{ fontSize: "14px", color: "#fff" }}>
+              Please wait
+            </span>
+          </div>
+        </div>
+      )}
       <img src={rfidImg} style={S.rfid_img} alt="Scan RFID" />
       <div style={S.rfid_info(theme)}>
         Please scan your RFID card to authorize your EV
@@ -108,6 +157,7 @@ function Rfid({ handleClick, eachOutlet }) {
         <button
           onClick={() => {
             clearInterval(timerRef.current);
+            setIsScanning(false);
             handleClick("initial");
           }}
           style={{

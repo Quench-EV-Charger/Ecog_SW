@@ -11,6 +11,7 @@
 
 const baseUrl = "http://localhost:3001";
 const powerLowDemandValue = 10000;
+const SAFETY_DEDUCTION_W = 500; // Hardware tolerance safety margin to prevent exceeding configured limits
 let numOfModule = 2;
 let powercapValue = numOfModule * 30000;
 let powerDemandValue = Math.floor(powercapValue / 2000);
@@ -218,9 +219,9 @@ async function handleIdleState() {
     await wait(250);
     
     // Set power caps
-    await setPowerCap("1", effectiveTotalPower);
+    await setPowerCap("1", effectiveTotalPower, "Idle State");
     await wait(250);
-    await setPowerCap("2", effectiveTotalPower);
+    await setPowerCap("2", effectiveTotalPower, "Idle State");
     
     // Reset execution flags
     isRunOnOutlet = [false, false];
@@ -229,20 +230,23 @@ async function handleIdleState() {
     logScenario("Idle State", `Both outlets set to ${effectiveTotalPower}W (full system capacity)`);
 }
 
-// Helper for setting power cap
-async function setPowerCap(outletNum, power) {
+// Helper for setting power cap with 500W safety deduction
+async function setPowerCap(outletNum, power, reason = "Power Cap Applied") {
     try {
+        // Apply 500W safety deduction to prevent hardware tolerance issues
+        const safePower = Math.max(power - SAFETY_DEDUCTION_W, powerLowDemandValue);
+        
         const response = await fetch(baseUrl + "/outlets/" + outletNum + "/powercap", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ PowerCapW: power }),
+            body: JSON.stringify({ PowerCapW: safePower }),
         });
         if (!response.ok) {
             // throw new Error(`PowerCap failed: ${response.status}`);
             return [];
         }
         const result = await response.text();
-        logPowerTransition(outletNum, "?", power, "Idle State");
+        logPowerTransition(outletNum, "?", safePower, `${reason} (Original: ${power}W, Applied: ${safePower}W with ${SAFETY_DEDUCTION_W}W safety deduction)`);
         return result;
     } catch (error) {
         console.error("PowerCap Error:", error);
@@ -288,9 +292,9 @@ async function handleSingleOutletIdle() {
         const idleOutletLimit = Math.floor(chargingOutletLimit / 2);
         
         // Apply power caps
-        await setPowerCap(chargingOutlet, chargingOutletLimit);
+        await setPowerCap(chargingOutlet, chargingOutletLimit, "Single Outlet Charging");
         await wait(250);
-        await setPowerCap(idleOutlet, idleOutletLimit);
+        await setPowerCap(idleOutlet, idleOutletLimit, "Single Outlet Idle");
         
         // Set execution flags
         if (chargingOutlet === "1") {
@@ -332,9 +336,9 @@ async function handleBothOutletsCharging() {
         : perOutletPower;
     
     // Apply power caps for both outlets
-    await setPowerCap("1", outlet1Limit);
+    await setPowerCap("1", outlet1Limit, "Dual Outlet Charging");
     await wait(250);
-    await setPowerCap("2", outlet2Limit);
+    await setPowerCap("2", outlet2Limit, "Dual Outlet Charging");
     
     // Set execution flags for both outlets
     isRunOnOutlet = [true, true];
@@ -368,8 +372,8 @@ async function handleSingleOutletNoSmartLimit(chargingOutlet) {
         : powercapValue;
     const otherOutletPowerCap = Math.floor(effectivePowerCap / 2)    
     // Single outlet gets full power (60kW), idle outlet gets half (30kW)
-    await setPowerCap(chargingOutlet, effectivePowerCap);
-    await setPowerCap(otherIdleChargingOutlet, otherOutletPowerCap);
+    await setPowerCap(chargingOutlet, effectivePowerCap, "Single Outlet No Smart Limit");
+    await setPowerCap(otherIdleChargingOutlet, otherOutletPowerCap, "Other Outlet Idle");
     
     logScenario("Single Outlet - No Smart Limits", `Full power distribution: ${effectivePowerCap}W / ${Math.floor(effectivePowerCap / 2)}W`);
 }
@@ -383,8 +387,8 @@ async function handleSingleOutletWithSmartLimit(outletLimit,chargingOutlet) {
     
     const smartLimit = Math.min(outletLimit, effectivePowerCap);
     
-    await setPowerCap(chargingOutlet, smartLimit);
-    await setPowerCap(otherIdleChargingOutlet, effectivePowerCap/2);
+    await setPowerCap(chargingOutlet, smartLimit, "Single Outlet With Smart Limit");
+    await setPowerCap(otherIdleChargingOutlet, effectivePowerCap/2, "Other Outlet Idle");
     
     logScenario("Single Outlet - With Smart Limit", `Smart limit applied: ${smartLimit}W `);
 
@@ -401,8 +405,8 @@ async function handleCPMaxProfileOnly() {
     // const singleOutletPower = Math.min(effectivePowerCap, powercapValue); //commented out
     const dualOutletPower = Math.min(Math.floor(effectivePowerCap / 2), Math.floor(powercapValue / 2));
     
-    await setPowerCap("1", dualOutletPower);
-    await setPowerCap("2", dualOutletPower);
+    await setPowerCap("1", dualOutletPower, "CPMaxProfileLimit Only");
+    await setPowerCap("2", dualOutletPower, "CPMaxProfileLimit Only");
     
     logScenario(
         "CPMaxProfileLimit Only",
@@ -440,8 +444,8 @@ async function handleCPMaxProfileAndIndividual() {
         ? Math.min(outlet2Limit, effectivePowerCap/2) 
         : effectivePowerCap/2;
     
-    await setPowerCap("1", finalOutlet1Limit);
-    await setPowerCap("2", finalOutlet2Limit);
+    await setPowerCap("1", finalOutlet1Limit, "CPMaxProfile + Individual");
+    await setPowerCap("2", finalOutlet2Limit, "CPMaxProfile + Individual");
     
     logScenario(
         "CPMaxProfileLimit + Individual",
@@ -481,8 +485,8 @@ async function handleIndividualOnly() {
     finalOutlet1Limit = Math.min(finalOutlet1Limit, powercapValue/2);
     finalOutlet2Limit = Math.min(finalOutlet2Limit, powercapValue/2);
     
-    await setPowerCap("1", finalOutlet1Limit);
-    await setPowerCap("2", finalOutlet2Limit);
+    await setPowerCap("1", finalOutlet1Limit, "Individual Limits Only");
+    await setPowerCap("2", finalOutlet2Limit, "Individual Limits Only");
     
     logScenario(
         "Individual Limits Only",
@@ -517,8 +521,8 @@ async function handleIndividualNull() {
         ? outlet2Limit 
         : Math.floor(powercapValue / 2);
     
-    await setPowerCap("1", finalOutlet1Limit);
-    await setPowerCap("2", finalOutlet2Limit);
+    await setPowerCap("1", finalOutlet1Limit, "Individual Limits Null");
+    await setPowerCap("2", finalOutlet2Limit, "Individual Limits Null");
     
     logScenario(
         "Individual Limits - Null",
@@ -541,8 +545,8 @@ async function handleIndividualNull() {
 async function handleIndividualZero(chargingOutlet) {
     const otherIdleChargingOutlet = chargingOutlet === "1" ? "2" : "1";
     // Individual limit set to 0
-    await setPowerCap(chargingOutlet, 0);
-    await setPowerCap(otherIdleChargingOutlet, powercapValue/2);
+    await setPowerCap(chargingOutlet, 0, "Individual Zero Limit");
+    await setPowerCap(otherIdleChargingOutlet, powercapValue/2, "Other Outlet Default");
     
     logScenario(
         "Individual Limits - Zero",
@@ -710,9 +714,9 @@ async function handleDualToSingle() {
         const effectivePowerCap = CPMaxProfileLimit !== null && CPMaxProfileLimit !== undefined 
             ? Math.min(CPMaxProfileLimit, powercapValue) 
             : powercapValue;
-        await setPowerCap(chargingOutlet, effectivePowerCap);
+        await setPowerCap(chargingOutlet, effectivePowerCap, "Dual to Single Transition");
         await wait(250);
-        await setPowerCap(idleOutlet, Math.floor(effectivePowerCap / 2));
+        await setPowerCap(idleOutlet, Math.floor(effectivePowerCap / 2), "Dual to Single Idle Outlet");
         
         // Update execution flags
         if (chargingOutlet === "1") {
@@ -774,8 +778,8 @@ async function handleProfileValueChange() {
 // 6. Edge/Error Cases
 async function handleAPIFailure() {
     // Fall back to system defaults
-    await setPowerCap("1", powercapValue);
-    await setPowerCap("2", Math.floor(powercapValue / 2));
+    await setPowerCap("1", powercapValue, "API Failure Fallback");
+    await setPowerCap("2", Math.floor(powercapValue / 2), "API Failure Fallback");
     
     console.error("API Failure - Using system defaults");
     logScenario("API Failure", "Fallback to system defaults");
@@ -788,8 +792,8 @@ async function handleZeroPowerLimits() {
     const outlet2Limit = limits && limits.find(l => l.outlet == "2") && limits.find(l => l.outlet == "2").limit;
 
     // Set outlets to minimum power
-    await setPowerCap("1", outlet1Limit);
-    await setPowerCap("2", outlet2Limit);
+    await setPowerCap("1", outlet1Limit, "Zero Power Limits");
+    await setPowerCap("2", outlet2Limit, "Zero Power Limits");
     
     logScenario(
         "Zero Power Limits",
@@ -811,8 +815,8 @@ async function handleZeroPowerLimits() {
 
 async function handleNegativePowerLimits() {
     // Treat as zero limits
-    await setPowerCap("1", powerLowDemandValue);
-    await setPowerCap("2", powerLowDemandValue);
+    await setPowerCap("1", powerLowDemandValue, "Negative Limits Converted");
+    await setPowerCap("2", powerLowDemandValue, "Negative Limits Converted");
     
     console.log("\n=== Dual Outlet Power Cap Configuration ===");
     console.log(`System Power Cap: ${powercapValue}W`);
@@ -831,8 +835,8 @@ async function handleNegativePowerLimits() {
 
 async function handleExtremelyHighLimits() {
     // Cap at system maximum
-    await setPowerCap("1", powercapValue);
-    await setPowerCap("2", Math.floor(powercapValue / 2));
+    await setPowerCap("1", powercapValue, "Extremely High Limits Capped");
+    await setPowerCap("2", Math.floor(powercapValue / 2), "Extremely High Limits Capped");
     
     logScenario(
         "Extremely High Limits",
@@ -859,8 +863,8 @@ async function handleSingleOutletCPMax(outletLimit,chargingOutlet) {
         ? Math.min(CPMaxProfileLimit, powercapValue) 
         : powercapValue;
     
-    await setPowerCap(chargingOutlet, Math.min(outletLimit, effectiveLimit));
-    await setPowerCap(otherIdleChargingOutlet, Math.floor(effectiveLimit / 2));
+    await setPowerCap(chargingOutlet, Math.min(outletLimit, effectiveLimit), "Single Outlet + CPMaxProfile");
+    await setPowerCap(otherIdleChargingOutlet, Math.floor(effectiveLimit / 2), "Single Outlet + CPMaxProfile Idle");
     
     logScenario(
         "Single Outlet + CPMaxProfileLimit",
@@ -1206,4 +1210,4 @@ async function MainFlow() {
 /* START THE SYSTEM                */
 /***********************************/
 async function start() { await MainFlow(); }
-start(); 
+start();

@@ -120,7 +120,7 @@ function Dashboard() {
     } catch (err) {
       console.error("Error getting connector state:", err);
       dispatch(setActiveConnector(0));
-      dispatch(setSECCreachable(true)); // Important: Mark as unreachable
+      dispatch(setSECCreachable(false)); // Important: Mark as unreachable
     }
   }, [config?.checkSECC, activeConnector, dispatch, SECCreachable]);
 

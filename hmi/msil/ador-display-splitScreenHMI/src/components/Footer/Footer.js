@@ -8,16 +8,15 @@ function Footer() {
   const [date, setDate] = useState("");
   const { theme, toggleTheme } = useContext(ThemeContext);
   const config = useSelector((state) => state.charging.config);
-  
 
   useEffect(() => {
     const updateDateTime = () => {
-      console.log("config?.timezone", config?.timezone)
+      console.log("config?.timezone", config?.timezone);
 
-      const timezone = config?.timezone || 'Asia/Kolkata';
+      const timezone = config?.timezone || "Asia/Kolkata";
       const now = moment().tz(timezone);
-      const timeString = now.format('h:mm:ss A'); // e.g., 4:23:05 PM
-      const dateString = now.format('M/D/YYYY'); // e.g., 4/8/2025
+      const timeString = now.format("h:mm:ss A"); // e.g., 4:23:05 PM
+      const dateString = now.format("M/D/YYYY"); // e.g., 4/8/2025
       setTime(timeString);
       setDate(dateString);
     };
@@ -29,26 +28,41 @@ function Footer() {
   }, [config?.timezone]);
 
   return (
-    <div
-      style={{
-        marginTop: "15px",
-        position: "absolute",
-        bottom: "20px",
-        right: "5px",
-      }}
-    >
-      <span
+    <>
+      <div
         style={{
           display: "flex",
-          flexDirection: "row-reverse",
-          marginRight: "25px",
+          // flexDirection: "row-reverse",
+          marginTop: "15px",
+
+          marginLeft: "25px",
           color: theme === "dark" ? "#ffffff" : "#000000",
-          fontSize: "25px"
+          fontSize: "25px",
         }}
       >
-        {time} {date}
-      </span>
-    </div>
+        {config?.version}
+      </div>
+      <div
+        style={{
+          marginBottom: "1px",
+          position: "absolute",
+          bottom: "20px",
+          right: "5px",
+        }}
+      >
+        <span
+          style={{
+            display: "flex",
+            flexDirection: "row-reverse",
+            marginRight: "25px",
+            color: theme === "dark" ? "#ffffff" : "#000000",
+            fontSize: "25px",
+          }}
+        >
+          {time} {date}
+        </span>
+      </div>
+    </>
   );
 }
 

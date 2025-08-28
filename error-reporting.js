@@ -19,7 +19,19 @@
  * Copyright (c) EcoG GmbH 2023
  * * All rights reserved
  * This script monitors the IO errors,Temperature errors and Supply Voltage errors
- * Version: 1.0.5
+ * Version: 1.0.7
+ *
+ * Modified: 28 August 2025 by Kushagra Mittal
+ * - Increased undervoltage threshold from 20 to 40 seconds for improved stability
+ * - Increased overvoltage threshold from 20 to 40 seconds for improved stability
+ * 
+ * Modified: 28 August 2025 by Kushagra Mittal (v1.0.6)
+ * - Fixed undervoltage/overvoltage counter contamination when switching between AC meter and power module monitoring
+ * - Added source tracking to reset voltage error counters on monitoring source transitions
+ * - Implemented grace period (5s) for power module communication errors after entering charging phases
+ * - Fixed Gun B asymmetric logic to match Gun A for power module communication monitoring
+ * - Added automatic counter reset when leaving charging phases for powerSaveInIdleMode=true
+ * - Synchronized tripCaseUV state management across monitoring source switches
  * 
  * Modified: 16 August 2025 by Kushagra Mittal
  * - Fixed race condition in IMD monitoring with mutex mechanism
@@ -50,6 +62,9 @@ const errorObjCount = {
   imdResistanceErr_2: 0, // Added IMD resistance error counter for gun 2
 };
 
+// Track the last monitoring source to detect switches
+let lastMonitoringSource = null; // 'ac_meter', 'power_module', or null
+
 const errorObj = {
   powerLossErr: false,
   eStopErr: false,
@@ -74,8 +89,8 @@ const errorObjThreshold = {
   doorOpenErr: 2,
   outletTemperatureErr: 4,
   cabinetTemperatureErr: 4,
-  overVoltageErr: 20, // changed to 20 from 10
-  underVoltageErr: 20, // changed to 20 from 10
+  overVoltageErr: 40, // changed to 40 from 20
+  underVoltageErr: 40, // changed to 40 from 20
   powerModuleFailureErr: 6,
   gunTemperatureErr_1: 6,
   gunTemperatureErr_2: 6,
@@ -122,6 +137,15 @@ let errIOSource = [];
 let temperatures = {};
 let voltage = {};
 
+// Track charging start times for grace period implementation
+let chargingStartTime = {
+  outlet1: null,
+  outlet2: null
+};
+
+// Grace period in milliseconds for power module communication after entering charging
+const COMM_GRACE_PERIOD_MS = 5000; // 5 seconds
+
 // Testing variables
 const onTestingMode = false;
 
@@ -136,7 +160,7 @@ let imdMonitorActive = false;
 // High-frequency IMD resistance monitoring loop
 const startIMDResistanceMonitor = async () => {
   imdMonitorActive = true;
-  
+
   const loop = async () => {
     try {
       // Check if monitoring should continue
@@ -630,6 +654,8 @@ async function checkSuppyVoltageTripACmeter(states, volts) {
     } else if (errorObj.underVoltageErr && !errorObjFlags.underVoltageErr) {
       console.log(`Supply voltage is too low: ${volts}`);
       errorObjFlags.underVoltageErr = true;
+      // Reset tripCaseUV when tripping from AC meter source
+      tripCaseUV = UVTripState.Idle;
       await trip(states, {
         msg: "ERR_UNDER_VOLTAGE",
         code: "997",
@@ -1172,23 +1198,50 @@ const checkPowerModuleCommErr = async (states, iostate) => {
   for (const obj of states) {
     if (obj.outlet == 1) {
       if (powerSaveInIdleMode == true || powerSaveInIdleMode == null) {
+        // Check if entering charging phase (5) and reset counter
+        if (obj.phs == 5 && chargingStartTime.outlet1 === null) {
+          console.log("[PMCE] Gun 1 entering charging phase 5 - resetting comm error counter and starting grace period");
+          errorObjCount.powerModuleCommErr_1 = 0;
+          errorObj.powerModuleCommErr_1 = false;
+          chargingStartTime.outlet1 = Date.now();
+        }
+        
         if (obj.phs > 4 && obj.phs < 8) {
-          if (obj.can1_RX_time && obj.can1_RX_time.conv_timeout) {
-            errorObj.powerModuleCommErr_1 =
-              errorObjCount.powerModuleCommErr_1 >=
-              errorObjThreshold.powerModuleCommErr_1;
-            errorObjCount.powerModuleCommErr_1++;
-            if (errorObjCount.underVoltageErr > 0) {
-              errorObjCount.underVoltageErr = 0;
+          // Check if we're still in grace period
+          const inGracePeriod = chargingStartTime.outlet1 && 
+                               (Date.now() - chargingStartTime.outlet1) < COMM_GRACE_PERIOD_MS;
+          
+          if (!inGracePeriod) {
+            // Normal monitoring after grace period
+            if (obj.can1_RX_time && obj.can1_RX_time.conv_timeout) {
+              errorObj.powerModuleCommErr_1 =
+                errorObjCount.powerModuleCommErr_1 >=
+                errorObjThreshold.powerModuleCommErr_1;
+              errorObjCount.powerModuleCommErr_1++;
+              if (errorObjCount.underVoltageErr > 0) {
+                errorObjCount.underVoltageErr = 0;
+              }
+            } else {
+              errorObj.powerModuleCommErr_1 = false;
+              errorObjCount.powerModuleCommErr_1 = 0;
             }
           } else {
-            errorObj.powerModuleCommErr_1 = false;
-            errorObjCount.powerModuleCommErr_1 = 0;
+            // Still in grace period, skip error checking
+            const remainingGrace = COMM_GRACE_PERIOD_MS - (Date.now() - chargingStartTime.outlet1);
+            console.log(`[PMCE] Gun 1 in grace period, ${Math.ceil(remainingGrace/1000)}s remaining`);
           }
         } else {
-          console.log("error pmce skipped");
+          // Clear counter when leaving charging phases
+          if (errorObjCount.powerModuleCommErr_1 > 0) {
+            console.log("[PMCE] Gun 1 left charging phases - clearing comm error counter");
+            errorObjCount.powerModuleCommErr_1 = 0;
+            errorObj.powerModuleCommErr_1 = false;
+          }
+          // Reset charging start time when not in charging phases
+          chargingStartTime.outlet1 = null;
         }
       } else {
+        // powerSaveInIdleMode = false, always monitor
         if (obj.can1_RX_time && obj.can1_RX_time.conv_timeout) {
           errorObj.powerModuleCommErr_1 =
             errorObjCount.powerModuleCommErr_1 >=
@@ -1204,23 +1257,51 @@ const checkPowerModuleCommErr = async (states, iostate) => {
       }
     } else if (obj.outlet == 2) {
       if (powerSaveInIdleMode == true || powerSaveInIdleMode == null) {
-        if (obj.pilot >= 3 && obj.pilot <= 4 && obj.phs == 7) {
-          if (obj.can1_RX_time && obj.can1_RX_time.conv_timeout) {
-            errorObj.powerModuleCommErr_2 =
-              errorObjCount.powerModuleCommErr_2 >=
-              errorObjThreshold.powerModuleCommErr_2;
-            errorObjCount.powerModuleCommErr_2++;
-            if (errorObjCount.underVoltageErr > 0) {
-              errorObjCount.underVoltageErr = 0;
+        // Fixed Gun B logic to match Gun A (use same phase logic)
+        // Check if entering charging phase (5) and reset counter
+        if (obj.phs == 5 && chargingStartTime.outlet2 === null) {
+          console.log("[PMCE] Gun 2 entering charging phase 5 - resetting comm error counter and starting grace period");
+          errorObjCount.powerModuleCommErr_2 = 0;
+          errorObj.powerModuleCommErr_2 = false;
+          chargingStartTime.outlet2 = Date.now();
+        }
+        
+        if (obj.phs > 4 && obj.phs < 8) {  // Changed to match Gun A logic
+          // Check if we're still in grace period
+          const inGracePeriod = chargingStartTime.outlet2 && 
+                               (Date.now() - chargingStartTime.outlet2) < COMM_GRACE_PERIOD_MS;
+          
+          if (!inGracePeriod) {
+            // Normal monitoring after grace period
+            if (obj.can1_RX_time && obj.can1_RX_time.conv_timeout) {
+              errorObj.powerModuleCommErr_2 =
+                errorObjCount.powerModuleCommErr_2 >=
+                errorObjThreshold.powerModuleCommErr_2;
+              errorObjCount.powerModuleCommErr_2++;
+              if (errorObjCount.underVoltageErr > 0) {
+                errorObjCount.underVoltageErr = 0;
+              }
+            } else {
+              errorObj.powerModuleCommErr_2 = false;
+              errorObjCount.powerModuleCommErr_2 = 0;
             }
           } else {
-            errorObj.powerModuleCommErr_2 = false;
-            errorObjCount.powerModuleCommErr_2 = 0;
+            // Still in grace period, skip error checking
+            const remainingGrace = COMM_GRACE_PERIOD_MS - (Date.now() - chargingStartTime.outlet2);
+            console.log(`[PMCE] Gun 2 in grace period, ${Math.ceil(remainingGrace/1000)}s remaining`);
           }
         } else {
-          console.log("error pmce skipped");
+          // Clear counter when leaving charging phases
+          if (errorObjCount.powerModuleCommErr_2 > 0) {
+            console.log("[PMCE] Gun 2 left charging phases - clearing comm error counter");
+            errorObjCount.powerModuleCommErr_2 = 0;
+            errorObj.powerModuleCommErr_2 = false;
+          }
+          // Reset charging start time when not in charging phases
+          chargingStartTime.outlet2 = null;
         }
       } else {
+        // powerSaveInIdleMode = false, always monitor
         if (obj.can1_RX_time && obj.can1_RX_time.conv_timeout) {
           errorObj.powerModuleCommErr_2 =
             errorObjCount.powerModuleCommErr_2 >=
@@ -1347,6 +1428,15 @@ const checkErrors = async () => {
             "modbus.selec.online" in iostate &&
             iostate["modbus.selec.online"] === true
           ) {
+            // Check if we're switching from power module to AC meter
+            if (lastMonitoringSource === 'power_module') {
+              console.log("[UV/OV] Switching from power module to AC meter monitoring - resetting UV/OV counters and trip state");
+              errorObjCount.underVoltageErr = 0;
+              errorObjCount.overVoltageErr = 0;
+              tripCaseUV = UVTripState.Idle;
+            }
+            lastMonitoringSource = 'ac_meter';
+            
             const voltageKeys = [
               "modbus.selec.voltage_L1_L2",
               "modbus.selec.voltage_L1_L3",
@@ -1360,6 +1450,15 @@ const checkErrors = async () => {
               await checkRecoveryConditions(voltsFiltered, states);
             }
           } else {
+            // Check if we're switching from AC meter to power module
+            if (lastMonitoringSource === 'ac_meter') {
+              console.log("[UV/OV] Switching from AC meter to power module monitoring - resetting UV/OV counters and trip state");
+              errorObjCount.underVoltageErr = 0;
+              errorObjCount.overVoltageErr = 0;
+              tripCaseUV = UVTripState.Idle;
+            }
+            lastMonitoringSource = 'power_module';
+            
             console.log("Ac meter is not available/connected");
             // Get voltage array
             const volts = await getVoltageArr(states);

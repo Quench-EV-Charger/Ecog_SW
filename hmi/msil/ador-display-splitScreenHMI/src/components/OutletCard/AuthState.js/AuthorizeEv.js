@@ -155,7 +155,7 @@ const AuthorizeEv = ({ status, outlet, handleClick }) => {
           localStorage.setItem("selectedOutlet", outletState.outlet);
           dispatch(setSelectedState(outletState));
         }
-        handleClick("checkpoint");
+        // handleClick("checkpoint");
       }
     }
   };
@@ -272,13 +272,13 @@ const AuthorizeEv = ({ status, outlet, handleClick }) => {
     }, 10000);
   };
 
-  useEffect(() => {
-    let outputHand = isHandshaking(outlet)
-    if (status === "auth" && isHandshaking(outlet)) {
-      console.log(outputHand)
-      handleClick("checkpoint");
-    }
-  })
+  // useEffect(() => {
+  //   let outputHand = isHandshaking(outlet)
+  //   if (status === "auth" && isHandshaking(outlet)) {
+  //     console.log(outputHand)
+  //     handleClick("checkpoint");
+  //   }
+  // })
 
   useEffect(() => {
     let socketRef;

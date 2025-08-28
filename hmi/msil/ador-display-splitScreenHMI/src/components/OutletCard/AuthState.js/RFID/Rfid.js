@@ -61,7 +61,7 @@ function Rfid({status, handleClick, eachOutlet }) {
           localStorage.setItem("selectedOutlet", outlet.outlet);
           localStorage.setItem("user", outlet.user);
           dispatch(setSelectedState(outlet));
-          handleClick("checkpoint");
+          // handleClick("checkpoint");
         }
       };
 
@@ -95,13 +95,7 @@ function Rfid({status, handleClick, eachOutlet }) {
     };
   },[countdown])
 
-   useEffect(() => {
-    let outputHand = isHandshaking(eachOutlet)
-    if (status === "auth" && isHandshaking(eachOutlet)) {
-      console.log(outputHand)
-      handleClick("checkpoint");
-    }
-  })
+
 
   return (
     <div style={{ position: "relative" }}>

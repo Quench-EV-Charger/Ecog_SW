@@ -23,7 +23,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build",
+"build": "set NODE_OPTIONS=--openssl-legacy-provider && react-scripts build",
     "plainbuild": "react-scripts build",
     "postbuild": "node ./buildscripts/postbuild/postbuild.js",
     "test": "react-scripts test",

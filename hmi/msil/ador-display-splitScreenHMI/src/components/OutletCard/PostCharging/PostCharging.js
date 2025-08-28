@@ -7,7 +7,7 @@ const PostCharging = ({ eachOutlet, handleClick }) => {
   const { theme, toggleTheme } = useContext(ThemeContext);
 
   useEffect(() => {
-    if (eachOutlet?.needsUnplug) {
+    if (eachOutlet?.needsUnplug && !eachOutlet?.sessionPending) {
       handleClick("unplug");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

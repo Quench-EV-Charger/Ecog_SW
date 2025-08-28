@@ -109,7 +109,7 @@ class CheckPoints extends React.Component {
   componentDidUpdate(prevProps, prevState) {
     const { selectedState, changePath, config, preparingOutletsIds, chargerState, setSelectedState, setShouldGoHomeOnSessionStart } = this.context; // prettier-ignore
 
-    if (selectedState?.needsUnplug && selectedState?.wasAuthorized) {
+    if (selectedState?.needsUnplug && !selectedState?.sessionPending) {
       console.log("checkpoints --> unplugev", selectedState);
       changePath("/unplugev");
       return;

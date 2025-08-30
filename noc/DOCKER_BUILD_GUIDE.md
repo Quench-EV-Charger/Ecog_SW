@@ -47,12 +47,12 @@ cd /mnt/Ecog_SW/noc
 
 ### 2. Build the image (using optimized Dockerfile)
 ```bash
-docker build -f Dockerfile.optimized -t cms_script:latest .
+docker build -f Dockerfile.optimized -t ador-samsung-1-14:latest .
 ```
 
 ### 3. Run the container
 ```bash
-docker run -d --name cms-noc --restart unless-stopped cms_script:latest
+docker run -d --name cms-noc --restart unless-stopped ador-samsung-1-14:latest
 ```
 
 ## Dockerfile Options
@@ -87,19 +87,19 @@ docker run -d --name cms-noc --restart unless-stopped cms_script:latest
 
 ```bash
 # Using standard Dockerfile
-docker build -t cms_script:latest .
+docker build -t ador-samsung-1-14:latest .
 
 # Using optimized Dockerfile (recommended)
-docker build -f Dockerfile.optimized -t cms_script:latest .
+docker build -f Dockerfile.optimized -t ador-samsung-1-14:latest .
 
 # Using minimal Alpine-based Dockerfile
-docker build -f Dockerfile.minimal -t cms_script:latest .
+docker build -f Dockerfile.minimal -t ador-samsung-1-14:latest .
 ```
 
 ### Build with specific version tag
 ```bash
-docker build -f Dockerfile.optimized -t cms_script:v1.14 .
-docker tag cms_script:v1.14 cms_script:latest
+docker build -f Dockerfile.optimized -t ador-samsung-1-14:v1.14 .
+docker tag ador-samsung-1-14:v1.14 ador-samsung-1-14:latest
 ```
 
 ## Cross-Platform Builds (ARM64)
@@ -121,17 +121,17 @@ docker tag cms_script:v1.14 cms_script:latest
 
 #### Option 1: Build and export to tar
 ```bash
-docker buildx build --platform linux/arm64 -f Dockerfile.minimal -t cms_script:arm64 --output type=docker,dest=cms_script_arm64.tar .
+docker buildx build --platform linux/arm64 -f Dockerfile -t ador-samsung-1-14:latest --output type=docker,dest=ador-samsung-1-14.tar .
 ```
 
 #### Option 2: Build and compress directly
 ```bash
-docker buildx build --platform linux/arm64 -f Dockerfile.minimal -t cms_script:arm64 --output type=docker,dest=- . | gzip > cms_script_arm64.tar.gz
+docker buildx build --platform linux/arm64 -f Dockerfile -t ador-samsung-1-14:latest --output type=docker,dest=- . | gzip > ador-samsung-1-14.tar.gz
 ```
 
 #### Option 3: Build for multiple platforms
 ```bash
-docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.minimal -t cms_script:multiarch .
+docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile -t ador-samsung-1-14:multiarch .
 ```
 
 ### Common ARM64 Build Issues
@@ -152,50 +152,50 @@ docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
 
 ```bash
 # Save uncompressed
-docker save -o cms_script.tar cms_script:latest
+docker save -o ador-samsung-1-14.tar ador-samsung-1-14:latest
 
 # View tar file size
-ls -lh cms_script.tar
+ls -lh ador-samsung-1-14.tar
 ```
 
 ### Save as compressed TAR.GZ
 
 ```bash
 # Method 1: Using pipe
-docker save cms_script:latest | gzip > cms_script.tar.gz
+docker save ador-samsung-1-14:latest | gzip > ador-samsung-1-14.tar.gz
 
 # Method 2: Compress existing tar
-docker save -o cms_script.tar cms_script:latest
-gzip cms_script.tar
+docker save -o ador-samsung-1-14.tar ador-samsung-1-14:latest
+gzip ador-samsung-1-14.tar
 
 # View compressed size
-ls -lh cms_script.tar.gz
+ls -lh ador-samsung-1-14.tar.gz
 ```
 
 ### Load from TAR/TAR.GZ
 
 ```bash
 # Load from tar
-docker load -i cms_script.tar
+docker load -i ador-samsung-1-14.tar
 
 # Load from tar.gz
-gunzip -c cms_script.tar.gz | docker load
+gunzip -c ador-samsung-1-14.tar.gz | docker load
 
 # Or using zcat
-zcat cms_script.tar.gz | docker load
+zcat ador-samsung-1-14.tar.gz | docker load
 ```
 
 ### Transfer to another system
 
 ```bash
 # On source system
-docker save cms_script:latest | gzip > cms_script.tar.gz
+docker save ador-samsung-1-14:latest | gzip > ador-samsung-1-14.tar.gz
 
 # Transfer file (example using scp)
-scp cms_script.tar.gz user@target-system:/path/to/destination/
+scp ador-samsung-1-14.tar.gz user@target-system:/path/to/destination/
 
 # On target system
-gunzip -c cms_script.tar.gz | docker load
+gunzip -c ador-samsung-1-14.tar.gz | docker load
 ```
 
 ## Running Containers
@@ -204,10 +204,10 @@ gunzip -c cms_script.tar.gz | docker load
 
 ```bash
 # Run in detached mode
-docker run -d --name cms-noc cms_script:latest
+docker run -d --name cms-noc ador-samsung-1-14:latest
 
 # Run with auto-restart
-docker run -d --name cms-noc --restart unless-stopped cms_script:latest
+docker run -d --name cms-noc --restart unless-stopped ador-samsung-1-14:latest
 ```
 
 ### Run with Environment Variables
@@ -219,7 +219,7 @@ docker run -d \
   -e SERVER_URL=https://your-cms-server.com/ \
   -e HARDWARE_URL=http://192.168.1.50:3001 \
   -e POLLING_INTERVAL=60 \
-  cms_script:latest
+  ador-samsung-1-14:latest
 ```
 
 ### Using Docker Compose
@@ -255,7 +255,7 @@ docker logs --tail 100 cms-noc
 **Error**: `exec format error`
 ```bash
 # Solution: Build for correct architecture
-docker build --platform linux/amd64 -t cms_script:latest .
+docker build --platform linux/amd64 -t ador-samsung-1-14:latest .
 ```
 
 **Error**: `no space left on device`
@@ -272,13 +272,13 @@ docker system prune -a
 docker logs cms-noc
 
 # Run interactively for debugging
-docker run -it --rm cms_script:latest /bin/sh
+docker run -it --rm ador-samsung-1-14:latest /bin/sh
 ```
 
 **Permission denied errors**
 ```bash
 # Run with specific user
-docker run -d --user 1000:1000 cms_script:latest
+docker run -d --user 1000:1000 ador-samsung-1-14:latest
 ```
 
 ### 3. Network Issues
@@ -286,11 +286,11 @@ docker run -d --user 1000:1000 cms_script:latest
 **Cannot connect to hardware**
 ```bash
 # Run with host network
-docker run -d --network host cms_script:latest
+docker run -d --network host ador-samsung-1-14:latest
 
 # Or use custom network
 docker network create cms-network
-docker run -d --network cms-network cms_script:latest
+docker run -d --network cms-network ador-samsung-1-14:latest
 ```
 
 ## Best Practices
@@ -300,7 +300,7 @@ docker run -d --network cms-network cms_script:latest
 - Keep base images updated
 - Scan images for vulnerabilities:
   ```bash
-  docker scan cms_script:latest
+  docker scan ador-samsung-1-14:latest
   ```
 
 ### 2. Image Optimization
@@ -311,13 +311,13 @@ docker run -d --network cms-network cms_script:latest
 ### 3. Tagging Strategy
 ```bash
 # Semantic versioning
-docker tag cms_script:latest cms_script:1.14.6
-docker tag cms_script:latest cms_script:1.14
-docker tag cms_script:latest cms_script:1
+docker tag ador-samsung-1-14:latest ador-samsung-1-14:1.14.6
+docker tag ador-samsung-1-14:latest ador-samsung-1-14:1.14
+docker tag ador-samsung-1-14:latest ador-samsung-1-14:1
 
 # Environment tags
-docker tag cms_script:latest cms_script:production
-docker tag cms_script:latest cms_script:staging
+docker tag ador-samsung-1-14:latest ador-samsung-1-14:production
+docker tag ador-samsung-1-14:latest ador-samsung-1-14:staging
 ```
 
 ### 4. Multi-Stage Build Example
@@ -374,7 +374,7 @@ cp .env.example .env
 nano .env
 
 # Run with env file
-docker run -d --env-file .env cms_script:latest
+docker run -d --env-file .env ador-samsung-1-14:latest
 ```
 
 ## Maintenance
@@ -385,7 +385,7 @@ docker run -d --env-file .env cms_script:latest
 docker pull python:3.11-slim
 
 # Rebuild
-docker build -f Dockerfile.optimized -t cms_script:latest .
+docker build -f Dockerfile.optimized -t ador-samsung-1-14:latest .
 
 # Remove old image
 docker image prune
@@ -394,29 +394,29 @@ docker image prune
 ### Backup and Restore
 ```bash
 # Backup
-docker save cms_script:latest | gzip > cms_script_backup_$(date +%Y%m%d).tar.gz
+docker save ador-samsung-1-14:latest | gzip > ador-samsung-1-14_backup_$(date +%Y%m%d).tar.gz
 
 # Restore
-gunzip -c cms_script_backup_20240816.tar.gz | docker load
+gunzip -c ador-samsung-1-14_backup_20240816.tar.gz | docker load
 ```
 
 ## Summary Commands Cheatsheet
 
 ```bash
 # Build for x86_64
-docker build -f Dockerfile.optimized -t cms_script:latest .
+docker build -f Dockerfile.optimized -t ador-samsung-1-14:latest .
 
 # Build for ARM64
-docker buildx build --platform linux/arm64 -f Dockerfile.minimal -t cms_script:arm64 --output type=docker,dest=- . | gzip > cms_script_arm64.tar.gz
+docker buildx build --platform linux/arm64 -f Dockerfile -t ador-samsung-1-14:latest --output type=docker,dest=- . | gzip > ador-samsung-1-14.tar.gz
 
 # Save image
-docker save cms_script:latest | gzip > cms_script.tar.gz
+docker save ador-samsung-1-14:latest | gzip > ador-samsung-1-14.tar.gz
 
 # Load image
-gunzip -c cms_script.tar.gz | docker load
+gunzip -c ador-samsung-1-14.tar.gz | docker load
 
 # Run container
-docker run -d --name cms-noc --restart unless-stopped cms_script:latest
+docker run -d --name cms-noc --restart unless-stopped ador-samsung-1-14:latest
 
 # View logs
 docker logs -f cms-noc

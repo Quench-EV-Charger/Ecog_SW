@@ -94,7 +94,7 @@ LARGE_FILE_TIMEOUT = 300             # Timeout for large transfers
 Build the Docker image locally with ARM64 architecture:
 
 ```bash
-docker buildx build --platform linux/arm64 -t cms_script:latest .
+docker buildx build --platform linux/arm64 -f Dockerfile -t ador-samsung-1-14:latest --output type=docker,dest=- . | gzip > ador-samsung-1-14.tar.gz
 ```
 
 **Note**: Ensure you have a `Dockerfile` in your project directory. If not, create one:
@@ -114,10 +114,10 @@ CMD ["python", "cms_script.py"]
 
 ### Step 2: Export Docker Image
 
-Save the built image to a tar file for transfer:
+The image is already saved as a compressed tar.gz file from the build step. If you need to save it separately:
 
 ```bash
-docker save -o cms_script.tar cms_script:latest
+docker save ador-samsung-1-14:latest | gzip > ador-samsung-1-14.tar.gz
 ```
 
 ### Step 3: Upload Image to Charger
@@ -131,7 +131,7 @@ Upload the tar file to the charger using the Docker API:
 ```bash
 curl -X POST "http://10.20.27.50:3001/docker-apps/images/load" \
      -H "Content-Type: application/octet-stream" \
-     --data-binary @cms_script.tar
+     --data-binary @ador-samsung-1-14.tar.gz
 ```
 
 ### Step 4: Create Container
@@ -143,7 +143,7 @@ Create a new container using the uploaded image:
 **Request Body**:
 ```json
 {
-  "Image": "cms_script:latest",
+  "Image": "ador-samsung-1-14:latest",
   "WorkingDir": "/app",
   "Cmd": ["python", "cms_script.py"],
   "Hostname": "",

@@ -102,7 +102,7 @@ docker buildx build --platform linux/arm64 -f Dockerfile -t ador-samsung-1-14:la
 ```dockerfile
 FROM python:3.9-slim
 
-WORKDIR /app
+WORKDIR /usr/src/app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -144,7 +144,7 @@ Create a new container using the uploaded image:
 ```json
 {
   "Image": "ador-samsung-1-14:latest",
-  "WorkingDir": "/app",
+  "WorkingDir": "/usr/src/app",
   "Cmd": ["python", "cms_script.py"],
   "Hostname": "",
   "ExposedPorts": {

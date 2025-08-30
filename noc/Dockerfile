@@ -1,7 +1,7 @@
 # Use Alpine Linux for even smaller size
 FROM python:3.11-alpine AS builder
 
-WORKDIR /app
+WORKDIR /usr/src/app
 
 # Install build dependencies for Alpine
 RUN apk add --no-cache gcc musl-dev linux-headers
@@ -13,7 +13,7 @@ RUN pip install --user --no-cache-dir -r requirements.txt
 # Runtime stage
 FROM python:3.11-alpine
 
-WORKDIR /app
+WORKDIR /usr/src/app
 
 # Install only runtime dependencies if needed
 RUN apk add --no-cache libstdc++

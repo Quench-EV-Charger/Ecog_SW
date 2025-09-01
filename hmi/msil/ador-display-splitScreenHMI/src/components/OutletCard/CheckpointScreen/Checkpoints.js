@@ -221,7 +221,7 @@ const CheckPoints = (props) => {
 
   useEffect(() => {
     handleVoltageAssignments();
-    if (myOutlet?.needsUnplug) {
+    if (myOutlet?.needsUnplug && !myOutlet?.sessionPending) {
       handleClick("unplug");
       return;
     }

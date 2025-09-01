@@ -238,7 +238,7 @@ function OutletCard({ eachOutlet, status, onStatusChange }) {
           <InitialState eachOutlet={eachOutlet} handleClick={handleClick} chargingStatus={chargingStatus}/>
         )}
         {status === "auth" && (
-          <AuthorizeEv outlet={eachOutlet} handleClick={handleClick} />
+          <AuthorizeEv status={status} outlet={eachOutlet} handleClick={handleClick} />
         )}
         {status === "otp" && (
           <Numpad outlet={eachOutlet} handleClick={handleClick} />

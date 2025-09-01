@@ -25,10 +25,11 @@ import {
 } from "../../../redux/chargingSlice";
 import PlugEV from "../GunAlerts/plugEV";
 import { ThemeContext } from "../../ThemeContext/ThemeProvider";
+import { isHandshaking } from "../../../Utilis/UtilityFunction";
 
 const { Title } = Typography;
 
-const AuthorizeEv = ({ outlet, handleClick }) => {
+const AuthorizeEv = ({ status, outlet, handleClick }) => {
   const { addOrUpdateSessionToDb } = useSessionDb();
   const dispatch = useDispatch();
   const { theme, toggleTheme } = useContext(ThemeContext);
@@ -154,7 +155,7 @@ const AuthorizeEv = ({ outlet, handleClick }) => {
           localStorage.setItem("selectedOutlet", outletState.outlet);
           dispatch(setSelectedState(outletState));
         }
-        handleClick("checkpoint");
+        // handleClick("checkpoint");
       }
     }
   };
@@ -271,6 +272,14 @@ const AuthorizeEv = ({ outlet, handleClick }) => {
     }, 10000);
   };
 
+  // useEffect(() => {
+  //   let outputHand = isHandshaking(outlet)
+  //   if (status === "auth" && isHandshaking(outlet)) {
+  //     console.log(outputHand)
+  //     handleClick("checkpoint");
+  //   }
+  // })
+
   useEffect(() => {
     let socketRef;
 
@@ -335,7 +344,7 @@ const AuthorizeEv = ({ outlet, handleClick }) => {
               <AuthMode outlet={outlet} handleClick={handleClick} />
             ) : (
               <>
-                <Rfid eachOutlet={outlet} handleClick={handleClick} />
+                <Rfid status={status} eachOutlet={outlet} handleClick={handleClick} />
 
                 {errorInRfid && (
                   <div

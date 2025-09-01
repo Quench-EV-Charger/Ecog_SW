@@ -6,8 +6,9 @@ import { useDispatch, useSelector } from "react-redux";
 import { setSelectedState } from "../../../../redux/chargingSlice";
 import { setRfidAuthOwner } from "../../../../redux/rfidSlice";
 import { ThemeContext } from "../../../ThemeContext/ThemeProvider";
+import { isHandshaking } from "../../../../Utilis/UtilityFunction";
 
-function Rfid({ handleClick, eachOutlet }) {
+function Rfid({status, handleClick, eachOutlet }) {
   const dispatch = useDispatch();
   const charging = useSelector((state) => state.charging);
   const rfidAuthOwner = useSelector((state) => state.rfid.rfidAuthOwner);
@@ -60,7 +61,7 @@ function Rfid({ handleClick, eachOutlet }) {
           localStorage.setItem("selectedOutlet", outlet.outlet);
           localStorage.setItem("user", outlet.user);
           dispatch(setSelectedState(outlet));
-          handleClick("checkpoint");
+          // handleClick("checkpoint");
         }
       };
 
@@ -93,6 +94,8 @@ function Rfid({ handleClick, eachOutlet }) {
       clearInterval(timerRef.current);
     };
   },[countdown])
+
+
 
   return (
     <div style={{ position: "relative" }}>

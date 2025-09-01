@@ -234,7 +234,7 @@ async function handleIdleState() {
 async function setPowerCap(outletNum, power, reason = "Power Cap Applied") {
     try {
         // Apply 500W safety deduction to prevent hardware tolerance issues
-        const safePower = Math.max(power - SAFETY_DEDUCTION_W, powerLowDemandValue);
+        const safePower = Math.max(power, powerLowDemandValue);
         
         const response = await fetch(baseUrl + "/outlets/" + outletNum + "/powercap", {
             method: "POST",
@@ -246,7 +246,7 @@ async function setPowerCap(outletNum, power, reason = "Power Cap Applied") {
             return [];
         }
         const result = await response.text();
-        logPowerTransition(outletNum, "?", safePower, `${reason} (Original: ${power}W, Applied: ${safePower}W with ${SAFETY_DEDUCTION_W}W safety deduction)`);
+        logPowerTransition(outletNum, "?", safePower, `${reason} (Original: ${power}W, Applied: ${safePower}W`);
         return result;
     } catch (error) {
         console.error("PowerCap Error:", error);

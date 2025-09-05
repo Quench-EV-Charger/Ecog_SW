@@ -257,22 +257,28 @@ class Charging extends Component {
                   <Row style={S.SessionInfoTextsContainer}>
                     <p style={S.SessionInfoText}>
                       {context.t("VOLTAGE")}:{" "}
-                      {!!chargerState &&
-                        !!chargerState.pv &&
-                        chargerState.pv.toFixed(2)}{" "}
-                      V
+                      {chargerState?.dc_meter?.voltage !== undefined
+                        ? `${chargerState.dc_meter.voltage.toFixed(2)} V`
+                        : chargerState?.pv !== undefined
+                        ? `${chargerState.pv.toFixed(2)} V`
+                        : "N/A"}
                     </p>
+
                     <p style={S.SessionInfoText}>
                       {context.t("CURRENT")}:{" "}
-                      {!!chargerState && chargerState.pc !== undefined ? (
-                        <>{chargerState.pc.toFixed(2)} A </>
-                      ) : (
-                        "N/A"
-                      )}
+                      {chargerState?.dc_meter?.current !== undefined
+                        ? `${chargerState.dc_meter.current.toFixed(2)} A`
+                        : chargerState?.pc !== undefined
+                        ? `${chargerState.pc.toFixed(2)} A`
+                        : "N/A"}
                     </p>
                     <p style={S.SessionInfoText}>
                       {context.t("POWER")}:{" "}
-                      {!!chargerState && (chargerState.pp / 1000).toFixed(2)} kW
+                      {chargerState?.dc_meter?.total_import_mains_power !== undefined
+                        ? `${chargerState.dc_meter.total_import_mains_power.toFixed(2)} kW`
+                        : chargerState?.pp !== undefined
+                        ? `${(chargerState.pp / 1000).toFixed(2)} kW`
+                        : "N/A"}
                     </p>
                     <p style={S.SessionInfoText}>
                       {context.t("UNIT_CONSUMED")}: {energyConsumed} kWh

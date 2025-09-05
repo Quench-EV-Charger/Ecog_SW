@@ -266,7 +266,7 @@ const AuthorizeEv = ({ status, outlet, handleClick }) => {
       }, 5000);
       
       try {
-        handlePostOutletId(rfidData);
+        await handlePostOutletId(rfidData);
         setAllowToShowAlert(true);
       } catch (error) {
         console.error("Error handling WebSocket message:", error);
@@ -323,8 +323,18 @@ const AuthorizeEv = ({ status, outlet, handleClick }) => {
 
     init();
 
-    return () => {
+    return async () => {
       // Clean up WebSocket connection
+      // Set outletId to null
+      const chargingStore = store.getState();
+      const api = chargingStore?.charging?.config?.API;
+
+      await clearRfid(api);
+      await httpPost(
+        `${api}/services/rfid/outletId`,
+        JSON.stringify({ outletId: null }),
+        "outlet id post"
+      );
       if (socketRef && socketRef.close) {
         socketRef.close();
         console.log("WebSocket closed on cleanup.");

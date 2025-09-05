@@ -12,6 +12,7 @@ import rfidImg from "../../../assets/images/scan_rfid.svg";
 import * as S from "./style";
 import { setRfidAuthOwner } from "../../../redux/rfidSlice";
 import { ThemeContext } from "../../ThemeContext/ThemeProvider";
+import { httpPost } from "../../../services/servicesApi";
 
 
 const StopCharging = ({ eachOutlet, handleClick }) => {
@@ -167,9 +168,18 @@ const StopCharging = ({ eachOutlet, handleClick }) => {
     };
     initialize();
 
-    return () => {
+    return async () => {
       // socketRef.current?.close();
       // Clear RFID processing timeout and set
+       // Set outletId to null
+      const api = store?.config?.API;
+
+      await clearRfid(api);
+      await httpPost(
+        `${api}/services/rfid/outletId`,
+        JSON.stringify({ outletId: null }),
+        "outlet id post"
+      );
       if (processingTimeoutRef.current) {
         clearTimeout(processingTimeoutRef.current);
       }

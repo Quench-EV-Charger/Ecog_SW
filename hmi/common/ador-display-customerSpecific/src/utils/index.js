@@ -131,7 +131,7 @@ export const isNeedUnplug = (outletState) => {
 
   return (
     (outletState.needsUnplug && !outletState.sessionPending) ||
-    (outletState.pilot === 2 && outletState.phs === 7 && outletState.auth)
+    (outletState.pilot === 2 && outletState.phs === 7 && outletState.auth && !outletState.sessionPending)
   );
 };
 
@@ -199,7 +199,7 @@ export const isHandshaking = (state) => {
   if (!state || !state.pilot) return false;
 
   const { pilot, phs, needsUnplug ,sessionPending} = state;
-  return pilot > 0 && pilot !== 7 && phs >= 3 && phs < 7 && !needsUnplug && sessionPending;
+  return pilot > 0 && pilot !== 7 && phs >= 3 && phs < 7 && !needsUnplug && !sessionPending;
 };
 
 export const isFaulted = (state) => {

@@ -231,7 +231,7 @@ function InitialState(props) {
               color: theme === "dark" ? "white" : "black",
             }}
           >
-            Press here to start
+            {chargingStatus === "available" ? "Plug your EV" : "Click to Start"}
           </span>
           <div
             style={{

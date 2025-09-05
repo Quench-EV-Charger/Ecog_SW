@@ -44,18 +44,19 @@ function ChargingState({ handleClick, eachOutlet }) {
           handleClick('stopcharger')
         }
         const updatedBatteryLevel = eachOutlet.EVRESSSOC ? +eachOutlet.EVRESSSOC.toFixed(0) : 0;
-        const updatedPowerUtilizing = eachOutlet.pp ? (eachOutlet.pp / 1000).toFixed(2) + " kW" : 'N/A';
+        const updatedPowerUtilizing = eachOutlet.dc_meter?.total_import_mains_power ? eachOutlet.dc_meter?.total_import_mains_power + " kW" : eachOutlet.pp ? (eachOutlet.pp / 1000).toFixed(2) + " kW" : 'N/A';
 
         let updatedEnergyConsumed = eachOutlet?.curr_ses_Wh;
         const isAC = eachOutlet?.outletType === OutletType.AC;
         if (!isAC && (updatedEnergyConsumed || updatedEnergyConsumed === 0)) {
           updatedEnergyConsumed = updatedEnergyConsumed / 1000;
         }
-        updatedEnergyConsumed = updatedEnergyConsumed?.toFixed(3);
+        updatedEnergyConsumed = eachOutlet.dc_meter?.total_import_device_energy ? eachOutlet.dc_meter?.total_import_device_energy?.toFixed(3) : updatedEnergyConsumed?.toFixed(3);
+
         const updatedEnergySupplied = updatedEnergyConsumed + " kWh";
 
-        const updatedVoltageSupply = eachOutlet.pv !== undefined ? eachOutlet.pv.toFixed(2) + " V" : "N/A";
-        const updatedCurrentSupply = eachOutlet.pc !== undefined ? eachOutlet.pc.toFixed(2) + " A" : "N/A";
+        const updatedVoltageSupply = eachOutlet.dc_meter?.voltage ? eachOutlet.dc_meter?.voltage + " V" : eachOutlet.pv !== undefined ? eachOutlet.pv.toFixed(2) + " V" : "N/A";
+        const updatedCurrentSupply = eachOutlet.dc_meter?.current ? eachOutlet.dc_meter.current + " A"  : eachOutlet.pc !== undefined ? eachOutlet.pc.toFixed(2) + " A" : "N/A";
         const updatedTimeElapsed = elapsedTime(eachOutlet.sessionStart);
         const updatedCurrentDemand = eachOutlet.tc !== undefined ? eachOutlet.tc.toFixed(2) + " A" : "N/A";
         const updatedVoltageDemand = eachOutlet.tv !== undefined ? eachOutlet.tv.toFixed(2) + " V" : "N/A";

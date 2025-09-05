@@ -22,13 +22,18 @@ class IpcMqttService {
           payload = JSON.parse(payload);
         } catch (error) {
           console.error("Invalid JSON payload:", error);
+          return;
         }
-  
-        ["auth-res", "reset", "remoteauth"].forEach((eventName) => {
-          window.dispatchEvent(
-            new CustomEvent(eventName, { bubbles: true, detail: payload })
-          );
-        });
+
+        // Only dispatch events that match the payload type
+        if (payload && payload.type) {
+          const eventType = payload.type;
+          if (["auth-res", "reset", "remoteauth"].includes(eventType)) {
+            window.dispatchEvent(
+              new CustomEvent(eventType, { bubbles: true, detail: payload })
+            );
+          }
+        }
       });
     }
   }

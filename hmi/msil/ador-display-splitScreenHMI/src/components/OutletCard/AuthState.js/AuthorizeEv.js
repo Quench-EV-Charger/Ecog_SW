@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useContext } from "react";
+import React, { useEffect, useState, useCallback, useContext, useRef } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { Row, Col, Typography } from "antd";
 import ReconnectingWebSocket from "reconnecting-websocket";
@@ -18,7 +18,6 @@ import useSessionDb from "../../../LocalDB/useSessionDb";
 import autochargespin from "../../../assets/images/autochargespin.gif";
 import AuthMode from "./AuthMode";
 import Rfid from "./RFID/Rfid";
-import IpcMqttService from "../../../services/ipcMqttService";
 import {
   setRemoteAuthMode,
   setSelectedState,
@@ -48,6 +47,10 @@ const AuthorizeEv = ({ status, outlet, handleClick }) => {
   const [reservationEndTime, setReservationEndTime] = useState(null);
   const [showAuthMode, setShowAuthMode] = useState(true);
   const [authMode, setAuthMode] = useState(null);
+
+  // RFID processing tracking
+  const processedRfidsRef = useRef(new Set());
+  const processingTimeoutRef = useRef(null);
 
   const selectedState = useSelector((state) => state.charging.selectedState);
   const chargerState = useSelector((state) => state.charging.chargerState);
@@ -229,7 +232,7 @@ const AuthorizeEv = ({ status, outlet, handleClick }) => {
     const { config } = chargingStore.charging;
 
     const socket = new ReconnectingWebSocket(
-      `${config.socketUrl}/services/rfid/idTag`
+      `${config.socketUrl}/services/rfid/v2/idTag`
     );
 
     socket.onopen = () => {
@@ -238,8 +241,32 @@ const AuthorizeEv = ({ status, outlet, handleClick }) => {
 
     socket.onmessage = async (event) => {
       if (!event || !event.data || typeof event.data !== "string") return;
+      
+      const rfidData = JSON.parse(event.data)
+      const rfidDataTag = JSON.parse(event.data).idTag
+      
+      if(rfidData.outletId != null) {
+        return
+      }
+      
+      // Prevent duplicate processing of same RFID
+      if (processedRfidsRef.current.has(rfidDataTag)) {
+        return;
+      }
+      
+      // Mark RFID as processed
+      processedRfidsRef.current.add(rfidDataTag);
+      
+      // Clear processed RFID after 3 seconds to allow re-authentication
+      if (processingTimeoutRef.current) {
+        clearTimeout(processingTimeoutRef.current);
+      }
+      processingTimeoutRef.current = setTimeout(() => {
+        processedRfidsRef.current.delete(rfidDataTag);
+      }, 5000);
+      
       try {
-        await handlePostOutletId(event.data);
+        handlePostOutletId(rfidData);
         setAllowToShowAlert(true);
       } catch (error) {
         console.error("Error handling WebSocket message:", error);
@@ -305,6 +332,11 @@ const AuthorizeEv = ({ status, outlet, handleClick }) => {
       // Remove custom event listeners
       window.removeEventListener("auth-res", authResHandler);
       window.removeEventListener("remoteauth", handleRemoteAuth);
+      // Clear RFID processing timeout and set
+      if (processingTimeoutRef.current) {
+        clearTimeout(processingTimeoutRef.current);
+      }
+      processedRfidsRef.current.clear();
     };
   }, [authResHandler, fetchData, selectedState, handleRemoteAuth]);
 

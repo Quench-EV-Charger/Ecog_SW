@@ -153,9 +153,13 @@ function Dashboard() {
     ipcClient.on("message", (_, payload) => {
       try {
         const parsed = JSON.parse(payload);
-        ["auth-res", "reset", "remoteauth"].forEach((eventType) =>
-          window.dispatchEvent(new CustomEvent(eventType, { detail: parsed }))
-        );
+        const eventType = parsed.type;
+        // Only dispatch RFID-related events when on home tab to avoid conflicts with component-specific handlers
+        if (["auth-res", "reset", "remoteauth"].includes(eventType)) {
+          if (selectedTab === "home" || eventType === "reset") {
+            window.dispatchEvent(new CustomEvent(eventType, { detail: parsed }));
+          }
+        }
       } catch (err) {
         console.error("Invalid MQTT payload:", err);
       }
@@ -174,7 +178,7 @@ function Dashboard() {
       ipcClient.end();
       window.removeEventListener("reset", handleReset);
     };
-  }, [ipcClientRoute]);
+  }, [ipcClientRoute, selectedTab]);
 
   const handleStatusChange = (outletId, newStatus) => {
     setStatusMap((prev) => ({ ...prev, [outletId]: newStatus }));

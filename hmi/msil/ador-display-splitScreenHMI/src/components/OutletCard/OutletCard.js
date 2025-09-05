@@ -197,7 +197,7 @@ function OutletCard({ eachOutlet, status, onStatusChange }) {
         shouldGoHomeOnSessionStart &&
         config?.isRfidFlow
       ) {
-        handleClick("initail");
+        handleClick("initial");
       } else {
         handleClick("charging");
       }

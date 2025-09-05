@@ -39,36 +39,36 @@ function Rfid({status, handleClick, eachOutlet }) {
       return;
     }
 
-    if (!isRfidFlow && socketUrl) {
-      const socket = new ReconnectingWebSocket(
-        `${socketUrl}/services/rfid/idTag`
-      );
-      socketRef.current = socket;
+    // if (!isRfidFlow && socketUrl) {
+    //   const socket = new ReconnectingWebSocket(
+    //     `${socketUrl}/services/rfid/idTag`
+    //   );
+    //   socketRef.current = socket;
 
-      socket.onmessage = (event) => {
-        const rfid = event.data;
-        console.log("RFID Scanned:", rfid);
+    //   socket.onmessage = (event) => {
+    //     const rfid = event.data;
+    //     console.log("RFID Scanned:", rfid);
 
-        const outlet = eachOutletRef.current;
+    //     const outlet = eachOutletRef.current;
 
-        const activeSession =
-          outlet?.user === rfid &&
-          outlet?.pilot >= 3 &&
-          outlet?.pilot <= 4 &&
-          outlet?.phs >= 3;
+    //     const activeSession =
+    //       outlet?.user === rfid &&
+    //       outlet?.pilot >= 3 &&
+    //       outlet?.pilot <= 4 &&
+    //       outlet?.phs >= 3;
 
-        if (activeSession) {
-          localStorage.setItem("selectedOutlet", outlet.outlet);
-          localStorage.setItem("user", outlet.user);
-          dispatch(setSelectedState(outlet));
-          // handleClick("checkpoint");
-        }
-      };
+    //     if (activeSession) {
+    //       localStorage.setItem("selectedOutlet", outlet.outlet);
+    //       localStorage.setItem("user", outlet.user);
+    //       dispatch(setSelectedState(outlet));
+    //       // handleClick("checkpoint");
+    //     }
+    //   };
 
-      return () => {
-        socket.close();
-      };
-    }
+    //   return () => {
+    //     socket.close();
+    //   };
+    // }
   }, [config, dispatch, handleClick]);
 
   // Redirect if different outlet scanned

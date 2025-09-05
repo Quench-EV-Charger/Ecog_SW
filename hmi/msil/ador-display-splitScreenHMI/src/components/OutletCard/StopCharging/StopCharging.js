@@ -26,6 +26,8 @@ const StopCharging = ({ eachOutlet, handleClick }) => {
   const [errorInPIN, setErrorInPIN] = useState(false);
   const [errorInRfid, setErrorInRfid] = useState(false);
   const [nullRfidSent, setNullRfidSent] = useState(false);
+  const processedRfidsRef = useRef(new Set());
+  const processingTimeoutRef = useRef(null);
   const socketRef = useRef(null);
   const [initialized, setInitialized] = useState(false);
   const { theme, toggleTheme } = useContext(ThemeContext);
@@ -93,7 +95,13 @@ const StopCharging = ({ eachOutlet, handleClick }) => {
     }
 
     if (getallCapsIdTag(API)) {
-      if (currentUser?.toLowerCase().includes(rfid.toLowerCase())) {
+      const rfidTag = JSON.parse(rfid).idTag
+      const rfidData = JSON.parse(rfid)
+
+      // if(rfidData.outletId != null) {
+      //   return
+      // }
+      if (currentUser?.toLowerCase().includes(rfidTag.toLowerCase())) {
         stopCharge();
       } else {
         ipcClient.publish(
@@ -117,10 +125,29 @@ const StopCharging = ({ eachOutlet, handleClick }) => {
   };
 
   const setupWebSocket = () => {
-    const socketEndpoint = `${store?.config?.socketUrl}/services/rfid/idTag`;
+    const socketEndpoint = `${store?.config?.socketUrl}/services/rfid/v2/idTag`;
     const socket = new ReconnectingWebSocket(socketEndpoint);
     socket.onmessage = async (event) => {
       if (nullRfidSent) return;
+      
+      const rfidData = event.data;
+      
+      // Prevent duplicate processing of same RFID
+      if (processedRfidsRef.current.has(rfidData)) {
+        return;
+      }
+      
+      // Mark RFID as processed
+      processedRfidsRef.current.add(rfidData);
+      
+      // Clear processed RFID after 3 seconds to allow re-authentication
+      if (processingTimeoutRef.current) {
+        clearTimeout(processingTimeoutRef.current);
+      }
+      processingTimeoutRef.current = setTimeout(() => {
+        processedRfidsRef.current.delete(rfidData);
+      }, 5000);
+      
       handleRFIDSubmit(event.data);
       setNullRfidSent(true);
       setTimeout(() => setNullRfidSent(false), 1000);
@@ -141,7 +168,12 @@ const StopCharging = ({ eachOutlet, handleClick }) => {
     initialize();
 
     return () => {
-      socketRef.current?.close();
+      // socketRef.current?.close();
+      // Clear RFID processing timeout and set
+      if (processingTimeoutRef.current) {
+        clearTimeout(processingTimeoutRef.current);
+      }
+      processedRfidsRef.current.clear();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

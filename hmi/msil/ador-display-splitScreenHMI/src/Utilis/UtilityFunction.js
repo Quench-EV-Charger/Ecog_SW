@@ -208,7 +208,7 @@ export const isNeedUnplug = (outletState) => {
 
   return (
     (outletState.needsUnplug && !outletState.sessionPending) ||
-    (outletState.pilot === 2 && outletState.phs === 7 && outletState.auth)
+    (outletState.pilot === 2 && outletState.phs === 7 && outletState.auth && !outletState.sessionPending)
   );
 };
 

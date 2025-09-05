@@ -281,7 +281,12 @@ class Charging extends Component {
                         : "N/A"}
                     </p>
                     <p style={S.SessionInfoText}>
-                      {context.t("UNIT_CONSUMED")}: {energyConsumed} kWh
+                      {context.t("UNIT_CONSUMED")}:{" "}
+                      {chargerState?.dc_meter?.total_import_device_energy !== undefined
+                        ? `${chargerState.dc_meter.total_import_device_energy.toFixed(2)} kWh`
+                        : energyConsumed !== undefined
+                        ? `${energyConsumed} kWh`
+                        : "N/A"}
                     </p>
                   </Row>
                   {context.selectedState?.outletType !== "AC" && (

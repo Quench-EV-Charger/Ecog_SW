@@ -439,7 +439,7 @@ class AuthorizeEv extends Component {
               iconType="warning"
               display={this.state.errorInRfid}
               onClose={() => {
-                this.hideRfidError();
+                this.hidePINError();
                 this.hideReservation();
               }}
               errorMessage={

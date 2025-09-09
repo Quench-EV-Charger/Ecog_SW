@@ -19,8 +19,25 @@
  * Copyright (c) EcoG GmbH 2023
  * * All rights reserved
  * This script monitors the IO errors,Temperature errors and Supply Voltage errors
- * Version: 1.0.7
- *
+ * Version: 1.0.9
+ * 
+ * Modified: 09 December 2024 - Fixed undervoltage false positive with empty voltage arrays
+ * - Added check to skip undervoltage detection when voltage array is empty (no power/no data)
+ * - Prevents false undervoltage alarms when both AC meter and power modules are offline
+ * - Resolves issue where Array.every() returns true for empty arrays causing incorrect undervoltage detection
+ * - Now correctly handles no-power scenarios without triggering false undervoltage counters
+ * 
+ * Modified: 09 September 2025 - Fixed voltage source selection based on powerSaveInIdleMode flag
+ * - Fixed voltage monitoring to properly respect powerSaveInIdleMode configuration
+ * - When powerSaveInIdleMode=false: System now exclusively uses power module voltages, ignoring AC meter even if available
+ * - When powerSaveInIdleMode=true: System uses AC meter if available, otherwise falls back to power module voltages
+ * - Applied consistent voltage source selection for undervoltage, overvoltage, and recovery conditions
+ * - Fixed power loss recovery logic to also respect powerSaveInIdleMode flag
+ * - Resolves field issue: False undervoltage alarms when powerSaveInIdleMode=false with healthy voltages
+ * - Confirms correct behavior: When all voltages are 0, power loss error is reported instead of undervoltage
+ * - Fixed undervoltage false positive: Added check to skip undervoltage detection when voltage array is empty
+ * - Prevents false undervoltage alarms when both AC meter and power modules are offline (no power condition)
+ * 
  * Modified: 28 August 2025 by Kushagra Mittal
  * - Increased undervoltage threshold from 20 to 40 seconds for improved stability
  * - Increased overvoltage threshold from 20 to 40 seconds for improved stability
@@ -160,7 +177,7 @@ let imdMonitorActive = false;
 // High-frequency IMD resistance monitoring loop
 const startIMDResistanceMonitor = async () => {
   imdMonitorActive = true;
-
+  
   const loop = async () => {
     try {
       // Check if monitoring should continue
@@ -567,6 +584,17 @@ const checkUnderVoltageThroughPowerModule = async (
   voltages,
   t_case
 ) => {
+  // Skip undervoltage check if voltage array is empty (no power/no data)
+  if (voltages.length === 0) {
+    // Reset counter if it was incrementing before power was lost
+    if (tripCaseUV == t_case && errorObjCount.underVoltageErr > 0) {
+      console.log(`[UV] Undervoltage counter reset: 0/${errorObjThreshold.underVoltageErr} for phase ${t_case}, no voltage data available`);
+      errorObjCount.underVoltageErr = 0;
+      tripCaseUV = UVTripState.Idle;
+    }
+    return;
+  }
+  
   if (voltages.every(checkVoltsBelowThres)) {
     !!onTestingMode &&
       console.log(
@@ -1400,7 +1428,21 @@ const checkErrors = async () => {
               await powerONRecoverCheck(states, volts);
             }
           } else if (iostate["modbus.selec.online"] === true) {
-            await powerrecoveracmeter(states, iostate);
+            // FIX for Issue 2: Check for power loss when AC meter is online but showing 0V
+            const voltageKeys = [
+              "modbus.selec.voltage_L1_L2",
+              "modbus.selec.voltage_L1_L3",
+              "modbus.selec.voltage_L3_L2",
+            ];
+            const acVolts = voltageKeys.map((key) => iostate[key] || 0);
+            
+            // If all voltages are below 200V, it's power loss not undervoltage
+            if (acVolts.every(v => v < Constants.powermoduleundervoltage)) {
+              console.log(`[AC Meter] Power loss detected - all voltages < ${Constants.powermoduleundervoltage}V:`, acVolts);
+              await powerfailacmeter(states, iostate);
+            } else {
+              await powerrecoveracmeter(states, iostate);
+            }
           }
         }
         // Handle error without AC meter
@@ -1424,7 +1466,9 @@ const checkErrors = async () => {
         if (iostateValue !== undefined) {
           // Process controller 1 data
           const iostate = iostateValue.controller1;
+          // FIX for Issue 1: Only use AC meter if powerSaveInIdleMode is true (AC meter installed)
           if (
+            powerSaveInIdleMode === true &&
             "modbus.selec.online" in iostate &&
             iostate["modbus.selec.online"] === true
           ) {
@@ -1433,6 +1477,8 @@ const checkErrors = async () => {
               console.log("[UV/OV] Switching from power module to AC meter monitoring - resetting UV/OV counters and trip state");
               errorObjCount.underVoltageErr = 0;
               errorObjCount.overVoltageErr = 0;
+              errorObj.underVoltageErr = false;  // Reset error flag too
+              errorObj.overVoltageErr = false;   // Reset error flag too
               tripCaseUV = UVTripState.Idle;
             }
             lastMonitoringSource = 'ac_meter';
@@ -1444,7 +1490,12 @@ const checkErrors = async () => {
             ];
             // Extract specific voltage values from iostate
             var voltsFiltered = voltageKeys.map((key) => iostate[key]);
-            if (voltsFiltered.length > 0 && !errorObj.powerLossErr) {
+            
+            // FIX for Issue 2: Check for power loss condition before undervoltage
+            if (voltsFiltered.every(v => v < Constants.powermoduleundervoltage)) {
+              console.log(`[AC Meter] Skipping UV/OV check - power loss condition detected (voltages < ${Constants.powermoduleundervoltage}V):`, voltsFiltered);
+              // Don't check UV/OV during power loss - it's already handled above
+            } else if (voltsFiltered.length > 0 && !errorObj.powerLossErr) {
               await checkSuppyVoltageTripACmeter(states, voltsFiltered);
               // Recover from Under Voltage, Over Voltage
               await checkRecoveryConditions(voltsFiltered, states);
@@ -1455,11 +1506,18 @@ const checkErrors = async () => {
               console.log("[UV/OV] Switching from AC meter to power module monitoring - resetting UV/OV counters and trip state");
               errorObjCount.underVoltageErr = 0;
               errorObjCount.overVoltageErr = 0;
+              errorObj.underVoltageErr = false;  // Reset error flag too
+              errorObj.overVoltageErr = false;   // Reset error flag too
               tripCaseUV = UVTripState.Idle;
             }
             lastMonitoringSource = 'power_module';
             
-            console.log("Ac meter is not available/connected");
+            // Log the actual configuration status
+            if (powerSaveInIdleMode === false) {
+              console.log("No AC meter installed (powerSaveInIdleMode=false), using power module voltages");
+            } else {
+              console.log("AC meter not available/offline, using power module voltages");
+            }
             // Get voltage array
             const volts = await getVoltageArr(states);
 

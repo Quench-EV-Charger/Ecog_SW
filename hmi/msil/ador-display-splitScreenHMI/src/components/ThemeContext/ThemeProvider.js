@@ -8,7 +8,7 @@ const ThemeProvider = ({ children }) => {
   const store = useSelector((state) => state.charging);
 
   const [theme, setTheme] = useState(
-    store?.config?.uiConfiguration?.theme || "dark"
+    store?.config?.uiConfiguration?.theme || "light"
   );
 
   const toggleTheme = () => {

@@ -1,22 +1,18 @@
-import React, { useContext, useState, useEffect } from "react";
+import React, { useContext, useState, useEffect, useCallback } from "react";
 import { useSelector } from "react-redux";
 import { 
-  FaShieldAlt, 
-  FaBolt, 
   FaCog, 
-  FaQrcode, 
   FaLock, 
   FaUnlock,
   FaDesktop,
   FaMicrochip,
   FaEye,
   FaEyeSlash,
-  FaWifi,
-  FaThermometerHalf,
-  FaBatteryFull,
-  FaPlug
+  FaRedo
 } from "react-icons/fa";
 import { ThemeContext } from "../ThemeContext/ThemeProvider";
+import EVChargerKeyboard from "../EVChargerKeyboard/EVChargerKeyboard";
+import { useStableCallback } from "../../hooks/useStableCallback";
 
 // Password Protection Component
 const PasswordProtection = ({ onAuthenticated, theme }) => {
@@ -24,12 +20,31 @@ const PasswordProtection = ({ onAuthenticated, theme }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [attempts, setAttempts] = useState(0);
+  const [showKeyboard, setShowKeyboard] = useState(false);
+  const passwordInputRef = React.useRef(null);
   
   const isDark = theme === "dark";
   const styles = getStyles(isDark, isDark ? "#f5f5f5" : "#000000", isDark ? "transparent" : "#ffffff");
 
   const ADMIN_PASSWORD = "admin123"; // Mock password - replace with secure implementation
   const MAX_ATTEMPTS = 3;
+
+  const handlePasswordInputClick = () => {
+    setShowKeyboard(true);
+    setTimeout(() => {
+      if (passwordInputRef.current) {
+        passwordInputRef.current.focus();
+      }
+    }, 50);
+  };
+
+  const handleKeyboardInput = (newValue) => {
+    setPassword(newValue);
+  };
+
+  const handleCloseKeyboard = () => {
+    setShowKeyboard(false);
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -95,9 +110,12 @@ const PasswordProtection = ({ onAuthenticated, theme }) => {
         <form onSubmit={handleSubmit}>
           <div style={{ position: "relative", marginBottom: "1rem" }}>
             <input
+              ref={passwordInputRef}
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              onClick={handlePasswordInputClick}
+              onFocus={handlePasswordInputClick}
               placeholder="Enter password"
               disabled={isLocked}
               style={{
@@ -109,7 +127,8 @@ const PasswordProtection = ({ onAuthenticated, theme }) => {
                 color: isDark ? "#ffffff" : "#000000",
                 fontSize: "1rem",
                 outline: "none",
-                opacity: isLocked ? 0.5 : 1
+                opacity: isLocked ? 0.5 : 1,
+                fontFamily: "monospace"
               }}
             />
             <button
@@ -173,6 +192,17 @@ const PasswordProtection = ({ onAuthenticated, theme }) => {
           </button>
         </form>
 
+        <EVChargerKeyboard
+          isVisible={showKeyboard}
+          onClose={handleCloseKeyboard}
+          targetRef={passwordInputRef}
+          onInput={handleKeyboardInput}
+          inputType="password"
+          placeholder="Enter password"
+          maxLength={50}
+          secureMode={true}
+        />
+
         {/* <div style={{
           marginTop: "1.5rem",
           padding: "1rem",
@@ -189,8 +219,9 @@ const PasswordProtection = ({ onAuthenticated, theme }) => {
   );
 };
 
-// Toggle Setting Component
-const ToggleSetting = ({ icon, label, description, color, enabled, onToggle, disabled = false }) => {
+
+// Toggle Setting Component - Memoized to prevent unnecessary re-renders
+const ToggleSetting = React.memo(({ icon, label, description, color, enabled, onToggle, disabled = false }) => {
   const { theme } = useContext(ThemeContext);
   const isDark = theme === "dark";
   const styles = getStyles(isDark, isDark ? "#f5f5f5" : "#000000", isDark ? "transparent" : "#ffffff");
@@ -231,10 +262,21 @@ const ToggleSetting = ({ icon, label, description, color, enabled, onToggle, dis
     </div>
   </div>
   );
-};
+}, (prevProps, nextProps) => {
+  // Enhanced memo comparison - only re-render if actual prop values change
+  return (
+    prevProps.icon === nextProps.icon &&
+    prevProps.label === nextProps.label &&
+    prevProps.description === nextProps.description &&
+    prevProps.color === nextProps.color &&
+    prevProps.enabled === nextProps.enabled &&
+    prevProps.onToggle === nextProps.onToggle &&
+    prevProps.disabled === nextProps.disabled
+  );
+});
 
-// Number Setting Component
-const NumberSetting = ({ icon, label, description, color, value, onValueChange, min = 0, max = 100, unit = "" }) => {
+// Number Setting Component - Memoized to prevent unnecessary re-renders
+const NumberSetting = React.memo(({ icon, label, description, color, value, onValueChange, min = 0, max = 100, unit = "" }) => {
   const { theme } = useContext(ThemeContext);
   const isDark = theme === "dark";
   const styles = getStyles(isDark, isDark ? "#f5f5f5" : "#000000", isDark ? "transparent" : "#ffffff");
@@ -287,66 +329,226 @@ const NumberSetting = ({ icon, label, description, color, value, onValueChange, 
       </div>
     </div>
   );
-};
+});
 
-// Text Setting Component
-const TextSetting = ({ icon, label, description, color, value, onValueChange }) => {
-  const { theme } = useContext(ThemeContext);
-  const isDark = theme === "dark";
-  const styles = getStyles(isDark, isDark ? "#f5f5f5" : "#000000", isDark ? "transparent" : "#ffffff");
-  
-  const handleChange = (e) => {
-    onValueChange(e.target.value);
-  };
+// Text Setting Component - Optimized to prevent unnecessary re-renders
+const TextSetting = React.memo(
+  ({ icon, label, description, color, value, onValueChange }) => {
+    const { theme } = useContext(ThemeContext);
+    const isDark = theme === "dark";
+    
+    // Memoize styles to prevent recalculation on every render
+    const styles = React.useMemo(() => 
+      getStyles(isDark, isDark ? "#f5f5f5" : "#000000", isDark ? "transparent" : "#ffffff"),
+      [isDark]
+    );
 
-  return (
-    <div style={styles.settingRow}>
-      <div style={styles.labelContainer}>
-        <span style={styles.label}>
-          {React.cloneElement(icon, { style: { marginRight: "8px", color } })}
-          {label}
-        </span>
-        {description && (
-          <span style={styles.description}>{description}</span>
-        )}
-      </div>
-      <input
-        type="text"
-        value={value || ''}
-        onChange={handleChange}
-        style={styles.textInput}
-        placeholder="Enter value..."
-      />
-    </div>
-  );
-};
+    // Local state for internal editing
+    const [tempValue, setTempValue] = useState(value || "");
+    const [isEditing, setIsEditing] = useState(false);
+    const [showKeyboard, setShowKeyboard] = useState(false);
+
+    const inputRef = React.useRef(null);
+    const containerRef = React.useRef(null);
+
+    // Update local state only when parent `value` changes externally
+    React.useEffect(() => {
+      if (!isEditing) {
+        setTempValue(value || "");
+      }
+    }, [value, isEditing]);
+
+    // Stable handler for Apply - memoized with stable dependencies
+    const handleApply = React.useCallback(
+      (e) => {
+        e?.stopPropagation();
+        onValueChange(tempValue); // Only notify parent when Apply is clicked
+        setIsEditing(false);
+        setShowKeyboard(false);
+      },
+      [tempValue, onValueChange]
+    );
+
+    // Cancel edits and revert to last saved value - memoized with stable dependencies
+    const handleCancel = React.useCallback(
+      (e) => {
+        e?.stopPropagation();
+        setTempValue(value || "");
+        setIsEditing(false);
+        setShowKeyboard(false);
+      },
+      [value]
+    );
+
+    // Input click - enable editing and show keyboard - memoized
+    const handleInputClick = React.useCallback((e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      setIsEditing(true);
+      setShowKeyboard(true);
+
+      // Small delay to ensure the keyboard shows before focus
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 50);
+    }, []);
+
+    // Input change - memoized
+    const handleChange = React.useCallback((e) => {
+      setTempValue(e.target.value);
+      if (!isEditing) setIsEditing(true);
+      if (!showKeyboard) setShowKeyboard(true);
+    }, [isEditing, showKeyboard]);
+
+    // Handle keyboard component input - memoized
+    const handleKeyboardInput = React.useCallback((newValue) => {
+      setTempValue(newValue);
+      if (!isEditing) setIsEditing(true);
+      if (!showKeyboard) setShowKeyboard(true);
+    }, [isEditing, showKeyboard]);
+
+    // Handle closing the keyboard - memoized
+    const handleCloseKeyboard = React.useCallback(() => {
+      setShowKeyboard(false);
+    }, []);
+
+    // Memoize dynamic styles to prevent recalculation
+    const inputStyle = React.useMemo(() => ({
+      ...styles.textInput,
+      border: isEditing
+        ? `2px solid ${color || "#007bff"}`
+        : styles.textInput.border,
+      boxShadow: isEditing
+        ? `0 0 0 2px ${color || "#007bff"}33`
+        : "none"
+    }), [styles.textInput, isEditing, color]);
+
+    const cancelButtonStyle = React.useMemo(() => ({
+      padding: "6px 12px",
+      border: `1px solid ${isDark ? "#555" : "#ccc"}`,
+      borderRadius: "4px",
+      background: isDark ? "#444" : "#f5f5f5",
+      color: isDark ? "#fff" : "#333",
+      cursor: "pointer",
+      fontSize: "12px",
+      transition: "all 0.2s ease"
+    }), [isDark]);
+
+    const applyButtonStyle = React.useMemo(() => ({
+      padding: "6px 12px",
+      border: "none",
+      borderRadius: "4px",
+      background: color || "#007bff",
+      color: "#fff",
+      cursor: "pointer",
+      fontSize: "12px",
+      fontWeight: "bold",
+      transition: "all 0.2s ease"
+    }), [color]);
+
+    return (
+      <>
+        <div style={styles.settingRow}>
+          <div style={styles.labelContainer}>
+            <span style={styles.label}>
+              {React.cloneElement(icon, { style: { marginRight: "8px", color } })}
+              {label}
+            </span>
+            {description && (
+              <span style={styles.description}>{description}</span>
+            )}
+          </div>
+
+          <div
+            ref={containerRef}
+            style={{ display: "flex", flexDirection: "column", gap: "8px", flex: 1 }}
+          >
+            <input
+              ref={inputRef}
+              type="text"
+              value={tempValue}
+              onChange={handleChange}
+              onClick={handleInputClick}
+              placeholder="Enter value..."
+              style={inputStyle}
+            />
+
+            {isEditing && (
+              <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                <button
+                  onClick={handleCancel}
+                  style={cancelButtonStyle}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleApply}
+                  style={applyButtonStyle}
+                >
+                  Apply
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Virtual Keyboard Component */}
+        <EVChargerKeyboard
+          isVisible={showKeyboard}
+          onClose={handleCloseKeyboard}
+          targetRef={inputRef}
+          onInput={handleKeyboardInput}
+          inputType="text"
+          placeholder="Enter configuration value..."
+          maxLength={100}
+        />
+      </>
+    );
+  },
+  // Optimized comparison function to prevent unnecessary re-renders
+  (prevProps, nextProps) => {
+    // Only re-render if these specific props change
+    return (
+      prevProps.value === nextProps.value &&
+      prevProps.label === nextProps.label &&
+      prevProps.color === nextProps.color &&
+      prevProps.description === nextProps.description &&
+      prevProps.icon?.type === nextProps.icon?.type &&
+      prevProps.onValueChange === nextProps.onValueChange
+    );
+  }
+);
 
 // Main Settings Component
-function Setting() {
+const Setting = React.memo(() => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [activeTab, setActiveTab] = useState("software");
+  const [activeTab, setActiveTab] = useState("hardware");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const { theme } = useContext(ThemeContext);
-  const Store = useSelector((state) => state.charging);
-  const {
-    config,
-  } = Store;
-
+  
+  // Only subscribe to the specific config value, not the entire charging state
+  const config = useSelector((state) => state.charging?.config);
 
   // Configuration State - will be populated from API
   const [softwareConfig, setSoftwareConfig] = useState({});
   const [hardwareConfig, setHardwareConfig] = useState({});
   const [rawConfig, setRawConfig] = useState({});
+  
+  // Restart button state tracking
+  const [hasChanges, setHasChanges] = useState(false);
+  const [lastUpdateSuccess, setLastUpdateSuccess] = useState(false);
+
+  // Memoize API base URL to prevent unnecessary re-renders
+  const apiUrl = React.useMemo(() => config?.API, [config?.API]);
 
   // API Functions
-  const fetchConfiguration = async () => {
+  const fetchConfiguration = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const API = config?.API;
 
     try {
-      const response = await fetch(`${API}/ocpp-client/config`);
+      const response = await fetch(`${apiUrl}/ocpp-client/config`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -363,14 +565,13 @@ function Setting() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [apiUrl]);
 
-  const updateConfiguration = async (updatedConfig) => {
+  const updateConfiguration = useCallback(async (updatedConfig) => {
     setLoading(true);
     setError(null);
-     const API = config?.API;
     try {
-      const response = await fetch(`${API}/ocpp-client/config`, {
+      const response = await fetch(`${apiUrl}/ocpp-client/config`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -378,28 +579,50 @@ function Setting() {
         body: JSON.stringify(updatedConfig)
       });
       if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+      } catch (err) {
+        setError(`Failed to update configuration: ${err.message}`);
+        console.error('Error updating configuration:', err);
+        throw err;
+      } finally {
+        setLoading(false);
+        // Always refresh configuration after update attempt, regardless of success/failure
+        try {
+          await fetchConfiguration();
+        } catch (refreshErr) {
+          console.error('Error refreshing configuration after update:', refreshErr);
+        }
+      }
+    }, [apiUrl, fetchConfiguration]);
+
+  // Restart OCPP Client API function
+  const restartOcppClient = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${apiUrl}/ocpp-client/restart`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      const result = await response.json();
-      setRawConfig(updatedConfig);
-      categorizeConfiguration(updatedConfig);
-      return result;
+      // Reset the restart button state after successful restart
+      setHasChanges(false);
+      setLastUpdateSuccess(false);
+      return true;
     } catch (err) {
-      setError(`Failed to update configuration: ${err.message}`);
-      console.error('Error updating configuration:', err);
+      setError(`Failed to restart OCPP client: ${err.message}`);
+      console.error('Error restarting OCPP client:', err);
       throw err;
     } finally {
       setLoading(false);
     }
-  };
+  }, [apiUrl]);
 
-  // Helper function to generate human-readable labels
-  const generateLabel = (key) => {
-    return key
-      .replace(/([A-Z])/g, ' $1') // Add space before capital letters
-      .replace(/^./, str => str.toUpperCase()) // Capitalize first letter
-      .replace(/\b\w/g, l => l.toUpperCase()); // Capitalize each word
-  };
 
   // Helper function to determine input type based on value
   const getInputType = (value) => {
@@ -408,108 +631,125 @@ function Setting() {
     return 'text';
   };
 
-  // Helper function to get appropriate icon based on key name
-  const getSettingIcon = (key) => {
-    const keyLower = key.toLowerCase();
-    if (keyLower.includes('update') || keyLower.includes('auto')) return <FaShieldAlt />;
-    if (keyLower.includes('debug') || keyLower.includes('log')) return <FaBolt />;
-    if (keyLower.includes('data') || keyLower.includes('qr')) return <FaQrcode />;
-    if (keyLower.includes('remote') || keyLower.includes('wifi') || keyLower.includes('network')) return <FaWifi />;
-    if (keyLower.includes('screen') || keyLower.includes('display')) return <FaDesktop />;
-    if (keyLower.includes('refresh') || keyLower.includes('rate')) return <FaBolt />;
-    if (keyLower.includes('session') || keyLower.includes('plug')) return <FaPlug />;
-    if (keyLower.includes('power') || keyLower.includes('battery')) return <FaBatteryFull />;
-    if (keyLower.includes('temperature') || keyLower.includes('temp')) return <FaThermometerHalf />;
-    if (keyLower.includes('emergency') || keyLower.includes('stop') || keyLower.includes('safety')) return <FaShieldAlt />;
-    if (keyLower.includes('current') || keyLower.includes('voltage') || keyLower.includes('ground')) return <FaBolt />;
-    if (keyLower.includes('fan') || keyLower.includes('cooling')) return <FaCog />;
+  // Helper function to get appropriate icon based on key name - Memoized
+  const getSettingIcon = React.useCallback((key) => {
     return <FaCog />; // Default icon
-  };
+  }, []);
 
-  // Helper function to get appropriate color based on key name
-  const getSettingColor = (key) => {
-    const keyLower = key.toLowerCase();
-    if (keyLower.includes('emergency') || keyLower.includes('stop')) return '#ff0000';
-    if (keyLower.includes('temperature') || keyLower.includes('temp')) return '#ff4400';
-    if (keyLower.includes('power') || keyLower.includes('auto')) return '#00ff00';
-    if (keyLower.includes('debug') || keyLower.includes('ground')) return '#ffaa00';
-    if (keyLower.includes('current') || keyLower.includes('refresh')) return '#ff6600';
-    if (keyLower.includes('voltage') || keyLower.includes('data')) return '#ff0000';
-    if (keyLower.includes('remote') || keyLower.includes('limit')) return '#ff0066';
-    if (keyLower.includes('screen') || keyLower.includes('session')) return '#9966ff';
-    if (keyLower.includes('fan') || keyLower.includes('cooling')) return '#00aaff';
+  // Helper function to get appropriate color based on key name - Memoized
+  const getSettingColor = React.useCallback((key) => {
     return '#00ffaa'; // Default color
-  };
+  }, []);
 
-  // Categorize configuration into software and hardware
+  // Categorize configuration into OCPP and hardware
   const categorizeConfiguration = (config) => {
-    const softwareKeys = [
-      'autoUpdate', 'debugMode', 'dataLogging', 'remoteAccess', 
-      'screenTimeout', 'refreshRate', 'maxSessions', 'logLevel',
-      'apiTimeout', 'retryAttempts', 'cacheSize', 'updateInterval',
-      'logRotation', 'backupEnabled', 'compressionLevel'
-    ];
-    
-    const hardwareKeys = [
-      'powerSaving', 'temperatureMonitoring', 'emergencyStop', 
-      'groundFaultProtection', 'maxCurrent', 'voltageThreshold', 
-      'temperatureLimit', 'coolingFanSpeed', 'currentLimit', 
-      'voltageLimit', 'powerLimit', 'fanSpeed', 'sensorCalibration'
+    // OCPP Config parameters
+    const ocppKeys = [
+      'OCPPEndpointToBackend', 'chargerName', 'chargePointSerialNumber', 
+      'chargingPointModel', 'chargingPointVendor', 'acceptRemoteStartOnPreparingOnly',
+      'maxPowerLimitInkW', 'maxCurrentLimitInAmps', 'powerSaveInIdleMode',
+      'emulatedMetering', 'comboModeHMI', 'dlbCombo', 'numberOfInstalledPM',
+      'powerModuleCapacity', 'gun1MaxPower', 'gun2MaxPower', 'underVoltageThreshold',
+      'overVoltageThreshold', 'outletCount', 'gunTempDeRating', 'gunTempCutoff',
+      'cabinetTemperature'
     ];
 
-    const software = {};
+
+    const ocpp = {};
     const hardware = {};
 
-    Object.keys(config).forEach(key => {
-      if (softwareKeys.includes(key)) {
-        software[key] = config[key];
-      } else if (hardwareKeys.includes(key)) {
-        hardware[key] = config[key];
+    ocppKeys.forEach(key => {
+      if (config.hasOwnProperty(key)) {
+        ocpp[key] = config[key];
       } else {
-        // Auto-categorize based on key patterns
-        if (key.toLowerCase().includes('software') || 
-            key.toLowerCase().includes('debug') ||
-            key.toLowerCase().includes('log') ||
-            key.toLowerCase().includes('api') ||
-            key.toLowerCase().includes('timeout') ||
-            key.toLowerCase().includes('screen') ||
-            key.toLowerCase().includes('update') ||
-            key.toLowerCase().includes('backup') ||
-            key.toLowerCase().includes('compression')) {
-          software[key] = config[key];
-        } else {
-          hardware[key] = config[key];
-        }
+        hardware[key] = config[key];
       }
     });
 
-    setSoftwareConfig(software);
+    setSoftwareConfig(ocpp);
     setHardwareConfig(hardware);
   };
+
+  // Memoized callback functions to prevent re-renders
+  const memoizedUpdateHardwareConfig = React.useCallback((key, value) => {
+    updateHardwareConfig(key, value);
+  }, []);
+
+  const memoizedUpdateOcppConfig = React.useCallback((key, value) => {
+    updateOcppConfig(key, value);
+  }, []);
+
+  // Memoized callback creators for each setting
+  const hardwareCallbacks = React.useMemo(() => {
+    const callbacks = {};
+    Object.keys(hardwareConfig).forEach(key => {
+      callbacks[key] = (newValue) => memoizedUpdateHardwareConfig(key, newValue);
+    });
+    return callbacks;
+  }, [hardwareConfig, memoizedUpdateHardwareConfig]);
+
+  const ocppCallbacks = React.useMemo(() => {
+    const callbacks = {};
+    Object.keys(softwareConfig).forEach(key => {
+      callbacks[key] = (newValue) => memoizedUpdateOcppConfig(key, newValue);
+    });
+    return callbacks;
+  }, [softwareConfig, memoizedUpdateOcppConfig]);
 
   // Load configuration on component mount and authentication
   useEffect(() => {
     if (isAuthenticated) {
       fetchConfiguration();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, fetchConfiguration]);
 
-  // Dynamic Setting Component
-  const DynamicSetting = ({ configKey, value, onValueChange, category }) => {
+  // Memoized callback functions to prevent unnecessary re-renders
+  const updateOcppConfig = useCallback(async (key, value) => {
+    try {
+      setHasChanges(true); // Mark that changes have been made
+      const updatedConfig = { [key]: value };
+      await updateConfiguration(updatedConfig);
+      setLastUpdateSuccess(true); // Mark successful update
+    } catch (err) {
+      setLastUpdateSuccess(false); // Mark failed update
+      console.error('Failed to update software configuration:', err);
+    }
+  }, [updateConfiguration]);
+
+  const updateHardwareConfig = useCallback(async (key, value) => {
+    try {
+      setHasChanges(true); // Mark that changes have been made
+      const updatedConfig = { ...rawConfig, [key]: value };
+      await updateConfiguration(updatedConfig);
+      setLastUpdateSuccess(true); // Mark successful update
+    } catch (err) {
+      setLastUpdateSuccess(false); // Mark failed update
+      console.error('Failed to update hardware configuration:', err);
+    }
+  }, [rawConfig, updateConfiguration]);
+
+  // Dynamic Setting Component - Memoized to prevent unnecessary re-renders
+  const DynamicSetting = React.memo(({ configKey, value, onValueChange, category }) => {
     const inputType = getInputType(value);
-    const label = generateLabel(configKey);
-    const icon = getSettingIcon(configKey);
-    const color = getSettingColor(configKey);
-    const description = `Configure ${label.toLowerCase()} setting`;
+    const label = configKey
+    const icon = React.useMemo(() => getSettingIcon(configKey), [configKey]);
+    const color = React.useMemo(() => getSettingColor(configKey), [configKey]);
+    const updateFunction = React.useMemo(() => 
+      category === 'ocpp' ? updateOcppConfig : updateHardwareConfig, 
+      [category, updateOcppConfig, updateHardwareConfig]
+    );
 
-    const updateFunction = category === 'software' ? updateSoftwareConfig : updateHardwareConfig;
+    // Memoized callback to prevent re-renders - using stable callback hook
+    const handleValueChange = useStableCallback((newValue) => {
+      updateFunction(configKey, newValue);
+    }, [updateFunction, configKey]);
 
     if (inputType === 'toggle') {
       return (
         <ToggleSetting
           icon={icon}
           label={label}
-          description={description}
+          description={""}
           color={color}
           enabled={value}
           onToggle={() => updateFunction(configKey, !value)}
@@ -540,10 +780,10 @@ function Setting() {
         <NumberSetting
           icon={icon}
           label={label}
-          description={description}
+          description={""}
           color={color}
           value={value}
-          onValueChange={(newValue) => updateFunction(configKey, newValue)}
+          onValueChange={handleValueChange}
           min={min}
           max={max}
           unit={unit}
@@ -554,14 +794,27 @@ function Setting() {
         <TextSetting
           icon={icon}
           label={label}
-          description={description}
+          description={""}
           color={color}
           value={value}
-          onValueChange={(newValue) => updateFunction(configKey, newValue)}
+          onValueChange={handleValueChange}
         />
       );
     }
-  };
+  }, (prevProps, nextProps) => {
+    // Enhanced memo comparison to prevent unnecessary re-renders
+    return (
+      prevProps.configKey === nextProps.configKey &&
+      prevProps.value === nextProps.value &&
+      prevProps.category === nextProps.category &&
+      prevProps.inputType === nextProps.inputType &&
+      prevProps.icon === nextProps.icon &&
+      prevProps.label === nextProps.label &&
+      prevProps.color === nextProps.color &&
+      prevProps.updateOcppConfig === nextProps.updateOcppConfig &&
+      prevProps.updateHardwareConfig === nextProps.updateHardwareConfig
+    );
+  });
 
   const isDark = theme === "dark";
   const backgroundColor = isDark ? "transparent" : "#ffffff";
@@ -572,28 +825,8 @@ function Setting() {
     return <PasswordProtection onAuthenticated={() => setIsAuthenticated(true)} theme={theme} />;
   }
 
-  const updateSoftwareConfig = async (key, value) => {
-    try {
-      const updatedConfig = { ...rawConfig, [key]: value };
-      await updateConfiguration(updatedConfig);
-    } catch (err) {
-      // Revert on error - the error is already handled in updateConfiguration
-      console.error('Failed to update software configuration:', err);
-    }
-  };
-
-  const updateHardwareConfig = async (key, value) => {
-    try {
-      const updatedConfig = { ...rawConfig, [key]: value };
-      await updateConfiguration(updatedConfig);
-    } catch (err) {
-      // Revert on error - the error is already handled in updateConfiguration
-      console.error('Failed to update hardware configuration:', err);
-    }
-  };
-
   return (
-    <div style={{ ...styles.container, backgroundColor, color: textColor }}>
+      <div style={{ ...styles.container, backgroundColor, color: textColor }}>
       {/* Header */}
       <div style={styles.header}>
         <h2 style={{ ...styles.heading, color: textColor }}>
@@ -616,47 +849,46 @@ function Setting() {
             </button>
           </div>
         )}
+        {/* Restart OCPP Client Button */}
         <button
-          onClick={() => setIsAuthenticated(false)}
+          onClick={async () => {
+            try {
+              await restartOcppClient();
+            } catch (err) {
+              // Error is already handled in the API function
+            }
+          }}
+          disabled={!hasChanges || !lastUpdateSuccess || loading}
           style={{
-            background: "transparent",
+            background: (!hasChanges || !lastUpdateSuccess || loading) ? "transparent" : (isDark ? "rgb(136 171 226)" : "#ff0000"),
             border: `1px solid ${isDark ? "rgb(136 171 226)" : "#ff0000"}`,
-            color: isDark ? "rgb(136 171 226)" : "#ff0000",
+            color: (!hasChanges || !lastUpdateSuccess || loading) ? 
+              (isDark ? "rgba(136, 171, 226, 0.5)" : "rgba(255, 0, 0, 0.5)") : 
+              "#ffffff",
             padding: "8px 16px",
             borderRadius: "6px",
-            cursor: "pointer",
+            cursor: (!hasChanges || !lastUpdateSuccess || loading) ? "not-allowed" : "pointer",
             display: "flex",
             alignItems: "center",
             gap: "6px",
-            fontSize: "0.9rem"
+            fontSize: "0.9rem",
+            opacity: (!hasChanges || !lastUpdateSuccess || loading) ? 0.5 : 1,
+            marginLeft: "8px"
           }}
+          title={
+            !hasChanges ? "No changes made" :
+            !lastUpdateSuccess ? "Changes must be successfully updated first" :
+            loading ? "Processing..." :
+            "Restart OCPP Client"
+          }
         >
-          <FaLock /> Lock
+          <FaRedo /> Restart OCPP
         </button>
       </div>
 
       {/* Tab Navigation */}
       {!error && (
         <div style={styles.tabContainer}>
-          <button
-            onClick={() => setActiveTab("software")}
-            disabled={loading}
-            style={{
-              ...styles.tab,
-              backgroundColor: activeTab === "software" 
-                ? (isDark ? "rgb(136 171 226)" : "#ff0000")
-                : "transparent",
-              color: activeTab === "software" 
-                ? "#ffffff" 
-                : (isDark ? "rgb(136 171 226)" : "#ff0000"),
-              borderColor: isDark ? "rgb(136 171 226)" : "#ff0000",
-              opacity: loading ? 0.5 : 1,
-              cursor: loading ? "not-allowed" : "pointer"
-            }}
-          >
-            <FaDesktop style={{ marginRight: "8px" }} />
-            Software Configuration
-          </button>
           <button
             onClick={() => setActiveTab("hardware")}
             disabled={loading}
@@ -674,7 +906,26 @@ function Setting() {
             }}
           >
             <FaMicrochip style={{ marginRight: "8px" }} />
-            Hardware Configuration
+            Hardware Config
+          </button>
+          <button
+            onClick={() => setActiveTab("ocpp")}
+            disabled={loading}
+            style={{
+              ...styles.tab,
+              backgroundColor: activeTab === "ocpp" 
+                ? (isDark ? "rgb(136 171 226)" : "#ff0000")
+                : "transparent",
+              color: activeTab === "ocpp" 
+                ? "#ffffff" 
+                : (isDark ? "rgb(136 171 226)" : "#ff0000"),
+              borderColor: isDark ? "rgb(136 171 226)" : "#ff0000",
+              opacity: loading ? 0.5 : 1,
+              cursor: loading ? "not-allowed" : "pointer"
+            }}
+          >
+            <FaDesktop style={{ marginRight: "8px" }} />
+            OCPP Config
           </button>
         </div>
       )}
@@ -701,22 +952,6 @@ function Setting() {
           </div>
         ) : (
           <>
-            {activeTab === "software" && (
-              <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-                <div style={styles.scrollableContent}>
-                  {Object.entries(softwareConfig).map(([key, value]) => (
-                    <DynamicSetting
-                      key={key}
-                      configKey={key}
-                      value={value}
-                      onValueChange={(newValue) => updateSoftwareConfig(key, newValue)}
-                      category="software"
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
             {activeTab === "hardware" && (
               <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
                 <div style={styles.scrollableContent}>
@@ -725,8 +960,24 @@ function Setting() {
                       key={key}
                       configKey={key}
                       value={value}
-                      onValueChange={(newValue) => updateHardwareConfig(key, newValue)}
+                      onValueChange={hardwareCallbacks[key]}
                       category="hardware"
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {activeTab === "ocpp" && (
+              <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                <div style={styles.scrollableContent}>
+                  {Object.entries(softwareConfig).map(([key, value]) => (
+                    <DynamicSetting
+                      key={key}
+                      configKey={key}
+                      value={value}
+                      onValueChange={ocppCallbacks[key]}
+                      category="ocpp"
                     />
                   ))}
                 </div>
@@ -737,7 +988,7 @@ function Setting() {
       </div>
     </div>
   );
-}
+});
 
 const getStyles = (isDark, textColor, backgroundColor) => ({
   container: {

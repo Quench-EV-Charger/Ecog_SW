@@ -233,25 +233,34 @@ async function handleIdleState() {
 // Helper for setting power cap with 500W safety deduction
 async function setPowerCap(outletNum, power, reason = "Power Cap Applied") {
     try {
-        // Apply 500W safety deduction to prevent hardware tolerance issues
-        const safePower = Math.max(power, powerLowDemandValue);
-        
+        let safePower;
+
+        if (power < 0) {
+            // Invalid request → fall back to at least the low-demand value
+            safePower = Math.max(power, powerLowDemandValue);
+        } else {
+            // Normal case → cap at system maximum
+            safePower = Math.min(power, powercapValue);
+        }
+
         const response = await fetch(baseUrl + "/outlets/" + outletNum + "/powercap", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ PowerCapW: safePower }),
         });
+
         if (!response.ok) {
-            // throw new Error(`PowerCap failed: ${response.status}`);
             return [];
         }
+
         const result = await response.text();
-        logPowerTransition(outletNum, "?", safePower, `${reason} (Original: ${power}W, Applied: ${safePower}W`);
+        logPowerTransition(outletNum, "?", safePower, `${reason} (Original: ${power}W, Applied: ${safePower}W)`);
         return result;
     } catch (error) {
         console.error("PowerCap Error:", error);
     }
 }
+
 
 async function handleSingleOutletIdle() {
     // Determine which outlet is charging

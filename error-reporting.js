@@ -1,7 +1,10 @@
+// Immediate startup log to verify script is running
+//console.log("[INIT] Script error-reporting_111.js starting at", new Date().toISOString());
+
 /*
  *
  * EcoG Error Reporting Script Created on 2023
- *
+ *2
  * Only licensed to be used on/with EcoG OS
  *
  * To the maximum extent permitted by applicable law, in no event shall,
@@ -19,7 +22,18 @@
  * Copyright (c) EcoG GmbH 2023
  * * All rights reserved
  * This script monitors the IO errors,Temperature errors and Supply Voltage errors
- * Version: 1.0.9
+ * Version: 1.1.1
+ * 
+ * Modified: 10 September 2025 - Enhanced undervoltage detection for 2-phase conditions with Bender online
+ * - Added logic to trigger undervoltage (instead of power loss) when 2+ phases < 200V AND Bender is online
+ * - Modified checkSuppyVoltageTripACmeter to accept iostate parameter for Bender status checking
+ * - Modified checkSuppyVoltageTrip to detect undervoltage with Bender online for 2-phase < 200V
+ * - Updated AC meter monitoring section to handle undervoltage when 2 phases < 200V with Bender online
+ * - Maintains original power loss behavior when Bender is offline
+ * - Ensures proper differentiation between true power loss (Bender offline) and undervoltage conditions (Bender online)
+ * - Increased undervoltage threshold from 40 to 55 seconds for improved stability
+ * - Increased overvoltage threshold from 40 to 55 seconds for improved stability
+ * - Increased ground fault threshold from 2 to 5 seconds for improved stability
  * 
  * Modified: 09 December 2024 - Fixed undervoltage false positive with empty voltage arrays
  * - Added check to skip undervoltage detection when voltage array is empty (no power/no data)
@@ -57,6 +71,29 @@
  * - Fixed memory leak in IMD monitor timeout handling
  * - Improved error propagation in catch handlers
  * - Fixed configuration sync issues with powerSaveInIdleMode
+ *
+ * Modified: 24 September 2025 - Dynamic controller detection and error monitoring improvements
+ * - Added dynamic detection of connected controllers from API endpoint /controllers
+ * - Modified ioMapperState to only fetch data for connected controllers
+ * - Script now works with single or dual controller configurations
+ * - Added periodic refresh of connected controllers list (every 30 seconds)
+ * - NULL controllers are properly ignored throughout the script
+ * - Added comprehensive logging system with prefixes for better debugging:
+ *   • [CONTROLLER FETCH] - Controller detection from API
+ *   • [CONTROLLER STATUS] - Individual controller availability
+ *   • [CONTROLLER CONFIG] - Running mode (SINGLE/DUAL)
+ *   • [IOMAPPER] - IO mapper data fetching status
+ *   • [ERROR CHECK] - Error processing status
+ *   • [VOLTAGE CHECK] - Voltage monitoring status
+ *   • [IMD CHECK] - IMD monitoring status
+ *   • [PERIODIC CHECK] - Periodic controller refresh
+ *   • [STARTUP] - System initialization
+ * - Fixed errorObj logging to show actual JSON data instead of empty object
+ * - Added error counter limit of 512 to prevent infinite incrementing
+ * - Implemented incrementErrorCounter() helper function for all error types
+ * - Enhanced error handling with detailed stack traces
+ * - Fixed scope issue with iostate variable in error checking
+ * - Improved error messages with more context and formatting
  */
 
 // import fetch from "node-fetch";
@@ -106,14 +143,14 @@ const errorObjThreshold = {
   doorOpenErr: 2,
   outletTemperatureErr: 4,
   cabinetTemperatureErr: 4,
-  overVoltageErr: 40, // changed to 40 from 20
-  underVoltageErr: 40, // changed to 40 from 20
+  overVoltageErr: 55, // changed to 55 from 20
+  underVoltageErr: 55, // changed to 55 from 20
   powerModuleFailureErr: 6,
   gunTemperatureErr_1: 6,
   gunTemperatureErr_2: 6,
   powerModuleCommErr_1: 25, // changed to 25 from 14
   powerModuleCommErr_2: 25, // changed to 25 from 14
-  groundFault: 2,
+  groundFault: 5,
   imdResistanceErr_1: 1, // Added IMD resistance threshold for gun 1 (3 consecutive readings)
   imdResistanceErr_2: 1, // Added IMD resistance threshold for gun 2 (3 consecutive readings)
 };
@@ -169,6 +206,16 @@ const onTestingMode = false;
 // Global variable to store the latest IO Mapper data
 let latestIOMapping = null;
 
+// Global variable to store connected controllers
+let connectedControllers = [];
+
+// Helper function to increment error counter with max limit of 512
+const incrementErrorCounter = (errorType) => {
+  if (errorObjCount[errorType] < 512) {
+    errorObjCount[errorType]++;
+  }
+};
+
 // BEFORE FIX: No cleanup mechanism for timeout, potential memory leak
 // AFTER FIX: Added proper cleanup with clearTimeout and active flag
 let imdMonitorTimeout = null;
@@ -188,7 +235,7 @@ const startIMDResistanceMonitor = async () => {
       
       // Fetch the latest IO Mapper data
       const iostateValue = await ioMapperState();
-      if (iostateValue !== undefined) {
+      if (iostateValue !== undefined && iostateValue.controller1 !== null) {
         const iostate = iostateValue.controller1;
         const IMDOnline = await getIMDData(iostate);
 
@@ -252,26 +299,100 @@ const getFromApi = async (path) =>
       throw err;
     });
 
+// Function to fetch connected controllers
+const getConnectedControllers = async () => {
+  try {
+    console.log("[CONTROLLER FETCH] Fetching connected controllers from API...");
+    const response = await fetch(`${baseURL}controllers`);
+    const controllers = await response.json();
+
+    // Extract controller IDs from the response
+    connectedControllers = controllers.map(controller => controller.id);
+
+    // Log detailed controller status
+    console.log("[CONTROLLER FETCH] API Response:", JSON.stringify(controllers));
+    console.log("[CONTROLLER FETCH] Connected controllers detected:", connectedControllers);
+
+    // Log individual controller status
+    if (connectedControllers.includes(1)) {
+      console.log("[CONTROLLER STATUS] Controller 1: AVAILABLE ✓");
+    } else {
+      console.log("[CONTROLLER STATUS] Controller 1: NOT AVAILABLE ✗");
+    }
+
+    if (connectedControllers.includes(2)) {
+      console.log("[CONTROLLER STATUS] Controller 2: AVAILABLE ✓");
+    } else {
+      console.log("[CONTROLLER STATUS] Controller 2: NOT AVAILABLE ✗");
+    }
+
+    // Log configuration summary
+    if (connectedControllers.length === 2) {
+      console.log("[CONTROLLER CONFIG] Running in DUAL controller mode");
+    } else if (connectedControllers.length === 1) {
+      console.log("[CONTROLLER CONFIG] Running in SINGLE controller mode (Controller " + connectedControllers[0] + ")");
+    } else if (connectedControllers.length === 0) {
+      console.log("[CONTROLLER CONFIG] WARNING: No controllers detected!");
+    }
+
+    return connectedControllers;
+  } catch (err) {
+    console.error("[CONTROLLER FETCH] Error fetching connected controllers:", err.message);
+    console.log("[CONTROLLER FETCH] Using fallback configuration: [1, 2]");
+    // Fallback to default if API fails
+    connectedControllers = [1, 2];
+    console.log("[CONTROLLER STATUS] Controller 1: ASSUMED AVAILABLE (fallback)");
+    console.log("[CONTROLLER STATUS] Controller 2: ASSUMED AVAILABLE (fallback)");
+    return connectedControllers;
+  }
+};
+
 const ioMapperState = async () => {
   try {
-    const controllers = [1, 2];
-    const promises = controllers.map((controller) =>
-      fetch(`${baseURL}controllers/${controller}/api/proxy/iomapper/`, {
-        headers: { "Content-Type": "application/json" },
-      }).then((response) => response.json())
-    );
+    // Use dynamically detected controllers or cached value
+    const controllers = connectedControllers.length > 0 ? connectedControllers : await getConnectedControllers();
 
-    const [controller1Data, controller2Data] = await Promise.all(promises);
-    return {
-      controller1: controller1Data,
-      controller2: controller2Data,
-    };
+    const result = {};
+
+    // Fetch data only for connected controllers
+    if (controllers.includes(1)) {
+      try {
+        console.log("[IOMAPPER] Fetching data for Controller 1...");
+        const controller1Response = await fetch(`${baseURL}controllers/1/api/proxy/iomapper/`, {
+          headers: { "Content-Type": "application/json" },
+        });
+        result.controller1 = await controller1Response.json();
+        console.log("[IOMAPPER] Controller 1 data fetched successfully");
+      } catch (err) {
+        console.error("[IOMAPPER] Error fetching Controller 1 data:", err.message);
+        result.controller1 = null;
+      }
+    } else {
+      console.log("[IOMAPPER] Controller 1 not available - skipping data fetch");
+      result.controller1 = null;
+    }
+
+    if (controllers.includes(2)) {
+      try {
+        console.log("[IOMAPPER] Fetching data for Controller 2...");
+        const controller2Response = await fetch(`${baseURL}controllers/2/api/proxy/iomapper/`, {
+          headers: { "Content-Type": "application/json" },
+        });
+        result.controller2 = await controller2Response.json();
+        console.log("[IOMAPPER] Controller 2 data fetched successfully");
+      } catch (err) {
+        console.error("[IOMAPPER] Error fetching Controller 2 data:", err.message);
+        result.controller2 = null;
+      }
+    } else {
+      console.log("[IOMAPPER] Controller 2 not available - skipping data fetch");
+      result.controller2 = null;
+    }
+
+    return result;
   } catch (err) {
-    // BEFORE FIX: Error swallowed, returning undefined silently
-    // AFTER FIX: Re-throw error for proper error handling
-    // Modified: 16 August 2025 by Kushagra Mittal
-    console.error("Error fetching iomapper data:", err);
-    throw err;
+    console.error("[IOMAPPER] Critical error in ioMapperState:", err);
+    return { controller1: null, controller2: null };
   }
 };
 
@@ -322,7 +443,7 @@ async function checkIOTrip() {
   // Check for EStop
   if (errIOSource.includes("emergency")) {
     errorObj.eStopErr = errorObjCount.eStopErr >= errorObjThreshold.eStopErr;
-    errorObjCount.eStopErr++;
+    incrementErrorCounter('eStopErr');
     errorObjCount.powerModuleCommErr_1 = 0;
     errorObjCount.powerModuleCommErr_2 = 0;
     //  if its EStop, reset inputUnderVoltage counter
@@ -337,7 +458,7 @@ async function checkIOTrip() {
   if (errIOSource.includes("door_open")) {
     errorObj.doorOpenErr =
       errorObjCount.doorOpenErr >= errorObjThreshold.doorOpenErr;
-    errorObjCount.doorOpenErr++;
+    incrementErrorCounter('doorOpenErr');
   } else {
     errorObjCount.doorOpenErr = 0; // Reset count if error is false
     errorObj.doorOpenErr = false; // Set errorObj to false
@@ -347,7 +468,7 @@ async function checkIOTrip() {
     errorObj.outletTemperatureErr =
       errorObjCount.outletTemperatureErr >=
       errorObjThreshold.outletTemperatureErr;
-    errorObjCount.outletTemperatureErr++;
+    incrementErrorCounter('outletTemperatureErr');
   } else {
     errorObjCount.outletTemperatureErr = 0; // Reset count if error is false
     errorObj.outletTemperatureErr = false; // Set errorObj to false
@@ -357,7 +478,7 @@ async function checkIOTrip() {
     errorObj.cabinetTemperatureErr =
       errorObjCount.cabinetTemperatureErr >=
       errorObjThreshold.cabinetTemperatureErr;
-    errorObjCount.cabinetTemperatureErr++;
+    incrementErrorCounter('cabinetTemperatureErr');
   } else {
     errorObjCount.cabinetTemperatureErr = 0; // Reset count if error is false
     errorObj.cabinetTemperatureErr = false; // Set errorObj to false
@@ -370,7 +491,7 @@ async function checkIOTrip() {
     errorObj.gunTemperatureErr_1 =
       errorObjCount.gunTemperatureErr_1 >=
       errorObjThreshold.gunTemperatureErr_1;
-    errorObjCount.gunTemperatureErr_1++;
+    incrementErrorCounter('gunTemperatureErr_1');
   } else {
     errorObjCount.gunTemperatureErr_1 = 0; // Reset count if error is false
     errorObj.gunTemperatureErr_1 = false; // Set errorObj to false
@@ -383,7 +504,7 @@ async function checkIOTrip() {
     errorObj.gunTemperatureErr_2 =
       errorObjCount.gunTemperatureErr_2 >=
       errorObjThreshold.gunTemperatureErr_2;
-    errorObjCount.gunTemperatureErr_2++;
+    incrementErrorCounter('gunTemperatureErr_2');
   } else {
     errorObjCount.gunTemperatureErr_2 = 0; // Reset count if error is false
     errorObj.gunTemperatureErr_2 = false;
@@ -392,7 +513,7 @@ async function checkIOTrip() {
   if (errIOSource.includes("ground_fault")) {
     errorObj.groundFault =
       errorObjCount.groundFault >= errorObjThreshold.groundFault;
-    errorObjCount.groundFault++;
+    incrementErrorCounter('groundFault');
   } else {
     errorObjCount.groundFault = 0; // Reset count if error is false
     errorObj.groundFault = false; // Set errorObj to false
@@ -454,6 +575,17 @@ const checkVoltsBelowThres = (currentValue) =>
 const checkVoltsBelow200 = (currentValue) =>
   currentValue < Constants.powermoduleundervoltage;
 
+// New functions for phase-specific voltage monitoring
+const checkTwoPhasesBelow200 = (voltages) => {
+  const below200Count = voltages.filter(v => v < Constants.powermoduleundervoltage).length;
+  return below200Count >= 2;
+};
+
+const checkOnePhasesBelow200 = (voltages) => {
+  const below200Count = voltages.filter(v => v < Constants.powermoduleundervoltage).length;
+  return below200Count === 1;
+};
+
 const powerrecoveracmeter = async (states, iostate) => {
   if (iostate["modbus.selec.online"] === true && errorObj.powerLossErr) {
     console.log(`[PL] Power loss recovered - AC meter online, untripping. Counter reset: 0/${errorObjThreshold.powerLossErr}`);
@@ -485,7 +617,7 @@ const powerONRecoverCheck = async (states, volts) => {
 const powerfailacmeter = async (states, iostate) => {
   errorObj.powerLossErr =
     errorObjCount.powerLossErr >= errorObjThreshold.powerLossErr;
-  errorObjCount.powerLossErr++;
+  incrementErrorCounter('powerLossErr');
   if (errorObjCount.underVoltageErr > 0) {
     errorObjCount.underVoltageErr = 0;
   }
@@ -501,7 +633,7 @@ const powerOffErrCheck = async (states, volts) => {
     if (errorObjCount.underVoltageErr > 0) {
       errorObjCount.underVoltageErr = 0;
     }
-    errorObjCount.powerLossErr++;
+    incrementErrorCounter('powerLossErr');
     console.log(
       `[PL] Power loss counter incremented: ${errorObjCount.powerLossErr}/${errorObjThreshold.powerLossErr}, voltage < 200V: ${volts}`
     );
@@ -513,7 +645,7 @@ const powerOffErrCheck = async (states, volts) => {
     volts.every(checkVoltsBelowThres) //&&
     //!errorObj.eStopErr //////////////////////////////////Check for Power loss even when E stop is active
   ) {
-    errorObjCount.powerLossErr++;
+    incrementErrorCounter('powerLossErr');
     console.log(
       `[PL] Power loss counter incremented: ${errorObjCount.powerLossErr}/${errorObjThreshold.powerLossErr}, IMD offline + all phases < ${Constants.UVThresh}V: ${volts}`
     );
@@ -528,7 +660,7 @@ const powerOffErrCheck = async (states, volts) => {
     //!errorObj.eStopErr && //////////////////////////////////Check for E stop even when Power loss is active
     isModuleUnavilable
   ) {
-    errorObjCount.powerLossErr++;
+    incrementErrorCounter('powerLossErr');
     console.log(
       `[PL] Power loss counter incremented: ${errorObjCount.powerLossErr}/${errorObjThreshold.powerLossErr}, IMD offline + module unavailable`
     );
@@ -615,7 +747,7 @@ const checkUnderVoltageThroughPowerModule = async (
       !errorObjFlags.underVoltageErr &&
       tripCaseUV == t_case
     ) {
-      errorObjCount.underVoltageErr++;
+      incrementErrorCounter('underVoltageErr');
       console.log(`[UV] Undervoltage counter incremented: ${errorObjCount.underVoltageErr}/${errorObjThreshold.underVoltageErr} for phase ${t_case}, voltages: ${voltages}`);
       errorObj.underVoltageErr =
         errorObjCount.underVoltageErr >= errorObjThreshold.underVoltageErr;
@@ -640,7 +772,7 @@ const checkUnderVoltageThroughPowerModule = async (
   }
 };
 
-async function checkSuppyVoltageTripACmeter(states, volts) {
+async function checkSuppyVoltageTripACmeter(states, volts, iostate) {
   const isOverThreshold = (currentValue) => currentValue > Constants.OVThresh;
   const isUnderThreshold = (currentValue) => currentValue < Constants.UVThresh;
 
@@ -648,7 +780,7 @@ async function checkSuppyVoltageTripACmeter(states, volts) {
   if (volts.some(isOverThreshold)) {
     !!onTestingMode && console.log("It's OverVoltage");
     if (!errorObj.overVoltageErr && !errorObjFlags.overVoltageErr) {
-      errorObjCount.overVoltageErr++;
+      incrementErrorCounter('overVoltageErr');
       console.log(`[OV-AC] Overvoltage counter incremented: ${errorObjCount.overVoltageErr}/${errorObjThreshold.overVoltageErr}, voltages: ${volts}`);
       errorObj.overVoltageErr =
         errorObjCount.overVoltageErr >= errorObjThreshold.overVoltageErr;
@@ -671,11 +803,77 @@ async function checkSuppyVoltageTripACmeter(states, volts) {
     }
   }
 
-  // Check Under Voltage
+  // MODIFIED: Check for undervoltage when 2 phases < 200V and Bender is online
+  const benderOnline = iostate && iostate["modbus.ccs_bender.online"] === true;
+  
+  if (checkTwoPhasesBelow200(volts) && benderOnline) {
+    console.log(`[UV-AC] Undervoltage detected - 2+ phases < ${Constants.powermoduleundervoltage}V with Bender online: ${volts}`);
+    if (!errorObj.underVoltageErr && !errorObjFlags.underVoltageErr) {
+      incrementErrorCounter('underVoltageErr');
+      console.log(`[UV-AC] Undervoltage counter incremented (2 phases < 200V, Bender online): ${errorObjCount.underVoltageErr}/${errorObjThreshold.underVoltageErr}, voltages: ${volts}`);
+      errorObj.underVoltageErr =
+        errorObjCount.underVoltageErr >= errorObjThreshold.underVoltageErr;
+    } else if (errorObj.underVoltageErr && !errorObjFlags.underVoltageErr) {
+      console.log(`Supply voltage too low (2 phases < 200V with Bender online): ${volts}`);
+      errorObjFlags.underVoltageErr = true;
+      tripCaseUV = UVTripState.Idle;
+      await trip(states, {
+        msg: "ERR_UNDER_VOLTAGE",
+        code: "997",
+        stopReason: "UnderVoltageError",
+      });
+    }
+    return; // Exit early, don't check other voltage conditions
+  } else if (checkTwoPhasesBelow200(volts) && !benderOnline) {
+    // Original power loss logic when Bender is offline
+    console.log(`[PL-AC] Power loss detected - 2+ phases < ${Constants.powermoduleundervoltage}V: ${volts}`);
+    incrementErrorCounter('powerLossErr');
+    errorObj.powerLossErr = errorObjCount.powerLossErr >= errorObjThreshold.powerLossErr;
+    
+    // Reset undervoltage counter since power loss takes priority
+    if (errorObjCount.underVoltageErr > 0) {
+      errorObjCount.underVoltageErr = 0;
+    }
+    
+    // Trip power loss if threshold reached
+    if (errorObj.powerLossErr && !errorObjFlags.powerLossErr) {
+      errorObjFlags.powerLossErr = true;
+      console.log("AC meter: 2+ phases < 200V -> power loss trip");
+      await trip(states, {
+        msg: "ERR_POWERLOSS",
+        code: "70",
+        stopReason: "PowerLossError",
+      });
+    }
+    return; // Exit early, don't check undervoltage
+  }
+  
+  // NEW IMPLEMENTATION: Check for single phase undervoltage alarm (1 phase < 200V)
+  if (checkOnePhasesBelow200(volts)) {
+    console.log(`[UV-AC] Single phase undervoltage alarm - 1 phase < ${Constants.powermoduleundervoltage}V: ${volts}`);
+    if (!errorObj.underVoltageErr && !errorObjFlags.underVoltageErr) {
+      incrementErrorCounter('underVoltageErr');
+      console.log(`[UV-AC] Single phase undervoltage counter incremented: ${errorObjCount.underVoltageErr}/${errorObjThreshold.underVoltageErr}, voltages: ${volts}`);
+      errorObj.underVoltageErr =
+        errorObjCount.underVoltageErr >= errorObjThreshold.underVoltageErr;
+    } else if (errorObj.underVoltageErr && !errorObjFlags.underVoltageErr) {
+      console.log(`Single phase voltage too low: ${volts}`);
+      errorObjFlags.underVoltageErr = true;
+      tripCaseUV = UVTripState.Idle;
+      await trip(states, {
+        msg: "ERR_UNDER_VOLTAGE",
+        code: "997",
+        stopReason: "UnderVoltageError",
+      });
+    }
+    return; // Exit early, don't check standard undervoltage
+  }
+
+  // Check Under Voltage (original logic for voltages below UVThresh)
   if (volts.some(isUnderThreshold)) {
     !!onTestingMode && console.log("Condition UnderVoltage");
     if (!errorObj.underVoltageErr && !errorObjFlags.underVoltageErr) {
-      errorObjCount.underVoltageErr++;
+      incrementErrorCounter('underVoltageErr');
       console.log(`[UV-AC] Undervoltage counter incremented: ${errorObjCount.underVoltageErr}/${errorObjThreshold.underVoltageErr}, voltages: ${volts}`);
       errorObj.underVoltageErr =
         errorObjCount.underVoltageErr >= errorObjThreshold.underVoltageErr;
@@ -702,13 +900,13 @@ async function checkSuppyVoltageTripACmeter(states, volts) {
   }
 }
 
-async function checkSuppyVoltageTrip(states, volts) {
+async function checkSuppyVoltageTrip(states, volts, iostate) {
   // Check Over Voltage
   const isOverThreshold = (currentValue) => currentValue > Constants.OVThresh;
   if (volts.some(isOverThreshold)) {
     !!onTestingMode && console.log("its OverVoltage ");
     if (!errorObj.overVoltageErr && !errorObjFlags.overVoltageErr) {
-      errorObjCount.overVoltageErr++;
+      incrementErrorCounter('overVoltageErr');
       console.log(`[OV] Overvoltage counter incremented: ${errorObjCount.overVoltageErr}/${errorObjThreshold.overVoltageErr}, voltages: ${volts}`);
       errorObj.overVoltageErr =
         errorObjCount.overVoltageErr >= errorObjThreshold.overVoltageErr;
@@ -731,7 +929,73 @@ async function checkSuppyVoltageTrip(states, volts) {
     }
   }
 
-  // From here on check Under Voltgae and Over Voltage
+  // MODIFIED: Check for undervoltage when 2 phases < 200V and Bender is online
+  const benderOnline = iostate && iostate["modbus.ccs_bender.online"] === true;
+  
+  if (checkTwoPhasesBelow200(volts) && benderOnline) {
+    console.log(`[UV-PM] Undervoltage detected - 2+ phases < ${Constants.powermoduleundervoltage}V with Bender online: ${volts}`);
+    if (!errorObj.underVoltageErr && !errorObjFlags.underVoltageErr) {
+      incrementErrorCounter('underVoltageErr');
+      console.log(`[UV-PM] Undervoltage counter incremented (2 phases < 200V, Bender online): ${errorObjCount.underVoltageErr}/${errorObjThreshold.underVoltageErr}, voltages: ${volts}`);
+      errorObj.underVoltageErr =
+        errorObjCount.underVoltageErr >= errorObjThreshold.underVoltageErr;
+    } else if (errorObj.underVoltageErr && !errorObjFlags.underVoltageErr) {
+      console.log(`Supply voltage too low (2 phases < 200V with Bender online): ${volts}`);
+      errorObjFlags.underVoltageErr = true;
+      tripCaseUV = UVTripState.Idle;
+      await trip(states, {
+        msg: "ERR_UNDER_VOLTAGE",
+        code: "997",
+        stopReason: "UnderVoltageError",
+      });
+    }
+    return; // Exit early, don't check other voltage conditions
+  } else if (checkTwoPhasesBelow200(volts) && !benderOnline) {
+    // Original power loss logic when Bender is offline
+    console.log(`[PL-PM] Power loss detected - 2+ phases < ${Constants.powermoduleundervoltage}V: ${volts}`);
+    incrementErrorCounter('powerLossErr');
+    errorObj.powerLossErr = errorObjCount.powerLossErr >= errorObjThreshold.powerLossErr;
+    
+    // Reset undervoltage counter since power loss takes priority
+    if (errorObjCount.underVoltageErr > 0) {
+      errorObjCount.underVoltageErr = 0;
+    }
+    
+    // Trip power loss if threshold reached
+    if (errorObj.powerLossErr && !errorObjFlags.powerLossErr) {
+      errorObjFlags.powerLossErr = true;
+      console.log("Power module: 2+ phases < 200V -> power loss trip");
+      await trip(states, {
+        msg: "ERR_POWERLOSS",
+        code: "70",
+        stopReason: "PowerLossError",
+      });
+    }
+    return; // Exit early, don't check undervoltage
+  }
+  
+  // NEW IMPLEMENTATION: Check for single phase undervoltage alarm (1 phase < 200V)
+  if (checkOnePhasesBelow200(volts)) {
+    console.log(`[UV-PM] Single phase undervoltage alarm - 1 phase < ${Constants.powermoduleundervoltage}V: ${volts}`);
+    if (!errorObj.underVoltageErr && !errorObjFlags.underVoltageErr) {
+      incrementErrorCounter('underVoltageErr');
+      console.log(`[UV-PM] Single phase undervoltage counter incremented: ${errorObjCount.underVoltageErr}/${errorObjThreshold.underVoltageErr}, voltages: ${volts}`);
+      errorObj.underVoltageErr =
+        errorObjCount.underVoltageErr >= errorObjThreshold.underVoltageErr;
+    } else if (errorObj.underVoltageErr && !errorObjFlags.underVoltageErr) {
+      console.log(`Single phase voltage too low: ${volts}`);
+      errorObjFlags.underVoltageErr = true;
+      tripCaseUV = UVTripState.Idle;
+      await trip(states, {
+        msg: "ERR_UNDER_VOLTAGE",
+        code: "997",
+        stopReason: "UnderVoltageError",
+      });
+    }
+    return; // Exit early, don't check standard undervoltage
+  }
+
+  // From here on check Under Voltgae and Over Voltage (original logic)
   if (tripCaseUV == UVTripState.Idle || tripCaseUV == UVTripState.All) {
     !!onTestingMode && console.log("check trip for All phases"); // all the voltage value is less than 353
     await checkUnderVoltageThroughPowerModule(states, volts, UVTripState.All);
@@ -785,6 +1049,22 @@ async function checkSuppyVoltageTrip(states, volts) {
 
 // Check Recovery conditions for UV and OV
 async function checkRecoveryConditions(volts, states) {
+  // NEW IMPLEMENTATION: Check power loss recovery first (all phases > 200V)
+  const checkPowerLossRecoveryVal = (currentValue) => currentValue > Constants.powermoduleundervoltage;
+  if (
+    errorObj.powerLossErr &&
+    errorObjFlags.powerLossErr &&
+    volts.length > 0 &&
+    volts.every(checkPowerLossRecoveryVal)
+  ) {
+    console.log(`[PL-Recovery] Power loss recovered - all phases > ${Constants.powermoduleundervoltage}V: ${volts}`);
+    errorObjCount.powerLossErr = 0;
+    errorObj.powerLossErr = false;
+    errorObjFlags.powerLossErr = false;
+    await untrip(states, "70");
+    return;
+  }
+
   // recover from UV
   const checkUVRecoveryVal = (currentValue) =>
     currentValue > Constants.UVThresh + Constants.UV_OV_Hysteresis;
@@ -802,7 +1082,7 @@ async function checkRecoveryConditions(volts, states) {
     return;
   }
 
-  // recover from UV
+  // recover from OV
   const checkOVRecoveryVal = (currentValue) =>
     currentValue < Constants.OVThresh - Constants.UV_OV_Hysteresis;
   if (
@@ -849,7 +1129,7 @@ function checkModuleFailure(obj) {
     errorObj.powerModuleFailureErr =
       errorObjCount.powerModuleFailureErr >=
       errorObjThreshold.powerModuleFailureErr;
-    errorObjCount.powerModuleFailureErr++;
+    incrementErrorCounter('powerModuleFailureErr');
   } else {
     errorObj.powerModuleFailureErr = false;
     errorObjCount.powerModuleFailureErr = 0;
@@ -1025,7 +1305,7 @@ async function checkIMDResistance(states, iostate) {
           !firstUnhealthyIMDData.isTripped && gun1Data &&
           gun1Data.isUnhealthy
         ) {
-          errorObjCount.imdResistanceErr_1++;
+          incrementErrorCounter('imdResistanceErr_1');
           errorObj.imdResistanceErr_1 =
             errorObjCount.imdResistanceErr_1 >=
             errorObjThreshold.imdResistanceErr_1;
@@ -1049,7 +1329,7 @@ async function checkIMDResistance(states, iostate) {
           !firstUnhealthyIMDData.isTripped && gun2Data &&
           gun2Data.isUnhealthy
         ) {
-          errorObjCount.imdResistanceErr_2++;
+          incrementErrorCounter('imdResistanceErr_2');
           errorObj.imdResistanceErr_2 =
             errorObjCount.imdResistanceErr_2 >=
             errorObjThreshold.imdResistanceErr_2;
@@ -1073,8 +1353,8 @@ async function checkIMDResistance(states, iostate) {
     }
     // Handle single gun charging
     else if(isSingleCharging) {
-      // Process Gun 1
-      if (iostate.controller1 && isGunInValidState(outlet0)) {
+      // Process Gun 1 (only if controller 1 is connected)
+      if (iostate.controller1 && iostate.controller1 !== null && isGunInValidState(outlet0)) {
         if (gun1Data.isUnhealthy) {
           if (firstUnhealthyIMDData.gun === null) {
             firstUnhealthyIMDData.gun = 1;
@@ -1100,7 +1380,7 @@ async function checkIMDResistance(states, iostate) {
             firstUnhealthyIMDData.gun === 1 &&
             !firstUnhealthyIMDData.isTripped
           ) {
-            errorObjCount.imdResistanceErr_1++;
+            incrementErrorCounter('imdResistanceErr_1');
             errorObj.imdResistanceErr_1 =
               errorObjCount.imdResistanceErr_1 >=
               errorObjThreshold.imdResistanceErr_1;
@@ -1123,8 +1403,8 @@ async function checkIMDResistance(states, iostate) {
         }
       }
 
-      // Process Gun 2
-      if (iostate.controller2 && isGunInValidState(outlet1)) {
+      // Process Gun 2 (only if controller 2 is connected)
+      if (iostate.controller2 && iostate.controller2 !== null && isGunInValidState(outlet1)) {
         if (gun2Data.isUnhealthy) {
           if (firstUnhealthyIMDData.gun === null) {
             firstUnhealthyIMDData.gun = 2;
@@ -1150,7 +1430,7 @@ async function checkIMDResistance(states, iostate) {
             firstUnhealthyIMDData.gun === 2 &&
             !firstUnhealthyIMDData.isTripped
           ) {
-            errorObjCount.imdResistanceErr_2++;
+            incrementErrorCounter('imdResistanceErr_2');
             errorObj.imdResistanceErr_2 =
               errorObjCount.imdResistanceErr_2 >=
               errorObjThreshold.imdResistanceErr_2;
@@ -1245,7 +1525,7 @@ const checkPowerModuleCommErr = async (states, iostate) => {
               errorObj.powerModuleCommErr_1 =
                 errorObjCount.powerModuleCommErr_1 >=
                 errorObjThreshold.powerModuleCommErr_1;
-              errorObjCount.powerModuleCommErr_1++;
+              incrementErrorCounter('powerModuleCommErr_1');
               if (errorObjCount.underVoltageErr > 0) {
                 errorObjCount.underVoltageErr = 0;
               }
@@ -1274,7 +1554,7 @@ const checkPowerModuleCommErr = async (states, iostate) => {
           errorObj.powerModuleCommErr_1 =
             errorObjCount.powerModuleCommErr_1 >=
             errorObjThreshold.powerModuleCommErr_1;
-          errorObjCount.powerModuleCommErr_1++;
+          incrementErrorCounter('powerModuleCommErr_1');
           if (errorObjCount.underVoltageErr > 0) {
             errorObjCount.underVoltageErr = 0;
           }
@@ -1305,7 +1585,7 @@ const checkPowerModuleCommErr = async (states, iostate) => {
               errorObj.powerModuleCommErr_2 =
                 errorObjCount.powerModuleCommErr_2 >=
                 errorObjThreshold.powerModuleCommErr_2;
-              errorObjCount.powerModuleCommErr_2++;
+              incrementErrorCounter('powerModuleCommErr_2');
               if (errorObjCount.underVoltageErr > 0) {
                 errorObjCount.underVoltageErr = 0;
               }
@@ -1334,7 +1614,7 @@ const checkPowerModuleCommErr = async (states, iostate) => {
           errorObj.powerModuleCommErr_2 =
             errorObjCount.powerModuleCommErr_2 >=
             errorObjThreshold.powerModuleCommErr_2;
-          errorObjCount.powerModuleCommErr_2++;
+          incrementErrorCounter('powerModuleCommErr_2');
           if (errorObjCount.underVoltageErr > 0) {
             errorObjCount.underVoltageErr = 0;
           }
@@ -1382,11 +1662,17 @@ const checkErrors = async () => {
 
     // get IO States
     await ioMapperState().then(async (iostateValue) => {
-      
-      if (iostateValue !== undefined) {
-        // Process controller 1 data
+
+      if (iostateValue !== undefined && iostateValue.controller1 !== null) {
+        // Process controller 1 data (only if controller 1 is connected)
+        console.log("[ERROR CHECK] Processing Controller 1 IO state data");
         const iostate = iostateValue.controller1;
         const controller2State = iostateValue.controller2;
+        if (controller2State !== null) {
+          console.log("[ERROR CHECK] Controller 2 data also available");
+        } else {
+          console.log("[ERROR CHECK] Controller 2 data not available - Single controller mode");
+        }
 
         if (
           iostate.hasOwnProperty("safety_tripped") &&
@@ -1401,6 +1687,18 @@ const checkErrors = async () => {
         } else {
           errIOSource = [];
         }
+      } else {
+        if (iostateValue === undefined) {
+          console.log("[ERROR CHECK] No IO state data available from controllers");
+        } else if (iostateValue.controller1 === null) {
+          console.log("[ERROR CHECK] Controller 1 not available - cannot process errors");
+        }
+        errIOSource = [];
+      }
+
+      // Re-check for controller 1 availability for rest of processing
+      if (iostateValue !== undefined && iostateValue.controller1 !== null) {
+        const iostate = iostateValue.controller1;
 
         temperatures = {
           cabinet_temp: iostate["secc.pt4_temp"],
@@ -1436,9 +1734,30 @@ const checkErrors = async () => {
             ];
             const acVolts = voltageKeys.map((key) => iostate[key] || 0);
             
-            // If all voltages are below 200V, it's power loss not undervoltage
-            if (acVolts.every(v => v < Constants.powermoduleundervoltage)) {
-              console.log(`[AC Meter] Power loss detected - all voltages < ${Constants.powermoduleundervoltage}V:`, acVolts);
+            // MODIFIED: Check for undervoltage when 2 phases < 200V and Bender is online
+            const benderOnline = iostate["modbus.ccs_bender.online"] === true;
+            
+            if (checkTwoPhasesBelow200(acVolts) && benderOnline) {
+              console.log(`[AC Meter] Undervoltage condition - 2+ phases < ${Constants.powermoduleundervoltage}V with Bender online:`, acVolts);
+              // Set undervoltage error directly here since we're not going through the normal voltage check
+              if (!errorObj.underVoltageErr && !errorObjFlags.underVoltageErr) {
+                incrementErrorCounter('underVoltageErr');
+                console.log(`[UV-AC Meter] Undervoltage counter incremented (2 phases < 200V, Bender online): ${errorObjCount.underVoltageErr}/${errorObjThreshold.underVoltageErr}`);
+                errorObj.underVoltageErr = errorObjCount.underVoltageErr >= errorObjThreshold.underVoltageErr;
+                
+                if (errorObj.underVoltageErr) {
+                  console.log(`Supply voltage too low (2 phases < 200V with Bender online): ${acVolts}`);
+                  errorObjFlags.underVoltageErr = true;
+                  tripCaseUV = UVTripState.Idle;
+                  await trip(states, {
+                    msg: "ERR_UNDER_VOLTAGE",
+                    code: "997",
+                    stopReason: "UnderVoltageError",
+                  });
+                }
+              }
+            } else if (checkTwoPhasesBelow200(acVolts) && !benderOnline) {
+              console.log(`[AC Meter] Power loss detected - 2+ phases < ${Constants.powermoduleundervoltage}V:`, acVolts);
               await powerfailacmeter(states, iostate);
             } else {
               await powerrecoveracmeter(states, iostate);
@@ -1463,8 +1782,9 @@ const checkErrors = async () => {
 
       // BYPASS Errors: Uncomment to enable the following checks
       if (!errorObj.powerLossErr && !errorObj.eStopErr) {
-        if (iostateValue !== undefined) {
-          // Process controller 1 data
+        if (iostateValue !== undefined && iostateValue.controller1 !== null) {
+          // Process controller 1 data (only if controller 1 is connected)
+          console.log("[VOLTAGE CHECK] Processing voltage data from Controller 1");
           const iostate = iostateValue.controller1;
           // FIX for Issue 1: Only use AC meter if powerSaveInIdleMode is true (AC meter installed)
           if (
@@ -1491,12 +1811,12 @@ const checkErrors = async () => {
             // Extract specific voltage values from iostate
             var voltsFiltered = voltageKeys.map((key) => iostate[key]);
             
-            // FIX for Issue 2: Check for power loss condition before undervoltage
-            if (voltsFiltered.every(v => v < Constants.powermoduleundervoltage)) {
-              console.log(`[AC Meter] Skipping UV/OV check - power loss condition detected (voltages < ${Constants.powermoduleundervoltage}V):`, voltsFiltered);
+            // NEW IMPLEMENTATION: Check for power loss condition before undervoltage
+            if (checkTwoPhasesBelow200(voltsFiltered)) {
+              console.log(`[AC Meter] Skipping UV/OV check - power loss condition detected (2+ phases < ${Constants.powermoduleundervoltage}V):`, voltsFiltered);
               // Don't check UV/OV during power loss - it's already handled above
             } else if (voltsFiltered.length > 0 && !errorObj.powerLossErr) {
-              await checkSuppyVoltageTripACmeter(states, voltsFiltered);
+              await checkSuppyVoltageTripACmeter(states, voltsFiltered, iostate);
               // Recover from Under Voltage, Over Voltage
               await checkRecoveryConditions(voltsFiltered, states);
             }
@@ -1524,7 +1844,7 @@ const checkErrors = async () => {
             // Filter voltage array
             var voltsFiltered = await filterVolts(volts);
             // Check Under Voltage, Over Voltage
-            await checkSuppyVoltageTrip(states, voltsFiltered);
+            await checkSuppyVoltageTrip(states, voltsFiltered, iostate);
             // Recover from Under Voltage, Over Voltage
             await checkRecoveryConditions(voltsFiltered, states);
           }
@@ -1542,10 +1862,12 @@ const checkErrors = async () => {
         }
       }
 
-      console.log("errorObj", errorObj);
+      // Log errorObj with proper formatting
+      console.log("[ERROR OBJ] Current error states:", JSON.stringify(errorObj, null, 2));
+      console.log("[ERROR COUNT] Error counters:", JSON.stringify(errorObjCount, null, 2));
 
       // post data to state obj
-      if(iostateValue !== undefined){
+      if(iostateValue !== undefined && iostateValue.controller1 !== null){
         const iostate = iostateValue.controller1
         if ("modbus.selec.online" in iostate) {
         if (iostate["modbus.selec.online"] === false) {
@@ -1638,7 +1960,8 @@ const checkErrors = async () => {
       
     });
   } catch (err) {
-    console.error("error in checkErrors", err);
+    console.error("[ERROR] Error in checkErrors function:", err.message || err);
+    console.error("[ERROR] Stack trace:", err.stack);
   }
 };
 
@@ -1666,6 +1989,15 @@ const getpowersaveinidlemode = async () => {
 // AFTER FIX: Ensure config is loaded with retry mechanism before starting
 // Modified: 16 August 2025 by Kushagra Mittal
 const start = async () => {
+  console.log("[STARTUP] ========================================");
+  console.log("[STARTUP] EcoG Error Reporting Script v1.1.1");
+  console.log("[STARTUP] Initializing system...");
+  console.log("[STARTUP] ========================================");
+
+  // Check connected controllers on startup
+  console.log("[STARTUP] Checking connected controllers...");
+  await getConnectedControllers();
+
   // Retry config fetch up to 3 times
   for (let i = 0; i < 3; i++) {
     try {
@@ -1680,7 +2012,14 @@ const start = async () => {
       }
     }
   }
-  
+
+  // Periodically refresh connected controllers list (every 30 seconds)
+  console.log("[STARTUP] Setting up periodic controller check (every 30 seconds)");
+  setInterval(async () => {
+    console.log("[PERIODIC CHECK] Refreshing connected controllers list...");
+    await getConnectedControllers();
+  }, 30000);
+
   // IIFE (Immediately Invoked Function Expression)
   const loop = async () => {
     try {
@@ -1689,14 +2028,27 @@ const start = async () => {
 
       setTimeout(loop, 1000); // Call the next loop
     } catch (err) {
-      console.error("error on executing checkErrors", err);
+      console.error("[MAIN LOOP ERROR] Error executing checkErrors:", err.message || err);
+      if (err.stack) {
+        console.error("[MAIN LOOP ERROR] Stack:", err.stack);
+      }
       setTimeout(loop, 1000); // Call the next loop on error object
     }
   };
+
+  console.log("[STARTUP] ========================================");
+  console.log("[STARTUP] System initialization complete");
+  console.log("[STARTUP] Starting error monitoring loop (1 second interval)");
+  console.log("[STARTUP] ========================================\n");
+
   loop();
 };
 
+console.log("[INIT] Calling start() function...");
 start();
 
+console.log("[INIT] Starting IMD resistance monitor...");
 // Start the high-frequency IMD resistance monitor
 startIMDResistanceMonitor();
+
+console.log("[INIT] All initialization calls complete");

@@ -8,7 +8,8 @@ import {
   FaMicrochip,
   FaEye,
   FaEyeSlash,
-  FaRedo
+  FaRedo,
+  FaSync
 } from "react-icons/fa";
 import { ThemeContext } from "../ThemeContext/ThemeProvider";
 import EVChargerKeyboard from "../EVChargerKeyboard/EVChargerKeyboard";
@@ -538,23 +539,80 @@ const Setting = React.memo(() => {
   // Restart button state tracking
   const [hasChanges, setHasChanges] = useState(false);
   const [lastUpdateSuccess, setLastUpdateSuccess] = useState(false);
+  const [isRestarting, setIsRestarting] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Memoize API base URL to prevent unnecessary re-renders
   const apiUrl = React.useMemo(() => config?.API, [config?.API]);
 
+  // Configuration key mapping - defines which keys to display and their API sources
+  const configKeyMapping = {
+    // Keys from OCPP Client API
+    'OCPPEndpointToBackend': { source: 'ocpp', path: 'OCPPEndpointToBackend' },
+    'chargerName': { source: 'ocpp', path: 'chargerName' },
+    'chargePointSerialNumber': { source: 'ocpp', path: 'chargePointSerialNumber' },
+    'chargingPointModel': { source: 'ocpp', path: 'chargingPointModel' },
+    'chargingPointVendor': { source: 'ocpp', path: 'chargingPointVendor' },
+    'acceptRemoteStartOnPreparingOnly': { source: 'ocpp', path: 'acceptRemoteStartOnPreparingOnly' },
+    'maxPowerLimitInkW': { source: 'ocpp', path: 'maxPowerLimitInkW', syncWith: 'maxKW' },
+    'maxCurrentLimitInAmps': { source: 'ocpp', path: 'maxCurrentLimitInAmps', syncWith: 'maxA' },
+    'emulatedMetering': { source: 'ocpp', path: 'emulatedMetering' },
+    'underVoltageThreshold': { source: 'ocpp', path: 'underVoltageThreshold' },
+    'overVoltageThreshold': { source: 'ocpp', path: 'overVoltageThreshold' },
+    
+    // Keys from UserConfig API (nested paths)
+    'powerSaveInIdleMode': { source: 'ocpp', path: 'powerSaveInIdleMode', syncWith: 'userPowerSaveInIdleMode' },
+    'userPowerSaveInIdleMode': { source: 'userconfig', path: 'ccs.stack.powerSaveInIdleMode', syncWith: 'powerSaveInIdleMode' },
+    'maxKW': { source: 'userconfig', path: 'ccs.stack.maxKW', syncWith: 'maxPowerLimitInkW' },
+    'maxA': { source: 'userconfig', path: 'ccs.stack.maxA', syncWith: 'maxCurrentLimitInAmps' },
+    'dlbCombo': { source: 'userconfig', path: 'ccs.dlbMode' },
+    'num_of_modules': { source: 'userconfig', path: 'ccs.num_of_modules' }
+  };
+
+  // Helper function to get nested value from object using dot notation
+  const getNestedValue = (obj, path) => {
+    return path.split('.').reduce((current, key) => current && current[key], obj);
+  };
+
+  // Helper function to set nested value in object using dot notation
+  const setNestedValue = (obj, path, value) => {
+    const keys = path.split('.');
+    const lastKey = keys.pop();
+    const target = keys.reduce((current, key) => {
+      if (!current[key]) current[key] = {};
+      return current[key];
+    }, obj);
+    target[lastKey] = value;
+    return obj;
+  };
+
   // API Functions
-  const fetchConfiguration = useCallback(async () => {
+  const fetchAllConfigurations = useCallback(async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(`${apiUrl}/ocpp-client/config`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      // Fetch both configurations in parallel
+      const [ocppResponse, userConfigResponse] = await Promise.all([
+        fetch(`${apiUrl}/ocpp-client/config`),
+        fetch(`http://10.20.27.100/api/system/userconfig`)
+      ]);
+
+      if (!ocppResponse.ok) {
+        throw new Error(`OCPP Config API error! status: ${ocppResponse.status}`);
       }
-      const ocppconfig = await response.json();
-      setRawConfig(ocppconfig);
-      categorizeConfiguration(ocppconfig);
+      if (!userConfigResponse.ok) {
+        throw new Error(`UserConfig API error! status: ${userConfigResponse.status}`);
+      }
+
+      const ocppData = await ocppResponse.json();
+      const userConfigData = await userConfigResponse.json();
+      
+      console.log('OCPP Config:', ocppData);
+      console.log('UserConfig:', userConfigData);
+      
+      // Categorize configuration from both sources
+      categorizeConfiguration(ocppData, userConfigData);
     } catch (err) {
        setError(`Failed to fetch configuration: ${err.message}`);
        console.error('Error fetching configuration:', err);
@@ -567,41 +625,216 @@ const Setting = React.memo(() => {
     }
   }, [apiUrl]);
 
-  const updateConfiguration = useCallback(async (updatedConfig) => {
-    setLoading(true);
+  // Refresh configuration function - similar to fetchAllConfigurations but with different state management
+  const refreshConfiguration = useCallback(async () => {
+    setIsRefreshing(true);
     setError(null);
+
     try {
+      // Fetch both configurations in parallel
+      const [ocppResponse, userConfigResponse] = await Promise.all([
+        fetch(`${apiUrl}/ocpp-client/config`),
+        fetch(`http://10.20.27.100/api/system/userconfig`)
+      ]);
+
+      if (!ocppResponse.ok) {
+        throw new Error(`OCPP Config API error! status: ${ocppResponse.status}`);
+      }
+      if (!userConfigResponse.ok) {
+        throw new Error(`UserConfig API error! status: ${userConfigResponse.status}`);
+      }
+
+      const ocppData = await ocppResponse.json();
+      const userConfigData = await userConfigResponse.json();
+      
+      console.log('Refreshed OCPP Config:', ocppData);
+      console.log('Refreshed UserConfig:', userConfigData);
+      
+      // Categorize configuration from both sources
+      categorizeConfiguration(ocppData, userConfigData);
+      
+      // Reset change tracking after successful refresh
+      setHasChanges(false);
+      setLastUpdateSuccess(true);
+    } catch (err) {
+       setError(`Failed to refresh configuration: ${err.message}`);
+       console.error('Error refreshing configuration:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [apiUrl]);
+
+
+  // Update OCPP configuration
+  const updateOcppConfig = useCallback(async (key, value) => {
+    const mapping = configKeyMapping[key];
+    if (!mapping || mapping.source !== 'ocpp') {
+      console.error('Invalid OCPP key:', key);
+      return;
+    }
+
+    setLoading(true);
+    setHasChanges(true);
+    setLastUpdateSuccess(false);
+
+    try {
+      const updatePayload = { [mapping.path]: value };
       const response = await fetch(`${apiUrl}/ocpp-client/config`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(updatedConfig)
+        body: JSON.stringify(updatePayload),
       });
+
       if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      setLastUpdateSuccess(true);
+      // Refresh configuration after successful update
+      await fetchAllConfigurations();
+    } catch (err) {
+      console.error('Error updating OCPP configuration:', err);
+      setError(err.message);
+      setLastUpdateSuccess(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [apiUrl, fetchAllConfigurations]);
+
+  // Update UserConfig configuration
+  const updateUserConfig = useCallback(async (key, value) => {
+    const mapping = configKeyMapping[key];
+    if (!mapping || mapping.source !== 'userconfig') {
+      console.error('Invalid UserConfig key:', key);
+      return;
+    }
+
+    setLoading(true);
+    setHasChanges(true);
+    setLastUpdateSuccess(false);
+
+    try {
+      // Get current userconfig to maintain structure
+      const currentUserConfig = rawConfig.userconfig || {};
+      const updatedUserConfig = { ...currentUserConfig };
+      
+      // Set the nested value
+      setNestedValue(updatedUserConfig, mapping.path, value);
+
+      // Define both API endpoints
+      const endpoints = [
+        'http://10.20.27.100/api/system/userconfig',
+        'http://10.20.27.101/api/system/userconfig'
+      ];
+
+      // Create fetch promises for both endpoints
+      const fetchPromises = endpoints.map(endpoint => 
+        fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(updatedUserConfig),
+        })
+      );
+
+      // Execute both requests in parallel
+      const responses = await Promise.all(fetchPromises);
+
+      // Check if all responses are successful
+      const failedEndpoints = [];
+      responses.forEach((response, index) => {
+        if (!response.ok) {
+          failedEndpoints.push({
+            endpoint: endpoints[index],
+            status: response.status,
+            statusText: response.statusText
+          });
         }
-      } catch (err) {
-        setError(`Failed to update configuration: ${err.message}`);
-        console.error('Error updating configuration:', err);
-        throw err;
-      } finally {
-        setLoading(false);
-        // Always refresh configuration after update attempt, regardless of success/failure
-        try {
-          await fetchConfiguration();
-        } catch (refreshErr) {
-          console.error('Error refreshing configuration after update:', refreshErr);
+      });
+
+      if (failedEndpoints.length > 0) {
+        const errorMessages = failedEndpoints.map(
+          failed => `${failed.endpoint}: ${failed.status} ${failed.statusText}`
+        );
+        throw new Error(`Failed to update endpoints: ${errorMessages.join(', ')}`);
+      }
+
+      setLastUpdateSuccess(true);
+      console.log('Successfully updated UserConfig on both endpoints:', endpoints);
+      
+      // Refresh configuration after successful update to both endpoints
+      await fetchAllConfigurations();
+    } catch (err) {
+      console.error('Error updating UserConfig configuration:', err);
+      setError(err.message);
+      setLastUpdateSuccess(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [rawConfig, fetchAllConfigurations]);
+
+  // Synchronized update function for keys that need to be kept in sync
+  const updateSynchronizedConfig = useCallback(async (key, value) => {
+    const mapping = configKeyMapping[key];
+    if (!mapping) {
+      console.error('Invalid key:', key);
+      return;
+    }
+
+    setLoading(true);
+    setHasChanges(true);
+    setLastUpdateSuccess(false);
+
+    try {
+      const updates = [];
+      
+      // Update the primary configuration
+      if (mapping.source === 'ocpp') {
+        updates.push(updateOcppConfig(key, value));
+      } else if (mapping.source === 'userconfig') {
+        updates.push(updateUserConfig(key, value));
+      }
+
+      // If this key has a sync partner, update it too
+      if (mapping.syncWith) {
+        const syncKey = mapping.syncWith;
+        const syncMapping = configKeyMapping[syncKey];
+        
+        if (syncMapping) {
+          if (syncMapping.source === 'ocpp') {
+            updates.push(updateOcppConfig(syncKey, value));
+          } else if (syncMapping.source === 'userconfig') {
+            updates.push(updateUserConfig(syncKey, value));
+          }
         }
       }
-    }, [apiUrl, fetchConfiguration]);
+
+      // Wait for all updates to complete
+      await Promise.all(updates);
+      
+      setLastUpdateSuccess(true);
+      console.log(`Successfully synchronized ${key} with value:`, value);
+      
+    } catch (err) {
+      console.error('Error in synchronized update:', err);
+      setError(err.message);
+      setLastUpdateSuccess(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [configKeyMapping, updateOcppConfig, updateUserConfig]);
 
   // Restart OCPP Client API function
-  const restartOcppClient = useCallback(async () => {
+  const restartCharger = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setIsRestarting(true); // Show restarting screen
+    
     try {
-      const response = await fetch(`${apiUrl}/ocpp-client/restart`, {
+      const response = await fetch(`${apiUrl}/reset`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -641,43 +874,81 @@ const Setting = React.memo(() => {
     return '#00ffaa'; // Default color
   }, []);
 
-  // Categorize configuration into OCPP and hardware
-  const categorizeConfiguration = (config) => {
-    // OCPP Config parameters
-    const ocppKeys = [
-      'OCPPEndpointToBackend', 'chargerName', 'chargePointSerialNumber', 
-      'chargingPointModel', 'chargingPointVendor', 'acceptRemoteStartOnPreparingOnly',
-      'maxPowerLimitInkW', 'maxCurrentLimitInAmps', 'powerSaveInIdleMode',
-      'emulatedMetering', 'comboModeHMI', 'dlbCombo', 'numberOfInstalledPM',
-      'powerModuleCapacity', 'gun1MaxPower', 'gun2MaxPower', 'underVoltageThreshold',
-      'overVoltageThreshold', 'outletCount', 'gunTempDeRating', 'gunTempCutoff',
-      'cabinetTemperature'
-    ];
-
-
-    const ocpp = {};
-    const hardware = {};
-
-    ocppKeys.forEach(key => {
-      if (config.hasOwnProperty(key)) {
-        ocpp[key] = config[key];
-      } else {
-        hardware[key] = config[key];
+  // Categorize configuration from both API sources
+  const categorizeConfiguration = (ocppConfig, userConfig) => {
+    const displayConfig = {};
+    
+    // Process each configured key
+    Object.entries(configKeyMapping).forEach(([displayKey, mapping]) => {
+      let value;
+      
+      if (mapping.source === 'ocpp' && ocppConfig) {
+        value = getNestedValue(ocppConfig, mapping.path);
+      } else if (mapping.source === 'userconfig' && userConfig) {
+        value = getNestedValue(userConfig, mapping.path);
+      }
+      
+      if (value !== undefined) {
+        displayConfig[displayKey] = {
+          value: value,
+          source: mapping.source,
+          path: mapping.path
+        };
       }
     });
 
-    setSoftwareConfig(ocpp);
-    setHardwareConfig(hardware);
+    // Separate into categories for display
+    const ocppKeys = Object.keys(configKeyMapping).filter(key => 
+      configKeyMapping[key].source === 'ocpp'
+    );
+    
+    const userConfigKeys = Object.keys(configKeyMapping).filter(key => 
+      configKeyMapping[key].source === 'userconfig'
+    );
+
+    const ocppDisplay = {};
+    const hardwareDisplay = {};
+
+    ocppKeys.forEach(key => {
+      if (displayConfig[key]) {
+        ocppDisplay[key] = displayConfig[key];
+      }
+    });
+
+    userConfigKeys.forEach(key => {
+      if (displayConfig[key]) {
+        // Don't display userPowerSaveInIdleMode separately since it's synchronized with powerSaveInIdleMode
+        if (key !== 'userPowerSaveInIdleMode' && key !== 'maxKW' && key !== 'maxA') {
+          hardwareDisplay[key] = displayConfig[key];
+        }
+      }
+    });
+
+    setSoftwareConfig(ocppDisplay);
+    setHardwareConfig(hardwareDisplay);
+    setRawConfig({ ocpp: ocppConfig, userconfig: userConfig });
   };
 
   // Memoized callback functions to prevent re-renders
   const memoizedUpdateHardwareConfig = React.useCallback((key, value) => {
-    updateHardwareConfig(key, value);
-  }, []);
+    // Check if this key needs synchronization
+    const mapping = configKeyMapping[key];
+    if (mapping && mapping.syncWith) {
+      updateSynchronizedConfig(key, value);
+    } else {
+      updateUserConfig(key, value);
+    }
+  }, [updateUserConfig, updateSynchronizedConfig, configKeyMapping]);
 
   const memoizedUpdateOcppConfig = React.useCallback((key, value) => {
-    updateOcppConfig(key, value);
-  }, []);
+    // Check if this key needs synchronization
+    const mapping = configKeyMapping[key];
+    if (mapping && mapping.syncWith) {
+      updateSynchronizedConfig(key, value);
+    } else {
+      updateOcppConfig(key, value);
+    }
+  }, [updateOcppConfig, updateSynchronizedConfig, configKeyMapping]);
 
   // Memoized callback creators for each setting
   const hardwareCallbacks = React.useMemo(() => {
@@ -699,44 +970,23 @@ const Setting = React.memo(() => {
   // Load configuration on component mount and authentication
   useEffect(() => {
     if (isAuthenticated) {
-      fetchConfiguration();
+      fetchAllConfigurations();
     }
-  }, [isAuthenticated, fetchConfiguration]);
+  }, [isAuthenticated, fetchAllConfigurations]);
 
-  // Memoized callback functions to prevent unnecessary re-renders
-  const updateOcppConfig = useCallback(async (key, value) => {
-    try {
-      setHasChanges(true); // Mark that changes have been made
-      const updatedConfig = { [key]: value };
-      await updateConfiguration(updatedConfig);
-      setLastUpdateSuccess(true); // Mark successful update
-    } catch (err) {
-      setLastUpdateSuccess(false); // Mark failed update
-      console.error('Failed to update software configuration:', err);
-    }
-  }, [updateConfiguration]);
 
-  const updateHardwareConfig = useCallback(async (key, value) => {
-    try {
-      setHasChanges(true); // Mark that changes have been made
-      const updatedConfig = { ...rawConfig, [key]: value };
-      await updateConfiguration(updatedConfig);
-      setLastUpdateSuccess(true); // Mark successful update
-    } catch (err) {
-      setLastUpdateSuccess(false); // Mark failed update
-      console.error('Failed to update hardware configuration:', err);
-    }
-  }, [rawConfig, updateConfiguration]);
 
   // Dynamic Setting Component - Memoized to prevent unnecessary re-renders
-  const DynamicSetting = React.memo(({ configKey, value, onValueChange, category }) => {
+  const DynamicSetting = React.memo(({ configKey, settingData, onValueChange, category }) => {
+    // Extract the actual value from the setting data structure
+    const value = settingData.value;
     const inputType = getInputType(value);
     const label = configKey
     const icon = React.useMemo(() => getSettingIcon(configKey), [configKey]);
     const color = React.useMemo(() => getSettingColor(configKey), [configKey]);
     const updateFunction = React.useMemo(() => 
-      category === 'ocpp' ? updateOcppConfig : updateHardwareConfig, 
-      [category, updateOcppConfig, updateHardwareConfig]
+      category === 'ocpp' ? memoizedUpdateOcppConfig : memoizedUpdateHardwareConfig, 
+      [category, memoizedUpdateOcppConfig, memoizedUpdateHardwareConfig]
     );
 
     // Memoized callback to prevent re-renders - using stable callback hook
@@ -763,9 +1013,9 @@ const Setting = React.memo(() => {
       if (keyLower.includes('timeout')) {
         min = 1; max = 300; unit = "s";
       } else if (keyLower.includes('current')) {
-        min = 6; max = 80; unit = "A";
+        min = 0; max = 250; unit = "A";
       } else if (keyLower.includes('voltage')) {
-        min = 200; max = 500; unit = "V";
+        min = 0; max = 500; unit = "V";
       } else if (keyLower.includes('temperature')) {
         min = 40; max = 100; unit = "°C";
       } else if (keyLower.includes('speed') || keyLower.includes('percent')) {
@@ -774,6 +1024,10 @@ const Setting = React.memo(() => {
         min = 1; max = 50;
       } else if (keyLower.includes('rate') || keyLower.includes('refresh')) {
         min = 1; max = 60; unit = "s";
+      } else if (keyLower.includes('modules')) {
+        min = 1; max = 10; unit = "";
+      } else if (keyLower.includes('power') || keyLower.includes('kw')) {
+        min = 0; max = 500; unit = "kW";
       }
 
       return (
@@ -821,29 +1075,104 @@ const Setting = React.memo(() => {
   const textColor = isDark ? "#f5f5f5" : "#000000";
   const styles = getStyles(isDark, textColor, backgroundColor);
 
+  // RestartingScreen component with animation
+  const RestartingScreen = () => {
+    const [dots, setDots] = useState('');
+    
+    useEffect(() => {
+      const interval = setInterval(() => {
+        setDots(prev => prev.length >= 3 ? '' : prev + '.');
+      }, 500);
+      
+      return () => clearInterval(interval);
+    }, []);
+
+    return (
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: isDark ? 'rgba(0, 0, 0, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 9999,
+        backdropFilter: 'blur(8px)',
+        opacity: isRestarting ? 1 : 0,
+        visibility: isRestarting ? 'visible' : 'hidden',
+        transition: 'all 0.3s ease-in-out'
+      }}>
+        {/* Spinning animation */}
+        <div style={{
+          width: '60px',
+          height: '60px',
+          border: `4px solid ${isDark ? 'rgba(136, 171, 226, 0.3)' : 'rgba(255, 0, 0, 0.3)'}`,
+          borderTop: `4px solid ${isDark ? 'rgb(136, 171, 226)' : '#ff0000'}`,
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite',
+          marginBottom: '20px'
+        }} />
+        
+        {/* Status message */}
+        <div style={{
+          color: isDark ? 'rgb(136, 171, 226)' : '#ff0000',
+          fontSize: '1.2rem',
+          fontWeight: '600',
+          textAlign: 'center',
+          marginBottom: '10px'
+        }}>
+          Restarting Charger{dots}
+        </div>
+        
+        <div style={{
+          color: isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)',
+          fontSize: '0.9rem',
+          textAlign: 'center'
+        }}>
+          Please wait while the system restarts
+        </div>
+      </div>
+    );
+  };
+
   if (!isAuthenticated) {
     return <PasswordProtection onAuthenticated={() => setIsAuthenticated(true)} theme={theme} />;
   }
 
   return (
       <div style={{ ...styles.container, backgroundColor, color: textColor }}>
+      {/* Add CSS keyframes for spinning animation */}
+      <style>
+        {`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}
+      </style>
+      
+      {/* Restarting Screen Overlay */}
+      <RestartingScreen />
       {/* Header */}
       <div style={styles.header}>
         <h2 style={{ ...styles.heading, color: textColor }}>
           <FaCog style={{ marginRight: "10px", color: "rgb(136 171 226)" }} />
           System Configuration
         </h2>
-        {loading && (
+        {/* {loading && (
           <div style={styles.loadingIndicator}>
             Loading configuration...
           </div>
-        )}
+        )} */}
         {error && (
           <div style={styles.errorMessage}>
             {error}
             <button 
               style={styles.retryButton} 
-              onClick={fetchConfiguration}
+              onClick={fetchAllConfigurations}
             >
               Retry
             </button>
@@ -853,7 +1182,7 @@ const Setting = React.memo(() => {
         <button
           onClick={async () => {
             try {
-              await restartOcppClient();
+              await restartCharger();
             } catch (err) {
               // Error is already handled in the API function
             }
@@ -879,10 +1208,48 @@ const Setting = React.memo(() => {
             !hasChanges ? "No changes made" :
             !lastUpdateSuccess ? "Changes must be successfully updated first" :
             loading ? "Processing..." :
-            "Restart OCPP Client"
+            "Restart Charger"
           }
         >
-          <FaRedo /> Restart OCPP
+          <FaRedo /> Restart Charger
+        </button>
+        
+        {/* Refresh Configuration Button */}
+        <button
+          onClick={async () => {
+            try {
+              await refreshConfiguration();
+            } catch (err) {
+              // Error is already handled in the refresh function
+            }
+          }}
+          disabled={loading || isRefreshing}
+          style={{
+            background: (loading || isRefreshing) ? "transparent" : (isDark ? "rgb(136 171 226)" : "#ff0000"),
+            border: `1px solid ${isDark ? "rgb(136 171 226)" : "#ff0000"}`,
+            color: (loading || isRefreshing) ? 
+              (isDark ? "rgba(136, 171, 226, 0.5)" : "rgba(255, 0, 0, 0.5)") : 
+              "#ffffff",
+            padding: "8px 16px",
+            borderRadius: "6px",
+            cursor: (loading || isRefreshing) ? "not-allowed" : "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            fontSize: "0.9rem",
+            opacity: (loading || isRefreshing) ? 0.5 : 1,
+            marginLeft: "8px"
+          }}
+          title={
+            loading ? "Configuration loading..." :
+            isRefreshing ? "Refreshing configuration..." :
+            "Refresh Configuration"
+          }
+        >
+          <FaSync style={{
+            animation: isRefreshing ? 'spin 1s linear infinite' : 'none'
+          }} /> 
+          Refresh
         </button>
       </div>
 
@@ -944,7 +1311,7 @@ const Setting = React.memo(() => {
             </div>
             <button 
               style={styles.retryButtonLarge} 
-              onClick={fetchConfiguration}
+              onClick={fetchAllConfigurations}
               disabled={loading}
             >
               {loading ? 'Retrying...' : 'Retry Connection'}
@@ -955,11 +1322,11 @@ const Setting = React.memo(() => {
             {activeTab === "hardware" && (
               <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
                 <div style={styles.scrollableContent}>
-                  {Object.entries(hardwareConfig).map(([key, value]) => (
+                  {Object.entries(hardwareConfig).map(([key, configItem]) => (
                     <DynamicSetting
                       key={key}
                       configKey={key}
-                      value={value}
+                      settingData={configItem}
                       onValueChange={hardwareCallbacks[key]}
                       category="hardware"
                     />
@@ -971,11 +1338,11 @@ const Setting = React.memo(() => {
             {activeTab === "ocpp" && (
               <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
                 <div style={styles.scrollableContent}>
-                  {Object.entries(softwareConfig).map(([key, value]) => (
+                  {Object.entries(softwareConfig).map(([key, configItem]) => (
                     <DynamicSetting
                       key={key}
                       configKey={key}
-                      value={value}
+                      settingData={configItem}
                       onValueChange={ocppCallbacks[key]}
                       category="ocpp"
                     />

@@ -230,10 +230,10 @@ const ToggleSetting = React.memo(({ icon, label, description, color, enabled, on
   return (
   <div style={styles.settingRow}>
     <div style={styles.labelContainer}>
-      <span style={styles.label}>
-        {React.cloneElement(icon, { style: { marginRight: "8px", color } })}
-        {label}
-      </span>
+        <span style={styles.label}>
+          {React.createElement(icon, { style: { marginRight: "8px", color } })}
+          {label}
+        </span>
       {description && (
         <span style={styles.description}>{description}</span>
       )}
@@ -277,24 +277,24 @@ const ToggleSetting = React.memo(({ icon, label, description, color, enabled, on
 });
 
 // Number Setting Component - Memoized to prevent unnecessary re-renders
-const NumberSetting = React.memo(({ icon, label, description, color, value, onValueChange, min = 0, max = 100, unit = "" }) => {
+const NumberSetting = React.memo(({ icon, label, description, color, value, onValueChange, min = 0, max = 100, unit = "", disabled = false }) => {
   const { theme } = useContext(ThemeContext);
   const isDark = theme === "dark";
   const styles = getStyles(isDark, isDark ? "#f5f5f5" : "#000000", isDark ? "transparent" : "#ffffff");
   
   const handleIncrement = () => {
-    if (value < max) onValueChange(value + 1);
+    if (!disabled && value < max) onValueChange(value + 1);
   };
 
   const handleDecrement = () => {
-    if (value > min) onValueChange(value - 1);
+    if (!disabled && value > min) onValueChange(value - 1);
   };
 
   return (
     <div style={styles.settingRow}>
       <div style={styles.labelContainer}>
         <span style={styles.label}>
-          {React.cloneElement(icon, { style: { marginRight: "8px", color } })}
+          {React.createElement(icon, { style: { marginRight: "8px", color } })}
           {label}
         </span>
         {description && (
@@ -304,25 +304,28 @@ const NumberSetting = React.memo(({ icon, label, description, color, value, onVa
       <div style={styles.numberControl}>
         <button 
           onClick={handleDecrement}
-          disabled={value <= min}
+          disabled={disabled || value <= min}
           style={{
             ...styles.numberButton,
-            opacity: value <= min ? 0.4 : 1,
-            cursor: value <= min ? "not-allowed" : "pointer"
+            opacity: disabled || value <= min ? 0.4 : 1,
+            cursor: disabled || value <= min ? "not-allowed" : "pointer"
           }}
         >
           -
         </button>
-        <span style={styles.numberValue}>
+        <span style={{
+          ...styles.numberValue,
+          opacity: disabled ? 0.6 : 1
+        }}>
           {value}{unit}
         </span>
         <button 
           onClick={handleIncrement}
-          disabled={value >= max}
+          disabled={disabled || value >= max}
           style={{
             ...styles.numberButton,
-            opacity: value >= max ? 0.4 : 1,
-            cursor: value >= max ? "not-allowed" : "pointer"
+            opacity: disabled || value >= max ? 0.4 : 1,
+            cursor: disabled || value >= max ? "not-allowed" : "pointer"
           }}
         >
           +
@@ -452,7 +455,7 @@ const TextSetting = React.memo(
         <div style={styles.settingRow}>
           <div style={styles.labelContainer}>
             <span style={styles.label}>
-              {React.cloneElement(icon, { style: { marginRight: "8px", color } })}
+              {React.createElement(icon, { style: { marginRight: "8px", color } })}
               {label}
             </span>
             {description && (
@@ -515,6 +518,230 @@ const TextSetting = React.memo(
       prevProps.color === nextProps.color &&
       prevProps.description === nextProps.description &&
       prevProps.icon?.type === nextProps.icon?.type &&
+      prevProps.onValueChange === nextProps.onValueChange
+    );
+  }
+);
+
+// DropdownSetting Component
+const DropdownSetting = React.memo(
+  ({ icon, label, description, color, value, onValueChange, options = [], disabled = false }) => {
+    const { theme } = useContext(ThemeContext);
+    const isDark = theme === "dark";
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = React.useRef(null);
+
+    // Close dropdown when clicking outside
+    React.useEffect(() => {
+      const handleClickOutside = (event) => {
+        if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+          setIsOpen(false);
+        }
+      };
+
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }, []);
+
+    const dropdownStyles = React.useMemo(() => ({
+      settingRow: {
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        backgroundColor: isDark ? "rgba(136, 171, 226, 0.08)" : "rgba(255, 0, 0, 0.05)",
+        border: isDark ? "1px solid rgba(136, 171, 226, 0.2)" : "1px solid rgba(255, 0, 0, 0.2)",
+        borderRadius: "8px",
+        padding: "16px",
+        marginBottom: "12px",
+        transition: "all 0.3s ease",
+        position: "relative",
+        minHeight: "60px"
+      },
+      labelContainer: {
+        display: "flex",
+        flexDirection: "column",
+        flex: 1,
+        marginRight: "16px"
+      },
+      label: {
+        display: "flex",
+        alignItems: "center",
+        fontSize: "1.2rem",
+        fontWeight: "600",
+        color: isDark ? "#f5f5f5" : "#000000",
+        marginBottom: "4px"
+      },
+      description: {
+        fontSize: "0.85rem",
+        color: isDark ? "#aaa" : "#666",
+        lineHeight: "1.4",
+        marginTop: "4px"
+      },
+      dropdownContainer: {
+        display: 'flex',
+        position: 'relative',
+        minWidth: "200px",
+        maxWidth: "300px"
+      },
+      inputField: {
+        width: "100%",
+        padding: "12px 16px",
+        border: isDark ? "2px solid rgba(136, 171, 226, 0.4)" : "2px solid rgba(255, 0, 0, 0.4)",
+        backgroundColor: isDark ? "rgba(136, 171, 226, 0.1)" : "rgba(255, 0, 0, 0.08)",
+        color: isDark ? "rgb(136 171 226)" : "rgb(255 0 0)",
+        borderRadius: "8px",
+        fontSize: "0.95rem",
+        outline: "none",
+        transition: "all 0.3s ease",
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        boxShadow: isDark ? "0 2px 8px rgba(136, 171, 226, 0.15)" : "0 2px 8px rgba(255, 0, 0, 0.1)",
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        fontWeight: "500"
+      },
+      inputFieldHover: {
+        border: isDark ? "2px solid rgba(136, 171, 226, 0.6)" : "2px solid rgba(255, 0, 0, 0.6)",
+        boxShadow: isDark ? "0 4px 12px rgba(136, 171, 226, 0.2)" : "0 4px 12px rgba(255, 0, 0, 0.15)",
+        transform: "translateY(-1px)"
+      },
+      dropdown: {
+        position: 'absolute',
+        top: 'calc(100% + 4px)',
+        left: 0,
+        right: 0,
+        backgroundColor: isDark ? '#2a2a2a' : '#ffffff',
+        border: isDark ? '2px solid rgba(136, 171, 226, 0.4)' : '2px solid rgba(255, 0, 0, 0.4)',
+        borderRadius: '8px',
+        boxShadow: isDark ? '0 8px 24px rgba(0, 0, 0, 0.3)' : '0 8px 24px rgba(0, 0, 0, 0.15)',
+        zIndex: 1000,
+        maxHeight: '200px',
+        overflowY: 'auto',
+        animation: 'dropdownSlide 0.2s ease-out'
+      },
+      dropdownItem: {
+        padding: '12px 16px',
+        cursor: 'pointer',
+        color: isDark ? '#f5f5f5' : '#000000',
+        borderBottom: `1px solid ${isDark ? 'rgba(136, 171, 226, 0.1)' : 'rgba(255, 0, 0, 0.1)'}`,
+        transition: 'all 0.2s ease',
+        fontSize: '0.95rem',
+        fontWeight: '500'
+      },
+      dropdownItemLast: {
+        borderBottom: 'none'
+      },
+      arrow: {
+        color: isDark ? 'rgba(136, 171, 226, 0.8)' : 'rgba(255, 0, 0, 0.8)',
+        transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+        transition: 'transform 0.3s ease',
+        fontSize: '14px',
+        fontWeight: 'bold'
+      }
+    }), [isDark, color, disabled, isOpen]);
+
+    const handleSelect = (option) => {
+      onValueChange(option);
+      setIsOpen(false);
+    };
+
+    return (
+      <div style={dropdownStyles.settingRow}>
+        <div style={dropdownStyles.labelContainer}>
+          <span style={dropdownStyles.label}>
+            {icon && React.createElement(icon, { style: { marginRight: "8px", color: color || (isDark ? "rgb(136 171 226)" : "#ff0000") } })}
+            {label}
+          </span>
+          {description && (
+            <span style={dropdownStyles.description}>{description}</span>
+          )}
+        </div>
+
+        <div style={dropdownStyles.dropdownContainer} ref={dropdownRef}>
+          <div
+            style={{
+              ...dropdownStyles.inputField,
+              backgroundColor: disabled ? (isDark ? '#2a2a2a' : '#f0f0f0') : dropdownStyles.inputField.backgroundColor,
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              opacity: disabled ? 0.6 : 1
+            }}
+            onClick={() => !disabled && setIsOpen(!isOpen)}
+            onMouseEnter={(e) => {
+              if (!disabled) {
+                Object.assign(e.target.style, dropdownStyles.inputFieldHover);
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!disabled) {
+                Object.assign(e.target.style, dropdownStyles.inputField);
+              }
+            }}
+          >
+            <span style={{ color: value ? (isDark ? '#f5f5f5' : '#000000') : '#888' }}>
+              {(() => {
+                if (!value) return 'Select an option...';
+                // Handle both string values and object options with value/label
+                const selectedOption = options.find(opt => 
+                  typeof opt === 'string' ? opt === value : opt.value === value
+                );
+                return selectedOption 
+                  ? (typeof selectedOption === 'string' ? selectedOption : selectedOption.label)
+                  : value;
+              })()}
+            </span>
+            <span style={dropdownStyles.arrow}>
+              ▼
+            </span>
+          </div>
+
+          {isOpen && !disabled && (
+            <div style={dropdownStyles.dropdown}>
+              {options.map((option, index) => {
+                // Handle both string options and object options with value/label
+                const optionValue = typeof option === 'string' ? option : option.value;
+                const optionLabel = typeof option === 'string' ? option : option.label;
+                const isLast = index === options.length - 1;
+                
+                return (
+                  <div
+                    key={index}
+                    style={{
+                      ...dropdownStyles.dropdownItem,
+                      ...(isLast ? dropdownStyles.dropdownItemLast : {}),
+                      backgroundColor: value === optionValue ? (isDark ? 'rgba(136, 171, 226, 0.2)' : 'rgba(255, 0, 0, 0.1)') : 'transparent'
+                    }}
+                    onClick={() => handleSelect(optionValue)}
+                    onMouseEnter={(e) => {
+                      if (value !== optionValue) {
+                        e.target.style.backgroundColor = isDark ? 'rgba(136, 171, 226, 0.1)' : 'rgba(255, 0, 0, 0.05)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (value !== optionValue) {
+                        e.target.style.backgroundColor = 'transparent';
+                      }
+                    }}
+                  >
+                    {optionLabel}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  },
+  (prevProps, nextProps) => {
+    return (
+      prevProps.value === nextProps.value &&
+      prevProps.label === nextProps.label &&
+      prevProps.color === nextProps.color &&
+      prevProps.description === nextProps.description &&
+      prevProps.disabled === nextProps.disabled &&
+      JSON.stringify(prevProps.options) === JSON.stringify(nextProps.options) &&
       prevProps.onValueChange === nextProps.onValueChange
     );
   }
@@ -614,7 +841,6 @@ const Setting = React.memo(() => {
       // Categorize configuration from both sources
       categorizeConfiguration(ocppData, userConfigData);
     } catch (err) {
-       setError(`Failed to fetch configuration: ${err.message}`);
        console.error('Error fetching configuration:', err);
        // Clear any existing configuration on error
        setRawConfig({});
@@ -866,7 +1092,7 @@ const Setting = React.memo(() => {
 
   // Helper function to get appropriate icon based on key name - Memoized
   const getSettingIcon = React.useCallback((key) => {
-    return <FaCog />; // Default icon
+    return FaCog; // Return the component, not JSX
   }, []);
 
   // Helper function to get appropriate color based on key name - Memoized
@@ -993,6 +1219,83 @@ const Setting = React.memo(() => {
     const handleValueChange = useStableCallback((newValue) => {
       updateFunction(configKey, newValue);
     }, [updateFunction, configKey]);
+
+    // Special handling for dlbCombo dropdown
+    if (configKey === 'dlbCombo') {
+      const dlbOptions = [
+        { value: 'singleCombo', label: 'singleCombo' },
+        { value: 'dualCombo', label: 'dualCombo' },
+        { value: 'tripleCombo', label: 'tripleCombo' }
+      ];
+
+      return (
+        <DropdownSetting
+          icon={icon}
+          label={label}
+          color={color}
+          value={value}
+          onValueChange={handleValueChange}
+          options={dlbOptions}
+        />
+      );
+    }
+
+    // Special handling for num_of_modules with conditional logic
+    if (configKey === 'num_of_modules') {
+      // Get the current dlbCombo value from the config
+      const dlbComboValue = category === 'hardware' ? 
+        hardwareConfig['dlbCombo']?.value : 
+        softwareConfig['dlbCombo']?.value;
+
+      let isDisabled = false;
+      let defaultValue = value;
+      let options = [];
+
+      if (dlbComboValue === 'singleCombo') {
+        // Enable dropdown with options 2, 4, 6, 8 and default to 2
+        options = [
+          { value: 2, label: '2' },
+          { value: 4, label: '4' },
+          { value: 6, label: '6' },
+          { value: 8, label: '8' }
+        ];
+        isDisabled = false;
+        // Set default value to 2 if not already set to a valid option
+        if (!options.some(option => option.value === value)) {
+          defaultValue = 2;
+          handleValueChange(2);
+        }
+      } else if (dlbComboValue === 'dualCombo') {
+        // Set to 3 and disable
+        defaultValue = 3;
+        isDisabled = true;
+        // Auto-update the value if it's not already 3
+        if (value !== 3) {
+          handleValueChange(3);
+        }
+      } else if (dlbComboValue === 'tripleCombo') {
+        // Set to 4 and disable
+        defaultValue = 4;
+        isDisabled = true;
+        // Auto-update the value if it's not already 4
+        if (value !== 4) {
+          handleValueChange(4);
+        }
+      }
+
+        return (
+          <DropdownSetting
+            icon={icon}
+            label={label}
+            color={color}
+            value={defaultValue}
+            onValueChange={handleValueChange}
+            options={options}
+            disabled={isDisabled}
+          />
+        );
+      
+    }
 
     if (inputType === 'toggle') {
       return (
@@ -1167,17 +1470,6 @@ const Setting = React.memo(() => {
             Loading configuration...
           </div>
         )} */}
-        {error && (
-          <div style={styles.errorMessage}>
-            {error}
-            <button 
-              style={styles.retryButton} 
-              onClick={fetchAllConfigurations}
-            >
-              Retry
-            </button>
-          </div>
-        )}
         {/* Restart OCPP Client Button */}
         <button
           onClick={async () => {
@@ -1301,7 +1593,6 @@ const Setting = React.memo(() => {
       <div style={styles.tabContent}>
         {error ? (
           <div style={styles.errorContainer}>
-            <div style={styles.errorIcon}>⚠️</div>
             <h3 style={styles.errorTitle}>Configuration Unavailable</h3>
             <p style={styles.errorDescription}>
               Unable to load configuration from the server. Please check your connection and try again.
@@ -1649,10 +1940,10 @@ const getStyles = (isDark, textColor, backgroundColor) => ({
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    padding: "3rem",
+    // padding: "3rem",
     textAlign: "center",
     height: "100%",
-    minHeight: "400px",
+    // minHeight: "400px",
   },
   errorIcon: {
     fontSize: "4rem",

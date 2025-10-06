@@ -876,6 +876,30 @@ const SettingHeader = React.memo(({
 });
 
 // Isolated Tab Navigation Component to prevent re-renders
+const ValidationError = React.memo(({ error, isDark }) => {
+  if (!error) return null;
+  
+  return (
+    <div style={{
+      marginBottom: '15px',
+      padding: '8px 12px',
+      backgroundColor: isDark ? 'rgba(220, 38, 38, 0.1)' : 'rgba(220, 38, 38, 0.05)',
+      border: `1px solid ${isDark ? 'rgba(220, 38, 38, 0.3)' : 'rgba(220, 38, 38, 0.2)'}`,
+      borderRadius: '4px',
+      fontSize: '12px',
+      color: '#dc2626',
+      lineHeight: '1.4'
+    }}>
+      <div style={{ fontWeight: '600', marginBottom: '4px' }}>
+        {error.message}
+      </div>
+      <div style={{ fontSize: '11px', opacity: 0.9 }}>
+        {error.details}
+      </div>
+    </div>
+  );
+});
+
 const TabNavigation = React.memo(({ 
   activeTab, 
   loading, 
@@ -980,6 +1004,10 @@ const Setting = React.memo(() => {
   const [hardwareConfig, setHardwareConfig] = useState({});
   const [rawConfig, setRawConfig] = useState({});
   
+  // Configuration validation state for cross-endpoint comparison
+  const [configValidation, setConfigValidation] = useState({});
+  const [validationErrors, setValidationErrors] = useState({});
+  
   // Restart button state tracking
   const [hasChanges, setHasChanges] = useState(false);
   const [lastUpdateSuccess, setLastUpdateSuccess] = useState(false);
@@ -1009,7 +1037,7 @@ const Setting = React.memo(() => {
     'userPowerSaveInIdleMode': { source: 'userconfig', path: 'ccs.stack.powerSaveInIdleMode', syncWith: 'powerSaveInIdleMode' },
     'maxKW': { source: 'userconfig', path: 'ccs.stack.maxKW', syncWith: 'maxPowerLimitInkW' },
     'maxA': { source: 'userconfig', path: 'ccs.stack.maxA', syncWith: 'maxCurrentLimitInAmps' },
-    'dlbCombo': { source: 'userconfig', path: 'ccs.dlbMode' },
+    'dlbMode': { source: 'userconfig', path: 'ccs.dlbMode' },
     'num_of_modules': { source: 'userconfig', path: 'ccs.num_of_modules' }
   };
 
@@ -1036,33 +1064,49 @@ const Setting = React.memo(() => {
     setError(null);
 
     try {
-      // Fetch both configurations in parallel
-      const [ocppResponse, userConfigResponse] = await Promise.all([
+      // Fetch configurations from all three endpoints in parallel
+      const [ocppResponse, userConfig100Response, userConfig101Response] = await Promise.all([
         fetch(`${apiUrl}/ocpp-client/config`),
-        fetch(`http://10.20.27.100/api/system/userconfig`)
+        fetch(`http://10.20.27.100/api/system/userconfig`),
+        fetch(`http://10.20.27.101/api/system/userconfig`)
       ]);
 
       if (!ocppResponse.ok) {
         throw new Error(`OCPP Config API error! status: ${ocppResponse.status}`);
       }
-      if (!userConfigResponse.ok) {
-        throw new Error(`UserConfig API error! status: ${userConfigResponse.status}`);
+      if (!userConfig100Response.ok) {
+        throw new Error(`SECC User Config API error! status: ${userConfig100Response.status}`);
+      }
+      if (!userConfig101Response.ok) {
+        throw new Error(`LE User Config API error! status: ${userConfig101Response.status}`);
       }
 
       const ocppData = await ocppResponse.json();
-      const userConfigData = await userConfigResponse.json();
+      const userConfig100Data = await userConfig100Response.json();
+      const userConfig101Data = await userConfig101Response.json();
       
-      console.log('OCPP Config:', ocppData);
-      console.log('UserConfig:', userConfigData);
+ 
       
-      // Categorize configuration from both sources
-      categorizeConfiguration(ocppData, userConfigData);
+      // Store all configurations for validation
+      const allConfigs = {
+        ocpp: ocppData,
+        userconfig100: userConfig100Data,
+        userconfig101: userConfig101Data
+      };
+      
+      // Validate configurations across endpoints
+      validateConfigurationsAcrossEndpoints(allConfigs);
+      
+      // Categorize configuration from both sources (using 100 as primary)
+      categorizeConfiguration(ocppData, userConfig100Data);
     } catch (err) {
        console.error('Error fetching configuration:', err);
        // Clear any existing configuration on error
        setRawConfig({});
        setSoftwareConfig({});
        setHardwareConfig({});
+       setConfigValidation({});
+       setValidationErrors({});
     } finally {
       setLoading(false);
     }
@@ -1074,27 +1118,39 @@ const Setting = React.memo(() => {
     setError(null);
 
     try {
-      // Fetch both configurations in parallel
-      const [ocppResponse, userConfigResponse] = await Promise.all([
+      // Fetch configurations from all three endpoints in parallel
+      const [ocppResponse, userConfig100Response, userConfig101Response] = await Promise.all([
         fetch(`${apiUrl}/ocpp-client/config`),
-        fetch(`http://10.20.27.100/api/system/userconfig`)
+        fetch(`http://10.20.27.100/api/system/userconfig`),
+        fetch(`http://10.20.27.101/api/system/userconfig`)
       ]);
 
       if (!ocppResponse.ok) {
         throw new Error(`OCPP Config API error! status: ${ocppResponse.status}`);
       }
-      if (!userConfigResponse.ok) {
-        throw new Error(`UserConfig API error! status: ${userConfigResponse.status}`);
+      if (!userConfig100Response.ok) {
+        throw new Error(`SECC User Config API error! status: ${userConfig100Response.status}`);
+      }
+      if (!userConfig101Response.ok) {
+        throw new Error(`LE User Config API error! status: ${userConfig101Response.status}`);
       }
 
       const ocppData = await ocppResponse.json();
-      const userConfigData = await userConfigResponse.json();
+      const userConfig100Data = await userConfig100Response.json();
+      const userConfig101Data = await userConfig101Response.json();
       
-      console.log('Refreshed OCPP Config:', ocppData);
-      console.log('Refreshed UserConfig:', userConfigData);
+      // Store all configurations for validation
+      const allConfigs = {
+        ocpp: ocppData,
+        userconfig100: userConfig100Data,
+        userconfig101: userConfig101Data
+      };
       
-      // Categorize configuration from both sources
-      categorizeConfiguration(ocppData, userConfigData);
+      // Validate configurations across endpoints
+      validateConfigurationsAcrossEndpoints(allConfigs);
+      
+      // Categorize configuration from both sources (using 100 as primary)
+      categorizeConfiguration(ocppData, userConfig100Data);
       
       // Reset change tracking after successful refresh
       setHasChanges(false);
@@ -1317,6 +1373,109 @@ const Setting = React.memo(() => {
     return '#00ffaa'; // Default color
   }, []);
 
+  // Configuration validation function
+  const validateConfigurationsAcrossEndpoints = useCallback((allConfigs) => {
+    const { ocpp, userconfig100, userconfig101 } = allConfigs;
+    const errors = {};
+    
+    // Define the keys to validate and their mappings
+    const validationKeys = [
+      {
+        ocppKey: 'maxPowerLimitInkW',
+        userconfigKey: 'maxKW',
+        displayName: 'Max Power Limit (kW)'
+      },
+      {
+        ocppKey: 'maxCurrentLimitInAmps', 
+        userconfigKey: 'maxA',
+        displayName: 'Max Current Limit (Amps)'
+      },
+      {
+        ocppKey: 'powerSaveInIdleMode',
+        userconfigKey: 'powerSaveInIdleMode',
+        displayName: 'Power Save in Idle Mode'
+      }
+    ];
+    
+    validationKeys.forEach(({ ocppKey, userconfigKey, displayName }) => {
+      // Get values from all three sources
+      const ocppValue = ocpp[ocppKey];
+      const userconfig100Value = userconfig100?.ccs?.stack?.[userconfigKey];
+      const userconfig101Value = userconfig101?.ccs?.stack?.[userconfigKey];
+      
+      // Create array of all values for comparison
+      const values = [
+        { source: 'OCPP Client', value: ocppValue },
+        { source: 'SECC User Config', value: userconfig100Value },
+        { source: 'LE User Config', value: userconfig101Value }
+      ];
+      
+      // Filter out undefined/null values
+      const definedValues = values.filter(v => v.value !== undefined && v.value !== null);
+      
+      if (definedValues.length > 1) {
+        // Check if all defined values are the same
+        const firstValue = definedValues[0].value;
+        const hasDiscrepancy = definedValues.some(v => v.value !== firstValue);
+        
+        if (hasDiscrepancy) {
+          // Create detailed error message
+          const valueDescriptions = definedValues.map(v => `${v.source}: ${v.value}`).join(', ');
+          errors[ocppKey] = {
+            message: `Configuration mismatch detected for ${displayName}`,
+            details: valueDescriptions,
+            values: definedValues
+          };
+        }
+      }
+    });
+    
+    // Define userconfig-only keys to validate between endpoints 100 and 101
+    const userconfigOnlyKeys = [
+      {
+        key: 'dlbMode',
+        path: 'ccs.dlbMode',
+        displayName: 'DLB Mode'
+      },
+      {
+        key: 'num_of_modules',
+        path: 'ccs.num_of_modules', 
+        displayName: 'Number of Modules'
+      }
+    ];
+    
+    // Validate userconfig-only keys between endpoints 100 and 101
+    userconfigOnlyKeys.forEach(({ key, path, displayName }) => {
+      const userconfig100Value = getNestedValue(userconfig100, path);
+      const userconfig101Value = getNestedValue(userconfig101, path);
+      
+      // Only validate if both values exist
+      if (userconfig100Value !== undefined && userconfig101Value !== undefined) {
+        if (userconfig100Value !== userconfig101Value) {
+          errors[key] = {
+            message: `Configuration mismatch detected for ${displayName}`,
+            details: `SECC User Config: ${userconfig100Value}, LE User Config: ${userconfig101Value}`,
+            values: [
+              { source: 'SECC User Config', value: userconfig100Value },
+              { source: 'LE User Config', value: userconfig101Value }
+            ]
+          };
+        }
+      }
+    });
+    
+    // Update validation state
+    setValidationErrors(errors);
+    setConfigValidation(allConfigs);
+    
+    // Log validation results
+    if (Object.keys(errors).length > 0) {
+      console.warn('Configuration validation errors found:', errors);
+    } else {
+      console.log('All configurations are synchronized across endpoints');
+    }
+  }, []);
+
   // Categorize configuration from both API sources
   const categorizeConfiguration = React.useCallback((ocppConfig, userConfig) => {
     const displayConfig = {};
@@ -1504,7 +1663,7 @@ const Setting = React.memo(() => {
 
 
   // Dynamic Setting Component - Heavily optimized to prevent unnecessary re-renders
-  const DynamicSetting = React.memo(({ configKey, settingData, onValueChange, category }) => {
+  const DynamicSetting = React.memo(({ configKey, settingData, onValueChange, category, isDark }) => {
     // Extract the actual value from the setting data structure
     const value = settingData.value;
     const inputType = getInputType(value);
@@ -1516,36 +1675,118 @@ const Setting = React.memo(() => {
       [category, memoizedUpdateOcppConfig, memoizedUpdateHardwareConfig]
     );
 
+    // Check for validation errors for this specific config key
+    const validationError = React.useMemo(() => {
+      // Map display keys to validation keys
+      const keyMappings = {
+        'maxPowerLimitInkW': 'maxPowerLimitInkW',
+        'maxKW': 'maxPowerLimitInkW',
+        'maxCurrentLimitInAmps': 'maxCurrentLimitInAmps', 
+        'maxA': 'maxCurrentLimitInAmps',
+        'powerSaveInIdleMode': 'powerSaveInIdleMode',
+        "dlbMode":"dlbMode",
+        "num_of_modules":"num_of_modules"
+      };
+      
+      const validationKey = keyMappings[configKey];
+      return validationKey ? validationErrors[validationKey] : null;
+    }, [configKey, validationErrors]);
+
     // Memoized callback to prevent re-renders - using stable callback hook
     const handleValueChange = useStableCallback((newValue) => {
       updateFunction(configKey, newValue);
     }, [updateFunction, configKey]);
 
     // Move all hooks to top level to avoid conditional hook calls
-    // dlbCombo options - always computed but only used when needed
+    // dlbMode options - always computed but only used when needed
     const dlbOptions = React.useMemo(() => [
       { value: 'singleCombo', label: 'singleCombo' },
       { value: 'dualCombo', label: 'dualCombo' },
       { value: 'tripleCombo', label: 'tripleCombo' }
     ], []);
 
-    // dlbCombo value change handler - always created but only used when needed
-    const dlbComboHandleValueChange = React.useCallback((newValue) => {
-        handleValueChange(newValue);
-    }, [handleValueChange]);
+    // dlbMode value change handler - always created but only used when needed
+    const dlbComboHandleValueChange = React.useCallback(async (newValue) => {
+        // First update the dlbMode
+        await handleValueChange(newValue);
+        
+        // Then automatically set num_of_modules based on dlbMode
+        let autoModules = null;
+        if (newValue === 'dualCombo') {
+          autoModules = 3;
+        } else if (newValue === 'tripleCombo') {
+          autoModules = 4;
+        }
+        
+        // If we need to auto-set modules, update both userconfigs
+        if (autoModules !== null) {
+          try {
+            // Get current userconfig to maintain structure
+            const currentUserConfig = rawConfig.userconfig || {};
+            const updatedUserConfig = { ...currentUserConfig };
+            
+            // Set the num_of_modules value
+            if (!updatedUserConfig.ccs) updatedUserConfig.ccs = {};
+            updatedUserConfig.ccs.num_of_modules = autoModules;
 
-    // CRITICAL FIX: Use stable reference for dlbCombo value to prevent cross-dependencies
+            // Define both API endpoints
+            const endpoints = [
+              'http://10.20.27.100/api/system/userconfig',
+              'http://10.20.27.101/api/system/userconfig'
+            ];
+
+            // Create fetch promises for both endpoints
+            const fetchPromises = endpoints.map(endpoint => 
+              fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(updatedUserConfig),
+              })
+            );
+
+            // Execute both requests in parallel
+            const responses = await Promise.all(fetchPromises);
+
+            // Check if all responses are successful
+            const failedEndpoints = [];
+            responses.forEach((response, index) => {
+              if (!response.ok) {
+                failedEndpoints.push({
+                  endpoint: endpoints[index],
+                  status: response.status,
+                  statusText: response.statusText
+                });
+              }
+            });
+
+            if (failedEndpoints.length > 0) {
+              const errorMessages = failedEndpoints.map(
+                failed => `${failed.endpoint}: ${failed.status} ${failed.statusText}`
+              );
+              console.error(`Failed to auto-update num_of_modules on endpoints: ${errorMessages.join(', ')}`);
+            } else {
+              console.log(`Successfully auto-set num_of_modules to ${autoModules} for ${newValue} on both endpoints`);
+            }
+          } catch (err) {
+            console.error('Error auto-updating num_of_modules:', err);
+          }
+        }
+    }, [handleValueChange, rawConfig]);
+
+    // CRITICAL FIX: Use stable reference for dlbMode value to prevent cross-dependencies
     const dlbComboValue = React.useMemo(() => {
       if (configKey !== 'num_of_modules') return null;
       
-      // Get dlbCombo value from rawConfig to avoid state dependencies
+      // Get dlbMode value from rawConfig to avoid state dependencies
       const dlbComboFromRaw = rawConfig?.userconfig?.ccs?.dlbMode;
       if (dlbComboFromRaw) return dlbComboFromRaw;
       
       // Fallback to config states only if rawConfig is not available
       return category === 'hardware' ? 
-        hardwareConfig['dlbCombo']?.value : 
-        softwareConfig['dlbCombo']?.value;
+        hardwareConfig['dlbMode']?.value : 
+        softwareConfig['dlbMode']?.value;
     }, [configKey, rawConfig?.userconfig?.ccs?.dlbMode, category, hardwareConfig, softwareConfig]);
 
     // num_of_modules computed options and state - always computed but only used when needed
@@ -1620,44 +1861,53 @@ const Setting = React.memo(() => {
     }, [configKey, dlbComboValue, value, numModulesConfig, handleValueChange, pendingUpdate]);
 
     // Conditional rendering logic moved after all hooks
-    if (configKey === 'dlbCombo') {
+    if (configKey === 'dlbMode') {
       return (
-        <DropdownSetting
-          icon={icon}
-          label={label}
-          color={color}
-          value={value}
-          onValueChange={dlbComboHandleValueChange}
-          options={dlbOptions}
-        />
+        <div>
+          <DropdownSetting
+            icon={icon}
+            label={label}
+            color={color}
+            value={value}
+            onValueChange={dlbComboHandleValueChange}
+            options={dlbOptions}
+          />
+          <ValidationError error={validationError} isDark={isDark} />
+        </div>
       );
     }
 
     if (configKey === 'num_of_modules' && numModulesConfig) {
       const { isDisabled, defaultValue, options } = numModulesConfig;
       return (
-        <DropdownSetting
-          icon={icon}
-          label={label}
-          color={color}
-          value={defaultValue}
-          onValueChange={numModulesHandleValueChange}
-          options={options}
-          disabled={isDisabled}
-        />
+        <div>
+          <DropdownSetting
+            icon={icon}
+            label={label}
+            color={color}
+            value={defaultValue}
+            onValueChange={numModulesHandleValueChange}
+            options={options}
+            disabled={isDisabled}
+          />
+          <ValidationError error={validationError} isDark={isDark} />
+        </div>
       );
     }
 
     if (inputType === 'toggle') {
       return (
-        <ToggleSetting
-          icon={icon}
-          label={label}
-          description={""}
-          color={color}
-          enabled={value}
-          onToggle={() => updateFunction(configKey, !value)}
-        />
+        <div>
+          <ToggleSetting
+            icon={icon}
+            label={label}
+            description={""}
+            color={color}
+            enabled={value}
+            onToggle={() => updateFunction(configKey, !value)}
+          />
+          <ValidationError error={validationError} isDark={isDark} />
+        </div>
       );
     } else if (inputType === 'number') {
       // Determine appropriate min/max based on key name
@@ -1685,28 +1935,34 @@ const Setting = React.memo(() => {
       }
 
       return (
-        <NumberSetting
-          icon={icon}
-          label={label}
-          description={""}
-          color={color}
-          value={value}
-          onValueChange={handleValueChange}
-          min={min}
-          max={max}
-          unit={unit}
-        />
+        <div>
+          <NumberSetting
+            icon={icon}
+            label={label}
+            description={""}
+            color={color}
+            value={value}
+            onValueChange={handleValueChange}
+            min={min}
+            max={max}
+            unit={unit}
+          />
+          <ValidationError error={validationError} isDark={isDark} />
+        </div>
       );
     } else {
       return (
-        <TextSetting
-          icon={icon}
-          label={label}
-          description={""}
-          color={color}
-          value={value}
-          onValueChange={handleValueChange}
-        />
+        <div>
+          <TextSetting
+            icon={icon}
+            label={label}
+            description={""}
+            color={color}
+            value={value}
+            onValueChange={handleValueChange}
+          />
+          <ValidationError error={validationError} isDark={isDark} />
+        </div>
       );
     }
   }, (prevProps, nextProps) => {
@@ -1907,6 +2163,7 @@ const Setting = React.memo(() => {
                       settingData={configItem}
                       onValueChange={hardwareCallbacks[key]}
                       category="hardware"
+                      isDark={isDark}
                     />
                   ))}
                 </div>
@@ -1923,6 +2180,7 @@ const Setting = React.memo(() => {
                       settingData={configItem}
                       onValueChange={ocppCallbacks[key]}
                       category="ocpp"
+                      isDark={isDark}
                     />
                   ))}
                 </div>

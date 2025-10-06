@@ -25,7 +25,12 @@ const PasswordProtection = ({ onAuthenticated, theme }) => {
   const passwordInputRef = React.useRef(null);
   
   const isDark = theme === "dark";
-  const styles = getStyles(isDark, isDark ? "#f5f5f5" : "#000000", isDark ? "transparent" : "#ffffff");
+  
+  // Memoize styles to prevent unnecessary recalculations
+  const styles = React.useMemo(() => 
+    getStyles(isDark, isDark ? "#f5f5f5" : "#000000", isDark ? "transparent" : "#ffffff"),
+    [isDark]
+  );
 
   const ADMIN_PASSWORD = "admin123"; // Mock password - replace with secure implementation
   const MAX_ATTEMPTS = 3;
@@ -225,7 +230,21 @@ const PasswordProtection = ({ onAuthenticated, theme }) => {
 const ToggleSetting = React.memo(({ icon, label, description, color, enabled, onToggle, disabled = false }) => {
   const { theme } = useContext(ThemeContext);
   const isDark = theme === "dark";
-  const styles = getStyles(isDark, isDark ? "#f5f5f5" : "#000000", isDark ? "transparent" : "#ffffff");
+  
+  // Memoize styles to prevent unnecessary recalculations
+  const styles = React.useMemo(() => 
+    getStyles(isDark, isDark ? "#f5f5f5" : "#000000", isDark ? "transparent" : "#ffffff"),
+    [isDark]
+  );
+  
+  // Memoize toggle handler for smoother transitions
+  const handleToggle = React.useCallback(() => {
+    if (!disabled) {
+      React.startTransition(() => {
+        onToggle();
+      });
+    }
+  }, [disabled, onToggle]);
   
   return (
   <div style={styles.settingRow}>
@@ -248,7 +267,7 @@ const ToggleSetting = React.memo(({ icon, label, description, color, enabled, on
         opacity: disabled ? 0.4 : 1,
         cursor: disabled ? "not-allowed" : "pointer",
       }}
-      onClick={!disabled ? onToggle : undefined}
+      onClick={handleToggle}
     >
       <div
         style={{
@@ -280,15 +299,29 @@ const ToggleSetting = React.memo(({ icon, label, description, color, enabled, on
 const NumberSetting = React.memo(({ icon, label, description, color, value, onValueChange, min = 0, max = 100, unit = "", disabled = false }) => {
   const { theme } = useContext(ThemeContext);
   const isDark = theme === "dark";
-  const styles = getStyles(isDark, isDark ? "#f5f5f5" : "#000000", isDark ? "transparent" : "#ffffff");
   
-  const handleIncrement = () => {
-    if (!disabled && value < max) onValueChange(value + 1);
-  };
+  // Memoize styles to prevent unnecessary recalculations
+  const styles = React.useMemo(() => 
+    getStyles(isDark, isDark ? "#f5f5f5" : "#000000", isDark ? "transparent" : "#ffffff"),
+    [isDark]
+  );
+  
+  // Memoize value change handlers to prevent unnecessary re-renders
+  const handleIncrement = React.useCallback(() => {
+    if (!disabled && value < max) {
+      React.startTransition(() => {
+        onValueChange(value + 1);
+      });
+    }
+  }, [disabled, value, max, onValueChange]);
 
-  const handleDecrement = () => {
-    if (!disabled && value > min) onValueChange(value - 1);
-  };
+  const handleDecrement = React.useCallback(() => {
+    if (!disabled && value > min) {
+      React.startTransition(() => {
+        onValueChange(value - 1);
+      });
+    }
+  }, [disabled, value, min, onValueChange]);
 
   return (
     <div style={styles.settingRow}>
@@ -313,7 +346,9 @@ const NumberSetting = React.memo(({ icon, label, description, color, value, onVa
         >
           -
         </button>
-        <span style={{
+        <span 
+        className="setting-value-transition"
+        style={{
           ...styles.numberValue,
           opacity: disabled ? 0.6 : 1
         }}>
@@ -366,7 +401,9 @@ const TextSetting = React.memo(
     const handleApply = React.useCallback(
       (e) => {
         e?.stopPropagation();
-        onValueChange(tempValue); // Only notify parent when Apply is clicked
+        React.startTransition(() => {
+          onValueChange(tempValue); // Only notify parent when Apply is clicked
+        });
         setIsEditing(false);
         setShowKeyboard(false);
       },
@@ -471,6 +508,7 @@ const TextSetting = React.memo(
               ref={inputRef}
               type="text"
               value={tempValue}
+              className="setting-value-transition"
               onChange={handleChange}
               onClick={handleInputClick}
               placeholder="Enter value..."
@@ -679,7 +717,7 @@ const DropdownSetting = React.memo(
               }
             }}
           >
-            <span style={{ color: value ? (isDark ? '#f5f5f5' : '#000000') : '#888' }}>
+            <span className="setting-value-transition" style={{ color: value ? (isDark ? '#f5f5f5' : '#000000') : '#888' }}>
               {(() => {
                 if (!value) return 'Select an option...';
                 // Handle both string values and object options with value/label
@@ -697,7 +735,7 @@ const DropdownSetting = React.memo(
           </div>
 
           {isOpen && !disabled && (
-            <div style={dropdownStyles.dropdown}>
+            <div className="dropdown-transition" style={dropdownStyles.dropdown}>
               {options.map((option, index) => {
                 // Handle both string options and object options with value/label
                 const optionValue = typeof option === 'string' ? option : option.value;
@@ -748,6 +786,153 @@ const DropdownSetting = React.memo(
 );
 
 // Main Settings Component
+// Isolated Header Component to prevent re-renders
+const SettingHeader = React.memo(({ 
+  textColor, 
+  hasChanges, 
+  lastUpdateSuccess, 
+  loading, 
+  isDark, 
+  isRefreshing,
+  onRestartCharger, 
+  onRefreshConfiguration,
+  headerStyle,
+  headingStyle
+}) => {
+  const restartButtonStyle = React.useMemo(() => ({
+    background: (!hasChanges || !lastUpdateSuccess || loading) ? "transparent" : (isDark ? "rgb(136 171 226)" : "#ff0000"),
+    border: `1px solid ${isDark ? "rgb(136 171 226)" : "#ff0000"}`,
+    color: (!hasChanges || !lastUpdateSuccess || loading) ? 
+      (isDark ? "rgba(136, 171, 226, 0.5)" : "rgba(255, 0, 0, 0.5)") : 
+      "#ffffff",
+    padding: "8px 16px",
+    borderRadius: "6px",
+    cursor: (!hasChanges || !lastUpdateSuccess || loading) ? "not-allowed" : "pointer",
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    fontSize: "0.9rem",
+    opacity: (!hasChanges || !lastUpdateSuccess || loading) ? 0.5 : 1,
+    marginLeft: "8px"
+  }), [hasChanges, lastUpdateSuccess, loading, isDark]);
+
+  const refreshButtonStyle = React.useMemo(() => ({
+    background: (loading || isRefreshing) ? "transparent" : (isDark ? "rgb(136 171 226)" : "#ff0000"),
+    border: `1px solid ${isDark ? "rgb(136 171 226)" : "#ff0000"}`,
+    color: (loading || isRefreshing) ? 
+      (isDark ? "rgba(136, 171, 226, 0.5)" : "rgba(255, 0, 0, 0.5)") : 
+      "#ffffff",
+    padding: "8px 16px",
+    borderRadius: "6px",
+    cursor: (loading || isRefreshing) ? "not-allowed" : "pointer",
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    fontSize: "0.9rem",
+    opacity: (loading || isRefreshing) ? 0.5 : 1,
+    marginLeft: "8px"
+  }), [loading, isRefreshing, isDark]);
+
+  return (
+    <div style={headerStyle}>
+      <h2 style={{ ...headingStyle, color: textColor }}>
+        <FaCog style={{ marginRight: "10px", color: "rgb(136 171 226)" }} />
+        System Configuration
+      </h2>
+      
+      {/* Restart OCPP Client Button */}
+      <button
+        onClick={onRestartCharger}
+        disabled={!hasChanges || !lastUpdateSuccess || loading}
+        style={restartButtonStyle}
+        title={
+          !hasChanges ? "No changes made" :
+          !lastUpdateSuccess ? "Changes must be successfully updated first" :
+          loading ? "Processing..." :
+          "Restart Charger"
+        }
+      >
+        <FaRedo /> Restart Charger
+      </button>
+      
+      {/* Refresh Configuration Button */}
+      <button
+        onClick={onRefreshConfiguration}
+        disabled={loading || isRefreshing}
+        style={refreshButtonStyle}
+        title={
+          loading ? "Configuration loading..." :
+          isRefreshing ? "Refreshing configuration..." :
+          "Refresh Configuration"
+        }
+      >
+        <FaSync style={{
+          animation: isRefreshing ? 'spin 1s linear infinite' : 'none'
+        }} /> 
+        Refresh
+      </button>
+    </div>
+  );
+});
+
+// Isolated Tab Navigation Component to prevent re-renders
+const TabNavigation = React.memo(({ 
+  activeTab, 
+  loading, 
+  isDark, 
+  onHardwareTabClick, 
+  onOcppTabClick,
+  tabContainerStyle,
+  tabStyle
+}) => {
+  const hardwareTabStyle = React.useMemo(() => ({
+    ...tabStyle,
+    backgroundColor: activeTab === "hardware" 
+      ? (isDark ? "rgb(136 171 226)" : "#ff0000")
+      : "transparent",
+    color: activeTab === "hardware" 
+      ? "#ffffff" 
+      : (isDark ? "rgb(136 171 226)" : "#ff0000"),
+    borderColor: isDark ? "rgb(136 171 226)" : "#ff0000",
+    opacity: loading ? 0.5 : 1,
+    cursor: loading ? "not-allowed" : "pointer"
+  }), [activeTab, isDark, loading, tabStyle]);
+
+  const ocppTabStyle = React.useMemo(() => ({
+    ...tabStyle,
+    backgroundColor: activeTab === "ocpp" 
+      ? (isDark ? "rgb(136 171 226)" : "#ff0000")
+      : "transparent",
+    color: activeTab === "ocpp" 
+      ? "#ffffff" 
+      : (isDark ? "rgb(136 171 226)" : "#ff0000"),
+    borderColor: isDark ? "rgb(136 171 226)" : "#ff0000",
+    opacity: loading ? 0.5 : 1,
+    cursor: loading ? "not-allowed" : "pointer"
+  }), [activeTab, isDark, loading, tabStyle]);
+
+  return (
+    <div style={tabContainerStyle}>
+      <button
+        onClick={onHardwareTabClick}
+        disabled={loading}
+        style={hardwareTabStyle}
+      >
+        <FaMicrochip style={{ marginRight: "8px" }} />
+        Hardware Config
+      </button>
+      <button
+        onClick={onOcppTabClick}
+        disabled={loading}
+        style={ocppTabStyle}
+      >
+        <FaDesktop style={{ marginRight: "8px" }} />
+        OCPP Config
+      </button>
+    </div>
+  );
+});
+
 const Setting = React.memo(() => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeTab, setActiveTab] = useState("hardware");
@@ -757,6 +942,38 @@ const Setting = React.memo(() => {
   
   // Only subscribe to the specific config value, not the entire charging state
   const config = useSelector((state) => state.charging?.config);
+
+  // Add CSS keyframes for smooth value transitions
+  React.useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes valueChange {
+        0% { opacity: 0.8; transform: scale(0.98); }
+        50% { opacity: 0.9; transform: scale(1.01); }
+        100% { opacity: 1; transform: scale(1); }
+      }
+      
+      @keyframes dropdownSlide {
+        0% { opacity: 0; transform: translateY(-8px); }
+        100% { opacity: 1; transform: translateY(0); }
+      }
+      
+      .setting-value-transition {
+        animation: valueChange 0.25s ease-out;
+      }
+      
+      .dropdown-transition {
+        animation: dropdownSlide 0.2s ease-out;
+      }
+    `;
+    document.head.appendChild(style);
+    
+    return () => {
+      if (document.head.contains(style)) {
+        document.head.removeChild(style);
+      }
+    };
+  }, []);
 
   // Configuration State - will be populated from API
   const [softwareConfig, setSoftwareConfig] = useState({});
@@ -1101,7 +1318,7 @@ const Setting = React.memo(() => {
   }, []);
 
   // Categorize configuration from both API sources
-  const categorizeConfiguration = (ocppConfig, userConfig) => {
+  const categorizeConfiguration = React.useCallback((ocppConfig, userConfig) => {
     const displayConfig = {};
     
     // Process each configured key
@@ -1150,31 +1367,115 @@ const Setting = React.memo(() => {
       }
     });
 
-    setSoftwareConfig(ocppDisplay);
-    setHardwareConfig(hardwareDisplay);
-    setRawConfig({ ocpp: ocppConfig, userconfig: userConfig });
-  };
+    // Batch state updates to prevent multiple re-renders
+    React.startTransition(() => {
+      setSoftwareConfig(ocppDisplay);
+      setHardwareConfig(hardwareDisplay);
+      setRawConfig({ ocpp: ocppConfig, userconfig: userConfig });
+    });
+  }, [configKeyMapping]);
 
-  // Memoized callback functions to prevent re-renders
+  // CRITICAL FIX: Add timeout tracking for debounced updates
+  const updateTimeouts = React.useRef({});
+
+  // CRITICAL FIX: Optimized memoized callback functions to prevent cascading re-renders
   const memoizedUpdateHardwareConfig = React.useCallback((key, value) => {
-    // Check if this key needs synchronization
-    const mapping = configKeyMapping[key];
-    if (mapping && mapping.syncWith) {
-      updateSynchronizedConfig(key, value);
-    } else {
-      updateUserConfig(key, value);
+    // Prevent unnecessary updates if value hasn't changed
+    const currentValue = hardwareConfig[key]?.value;
+    if (currentValue === value) {
+      console.log(`Skipping update for ${key} - value unchanged:`, value);
+      return;
     }
-  }, [updateUserConfig, updateSynchronizedConfig, configKeyMapping]);
+
+    console.log(`Updating hardware config: ${key} = ${value}`);
+    
+    // Optimistically update the UI state immediately
+    React.startTransition(() => {
+      setHardwareConfig(prev => ({
+        ...prev,
+        [key]: { ...prev[key], value }
+      }));
+    });
+
+    // Debounce the actual API call to prevent rapid successive calls
+    const updateKey = `hardware_${key}`;
+    if (updateTimeouts.current[updateKey]) {
+      clearTimeout(updateTimeouts.current[updateKey]);
+    }
+    
+    updateTimeouts.current[updateKey] = setTimeout(async () => {
+      try {
+        // Check if this key needs synchronization
+        const mapping = configKeyMapping[key];
+        if (mapping && mapping.syncWith) {
+          await updateSynchronizedConfig(key, value);
+        } else {
+          await updateUserConfig(key, value);
+        }
+        console.log(`Successfully updated hardware config: ${key}`);
+      } catch (error) {
+        console.error(`Failed to update hardware config ${key}:`, error);
+        // Revert the optimistic update on error
+        React.startTransition(() => {
+          setHardwareConfig(prev => ({
+            ...prev,
+            [key]: { ...prev[key], value: currentValue }
+          }));
+        });
+      } finally {
+        delete updateTimeouts.current[updateKey];
+      }
+    }, 300); // Increased debounce time for stability
+  }, [hardwareConfig, updateUserConfig, updateSynchronizedConfig, configKeyMapping]);
 
   const memoizedUpdateOcppConfig = React.useCallback((key, value) => {
-    // Check if this key needs synchronization
-    const mapping = configKeyMapping[key];
-    if (mapping && mapping.syncWith) {
-      updateSynchronizedConfig(key, value);
-    } else {
-      updateOcppConfig(key, value);
+    // Prevent unnecessary updates if value hasn't changed
+    const currentValue = softwareConfig[key]?.value;
+    if (currentValue === value) {
+      console.log(`Skipping update for ${key} - value unchanged:`, value);
+      return;
     }
-  }, [updateOcppConfig, updateSynchronizedConfig, configKeyMapping]);
+
+    console.log(`Updating OCPP config: ${key} = ${value}`);
+    
+    // Optimistically update the UI state immediately
+    React.startTransition(() => {
+      setSoftwareConfig(prev => ({
+        ...prev,
+        [key]: { ...prev[key], value }
+      }));
+    });
+
+    // Debounce the actual API call to prevent rapid successive calls
+    const updateKey = `ocpp_${key}`;
+    if (updateTimeouts.current[updateKey]) {
+      clearTimeout(updateTimeouts.current[updateKey]);
+    }
+    
+    updateTimeouts.current[updateKey] = setTimeout(async () => {
+      try {
+        // Check if this key needs synchronization
+        const mapping = configKeyMapping[key];
+        if (mapping && mapping.syncWith) {
+          await updateSynchronizedConfig(key, value);
+        } else {
+          await updateOcppConfig(key, value);
+        }
+        console.log(`Successfully updated OCPP config: ${key}`);
+      } catch (error) {
+        console.error(`Failed to update OCPP config ${key}:`, error);
+        // Revert the optimistic update on error
+        React.startTransition(() => {
+          setSoftwareConfig(prev => ({
+            ...prev,
+            [key]: { ...prev[key], value: currentValue }
+          }));
+        });
+      } finally {
+        delete updateTimeouts.current[updateKey];
+      }
+    }, 300); // Increased debounce time for stability
+  }, [softwareConfig, updateOcppConfig, updateSynchronizedConfig, configKeyMapping]);
 
   // Memoized callback creators for each setting
   const hardwareCallbacks = React.useMemo(() => {
@@ -1202,7 +1503,7 @@ const Setting = React.memo(() => {
 
 
 
-  // Dynamic Setting Component - Memoized to prevent unnecessary re-renders
+  // Dynamic Setting Component - Heavily optimized to prevent unnecessary re-renders
   const DynamicSetting = React.memo(({ configKey, settingData, onValueChange, category }) => {
     // Extract the actual value from the setting data structure
     const value = settingData.value;
@@ -1220,33 +1521,37 @@ const Setting = React.memo(() => {
       updateFunction(configKey, newValue);
     }, [updateFunction, configKey]);
 
-    // Special handling for dlbCombo dropdown
-    if (configKey === 'dlbCombo') {
-      const dlbOptions = [
-        { value: 'singleCombo', label: 'singleCombo' },
-        { value: 'dualCombo', label: 'dualCombo' },
-        { value: 'tripleCombo', label: 'tripleCombo' }
-      ];
+    // Move all hooks to top level to avoid conditional hook calls
+    // dlbCombo options - always computed but only used when needed
+    const dlbOptions = React.useMemo(() => [
+      { value: 'singleCombo', label: 'singleCombo' },
+      { value: 'dualCombo', label: 'dualCombo' },
+      { value: 'tripleCombo', label: 'tripleCombo' }
+    ], []);
 
-      return (
-        <DropdownSetting
-          icon={icon}
-          label={label}
-          color={color}
-          value={value}
-          onValueChange={handleValueChange}
-          options={dlbOptions}
-        />
-      );
-    }
+    // dlbCombo value change handler - always created but only used when needed
+    const dlbComboHandleValueChange = React.useCallback((newValue) => {
+        handleValueChange(newValue);
+    }, [handleValueChange]);
 
-    // Special handling for num_of_modules with conditional logic
-    if (configKey === 'num_of_modules') {
-      // Get the current dlbCombo value from the config
-      const dlbComboValue = category === 'hardware' ? 
+    // CRITICAL FIX: Use stable reference for dlbCombo value to prevent cross-dependencies
+    const dlbComboValue = React.useMemo(() => {
+      if (configKey !== 'num_of_modules') return null;
+      
+      // Get dlbCombo value from rawConfig to avoid state dependencies
+      const dlbComboFromRaw = rawConfig?.userconfig?.ccs?.dlbMode;
+      if (dlbComboFromRaw) return dlbComboFromRaw;
+      
+      // Fallback to config states only if rawConfig is not available
+      return category === 'hardware' ? 
         hardwareConfig['dlbCombo']?.value : 
         softwareConfig['dlbCombo']?.value;
+    }, [configKey, rawConfig?.userconfig?.ccs?.dlbMode, category, hardwareConfig, softwareConfig]);
 
+    // num_of_modules computed options and state - always computed but only used when needed
+    const numModulesConfig = React.useMemo(() => {
+      if (configKey !== 'num_of_modules') return null;
+      
       let isDisabled = false;
       let defaultValue = value;
       let options = [];
@@ -1263,38 +1568,84 @@ const Setting = React.memo(() => {
         // Set default value to 2 if not already set to a valid option
         if (!options.some(option => option.value === value)) {
           defaultValue = 2;
-          handleValueChange(2);
         }
       } else if (dlbComboValue === 'dualCombo') {
         // Set to 3 and disable
         defaultValue = 3;
         isDisabled = true;
-        // Auto-update the value if it's not already 3
-        if (value !== 3) {
-          handleValueChange(3);
-        }
       } else if (dlbComboValue === 'tripleCombo') {
         // Set to 4 and disable
         defaultValue = 4;
         isDisabled = true;
-        // Auto-update the value if it's not already 4
-        if (value !== 4) {
-          handleValueChange(4);
-        }
       }
 
-        return (
-          <DropdownSetting
-            icon={icon}
-            label={label}
-            color={color}
-            value={defaultValue}
-            onValueChange={handleValueChange}
-            options={options}
-            disabled={isDisabled}
-          />
-        );
+      return { isDisabled, defaultValue, options };
+    }, [configKey, dlbComboValue, value]);
+
+    // num_of_modules value change handler - always created but only used when needed
+    const numModulesHandleValueChange = React.useCallback((newValue) => {
+        handleValueChange(newValue);
+    }, [handleValueChange]);
+
+    // CRITICAL FIX: Debounced effect to prevent rapid cascading updates
+    const [pendingUpdate, setPendingUpdate] = React.useState(null);
+    
+    React.useEffect(() => {
+      if (configKey !== 'num_of_modules' || !numModulesConfig) return;
       
+      const { options } = numModulesConfig;
+      let newValue = null;
+      
+      if (dlbComboValue === 'singleCombo' && !options.some(option => option.value === value)) {
+        newValue = 2;
+      } else if (dlbComboValue === 'dualCombo' && value !== 3) {
+        newValue = 3;
+      } else if (dlbComboValue === 'tripleCombo' && value !== 4) {
+        newValue = 4;
+      }
+      
+      if (newValue !== null && newValue !== pendingUpdate) {
+        setPendingUpdate(newValue);
+        
+        // Use longer debounce to prevent flickering
+        const timeoutId = setTimeout(() => {
+          React.startTransition(() => {
+            handleValueChange(newValue);
+            setPendingUpdate(null);
+          });
+        }, 100); // Increased debounce time
+        
+        return () => clearTimeout(timeoutId);
+      }
+    }, [configKey, dlbComboValue, value, numModulesConfig, handleValueChange, pendingUpdate]);
+
+    // Conditional rendering logic moved after all hooks
+    if (configKey === 'dlbCombo') {
+      return (
+        <DropdownSetting
+          icon={icon}
+          label={label}
+          color={color}
+          value={value}
+          onValueChange={dlbComboHandleValueChange}
+          options={dlbOptions}
+        />
+      );
+    }
+
+    if (configKey === 'num_of_modules' && numModulesConfig) {
+      const { isDisabled, defaultValue, options } = numModulesConfig;
+      return (
+        <DropdownSetting
+          icon={icon}
+          label={label}
+          color={color}
+          value={defaultValue}
+          onValueChange={numModulesHandleValueChange}
+          options={options}
+          disabled={isDisabled}
+        />
+      );
     }
 
     if (inputType === 'toggle') {
@@ -1359,24 +1710,63 @@ const Setting = React.memo(() => {
       );
     }
   }, (prevProps, nextProps) => {
-    // Enhanced memo comparison to prevent unnecessary re-renders
-    return (
-      prevProps.configKey === nextProps.configKey &&
-      prevProps.value === nextProps.value &&
-      prevProps.category === nextProps.category &&
-      prevProps.inputType === nextProps.inputType &&
-      prevProps.icon === nextProps.icon &&
-      prevProps.label === nextProps.label &&
-      prevProps.color === nextProps.color &&
-      prevProps.updateOcppConfig === nextProps.updateOcppConfig &&
-      prevProps.updateHardwareConfig === nextProps.updateHardwareConfig
-    );
+    // CRITICAL FIX: Optimized comparison function to prevent unnecessary re-renders
+    // Only compare essential props that actually affect rendering
+    if (prevProps.configKey !== nextProps.configKey) return false;
+    if (prevProps.category !== nextProps.category) return false;
+    if (prevProps.onValueChange !== nextProps.onValueChange) return false;
+    
+    // Deep comparison only for the value that matters
+    const prevValue = prevProps.settingData?.value;
+    const nextValue = nextProps.settingData?.value;
+    
+    // For primitive values, direct comparison
+    if (typeof prevValue !== 'object' && typeof nextValue !== 'object') {
+      return prevValue === nextValue;
+    }
+    
+    // For objects, compare stringified version (but this should be rare)
+    return JSON.stringify(prevValue) === JSON.stringify(nextValue);
   });
 
   const isDark = theme === "dark";
   const backgroundColor = isDark ? "transparent" : "#ffffff";
   const textColor = isDark ? "#f5f5f5" : "#000000";
-  const styles = getStyles(isDark, textColor, backgroundColor);
+  
+  // Memoize styles to prevent unnecessary recalculations and flickering
+  const styles = React.useMemo(() => 
+    getStyles(isDark, textColor, backgroundColor), 
+    [isDark, textColor, backgroundColor]
+  );
+
+  // Memoized event handlers to prevent unnecessary re-renders
+  const handleRestartCharger = React.useCallback(async () => {
+    try {
+      await restartCharger();
+    } catch (err) {
+      // Error is already handled in the API function
+    }
+  }, [restartCharger]);
+
+  const handleRefreshConfiguration = React.useCallback(async () => {
+    try {
+      await refreshConfiguration();
+    } catch (err) {
+      // Error is already handled in the refresh function
+    }
+  }, [refreshConfiguration]);
+
+  const handleHardwareTabClick = React.useCallback(() => {
+    React.startTransition(() => {
+      setActiveTab("hardware");
+    });
+  }, []);
+
+  const handleOcppTabClick = React.useCallback(() => {
+    React.startTransition(() => {
+      setActiveTab("ocpp");
+    });
+  }, []);
 
   // RestartingScreen component with animation
   const RestartingScreen = () => {
@@ -1460,133 +1850,30 @@ const Setting = React.memo(() => {
       {/* Restarting Screen Overlay */}
       <RestartingScreen />
       {/* Header */}
-      <div style={styles.header}>
-        <h2 style={{ ...styles.heading, color: textColor }}>
-          <FaCog style={{ marginRight: "10px", color: "rgb(136 171 226)" }} />
-          System Configuration
-        </h2>
-        {/* {loading && (
-          <div style={styles.loadingIndicator}>
-            Loading configuration...
-          </div>
-        )} */}
-        {/* Restart OCPP Client Button */}
-        <button
-          onClick={async () => {
-            try {
-              await restartCharger();
-            } catch (err) {
-              // Error is already handled in the API function
-            }
-          }}
-          disabled={!hasChanges || !lastUpdateSuccess || loading}
-          style={{
-            background: (!hasChanges || !lastUpdateSuccess || loading) ? "transparent" : (isDark ? "rgb(136 171 226)" : "#ff0000"),
-            border: `1px solid ${isDark ? "rgb(136 171 226)" : "#ff0000"}`,
-            color: (!hasChanges || !lastUpdateSuccess || loading) ? 
-              (isDark ? "rgba(136, 171, 226, 0.5)" : "rgba(255, 0, 0, 0.5)") : 
-              "#ffffff",
-            padding: "8px 16px",
-            borderRadius: "6px",
-            cursor: (!hasChanges || !lastUpdateSuccess || loading) ? "not-allowed" : "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            fontSize: "0.9rem",
-            opacity: (!hasChanges || !lastUpdateSuccess || loading) ? 0.5 : 1,
-            marginLeft: "8px"
-          }}
-          title={
-            !hasChanges ? "No changes made" :
-            !lastUpdateSuccess ? "Changes must be successfully updated first" :
-            loading ? "Processing..." :
-            "Restart Charger"
-          }
-        >
-          <FaRedo /> Restart Charger
-        </button>
-        
-        {/* Refresh Configuration Button */}
-        <button
-          onClick={async () => {
-            try {
-              await refreshConfiguration();
-            } catch (err) {
-              // Error is already handled in the refresh function
-            }
-          }}
-          disabled={loading || isRefreshing}
-          style={{
-            background: (loading || isRefreshing) ? "transparent" : (isDark ? "rgb(136 171 226)" : "#ff0000"),
-            border: `1px solid ${isDark ? "rgb(136 171 226)" : "#ff0000"}`,
-            color: (loading || isRefreshing) ? 
-              (isDark ? "rgba(136, 171, 226, 0.5)" : "rgba(255, 0, 0, 0.5)") : 
-              "#ffffff",
-            padding: "8px 16px",
-            borderRadius: "6px",
-            cursor: (loading || isRefreshing) ? "not-allowed" : "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            fontSize: "0.9rem",
-            opacity: (loading || isRefreshing) ? 0.5 : 1,
-            marginLeft: "8px"
-          }}
-          title={
-            loading ? "Configuration loading..." :
-            isRefreshing ? "Refreshing configuration..." :
-            "Refresh Configuration"
-          }
-        >
-          <FaSync style={{
-            animation: isRefreshing ? 'spin 1s linear infinite' : 'none'
-          }} /> 
-          Refresh
-        </button>
-      </div>
+      <SettingHeader
+        textColor={textColor}
+        hasChanges={hasChanges}
+        lastUpdateSuccess={lastUpdateSuccess}
+        loading={loading}
+        isDark={isDark}
+        isRefreshing={isRefreshing}
+        onRestartCharger={handleRestartCharger}
+        onRefreshConfiguration={handleRefreshConfiguration}
+        headerStyle={styles.header}
+        headingStyle={styles.heading}
+      />
 
       {/* Tab Navigation */}
       {!error && (
-        <div style={styles.tabContainer}>
-          <button
-            onClick={() => setActiveTab("hardware")}
-            disabled={loading}
-            style={{
-              ...styles.tab,
-              backgroundColor: activeTab === "hardware" 
-                ? (isDark ? "rgb(136 171 226)" : "#ff0000")
-                : "transparent",
-              color: activeTab === "hardware" 
-                ? "#ffffff" 
-                : (isDark ? "rgb(136 171 226)" : "#ff0000"),
-              borderColor: isDark ? "rgb(136 171 226)" : "#ff0000",
-              opacity: loading ? 0.5 : 1,
-              cursor: loading ? "not-allowed" : "pointer"
-            }}
-          >
-            <FaMicrochip style={{ marginRight: "8px" }} />
-            Hardware Config
-          </button>
-          <button
-            onClick={() => setActiveTab("ocpp")}
-            disabled={loading}
-            style={{
-              ...styles.tab,
-              backgroundColor: activeTab === "ocpp" 
-                ? (isDark ? "rgb(136 171 226)" : "#ff0000")
-                : "transparent",
-              color: activeTab === "ocpp" 
-                ? "#ffffff" 
-                : (isDark ? "rgb(136 171 226)" : "#ff0000"),
-              borderColor: isDark ? "rgb(136 171 226)" : "#ff0000",
-              opacity: loading ? 0.5 : 1,
-              cursor: loading ? "not-allowed" : "pointer"
-            }}
-          >
-            <FaDesktop style={{ marginRight: "8px" }} />
-            OCPP Config
-          </button>
-        </div>
+        <TabNavigation
+          activeTab={activeTab}
+          loading={loading}
+          isDark={isDark}
+          onHardwareTabClick={handleHardwareTabClick}
+          onOcppTabClick={handleOcppTabClick}
+          tabContainerStyle={styles.tabContainer}
+          tabStyle={styles.tab}
+        />
       )}
 
       {/* Tab Content */}
@@ -1882,6 +2169,7 @@ const getStyles = (isDark, textColor, backgroundColor) => ({
     fontWeight: "600",
     color: isDark ? "rgb(136 171 226)" : "rgb(255 0 0)",
     textShadow: isDark ? "0 0 5px rgba(136, 171, 226, 0.5)" : "0 0 5px rgba(255, 0, 0, 0.3)",
+    transition: "all 0.3s ease",
   },
   textInput: {
     padding: "12px 16px",

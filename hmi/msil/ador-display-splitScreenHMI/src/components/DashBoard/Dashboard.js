@@ -126,7 +126,7 @@ function Dashboard() {
       if (config && config.API) {
         try {
           // Use the API endpoint from config, or fallback to a default endpoint
-          const apiEndpoint = 'http://10.20.27.50:3001/store/charger-config';
+          const apiEndpoint = `${config.API}/store/charger-config`;
           await startupApiCall(config, apiEndpoint);
         } catch (error) {
           // Error is already logged in the startupApiCall function

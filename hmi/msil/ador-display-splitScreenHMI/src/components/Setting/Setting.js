@@ -14,6 +14,7 @@ import {
 import { ThemeContext } from "../ThemeContext/ThemeProvider";
 import EVChargerKeyboard from "../EVChargerKeyboard/EVChargerKeyboard";
 import { useStableCallback } from "../../hooks/useStableCallback";
+import { useDebounce } from "../../hooks/useDebounce";
 
 // Password Protection Component
 const PasswordProtection = ({ onAuthenticated, theme }) => {
@@ -1058,6 +1059,44 @@ const Setting = React.memo(() => {
     return obj;
   };
 
+  // Helper function to add default dlbMode and update backend if not present
+  const addDefaultDlbMode = async (userConfig, endpoint) => {
+    // Create a deep copy to avoid mutating the original
+    const config = JSON.parse(JSON.stringify(userConfig));
+    
+    // Ensure ccs object exists
+    if (!config.ccs) {
+      config.ccs = {};
+    }
+    
+    // Check if dlbMode is missing and add default
+    if (!config.ccs.dlbMode) {
+      config.ccs.dlbMode = "singleCombo";
+      console.log(`Adding default dlbMode to ${endpoint}`);
+      
+      // Update the backend userconfig with the default dlbMode
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(config),
+        });
+        
+        if (!response.ok) {
+          console.error(`Failed to update ${endpoint} with default dlbMode:`, response.status, response.statusText);
+        } else {
+          console.log(`Successfully updated ${endpoint} with default dlbMode`);
+        }
+      } catch (error) {
+        console.error(`Error updating ${endpoint} with default dlbMode:`, error);
+      }
+    }
+    
+    return config;
+  };
+
   // API Functions
   const fetchAllConfigurations = useCallback(async () => {
     setLoading(true);
@@ -1082,10 +1121,12 @@ const Setting = React.memo(() => {
       }
 
       const ocppData = await ocppResponse.json();
-      const userConfig100Data = await userConfig100Response.json();
-      const userConfig101Data = await userConfig101Response.json();
+      let userConfig100Data = await userConfig100Response.json();
+      let userConfig101Data = await userConfig101Response.json();
       
- 
+      // Add default dlbMode if not present in userconfig responses and update backend
+      userConfig100Data = await addDefaultDlbMode(userConfig100Data, 'http://10.20.27.100/api/system/userconfig');
+      userConfig101Data = await addDefaultDlbMode(userConfig101Data, 'http://10.20.27.101/api/system/userconfig');
       
       // Store all configurations for validation
       const allConfigs = {
@@ -1136,8 +1177,12 @@ const Setting = React.memo(() => {
       }
 
       const ocppData = await ocppResponse.json();
-      const userConfig100Data = await userConfig100Response.json();
-      const userConfig101Data = await userConfig101Response.json();
+      let userConfig100Data = await userConfig100Response.json();
+      let userConfig101Data = await userConfig101Response.json();
+      
+      // Add default dlbMode if not present in userconfig responses and update backend
+      userConfig100Data = await addDefaultDlbMode(userConfig100Data, 'http://10.20.27.100/api/system/userconfig');
+      userConfig101Data = await addDefaultDlbMode(userConfig101Data, 'http://10.20.27.101/api/system/userconfig');
       
       // Store all configurations for validation
       const allConfigs = {
@@ -1163,8 +1208,124 @@ const Setting = React.memo(() => {
     }
   }, [apiUrl]);
 
+  // Create debounced versions of API functions to prevent excessive calls
+  const { debouncedCallback: debouncedUpdateOcppConfig } = useDebounce(
+    async (key, value) => {
+      const mapping = configKeyMapping[key];
+      if (!mapping || mapping.source !== 'ocpp') {
+        console.error('Invalid OCPP key:', key);
+        return;
+      }
 
-  // Update OCPP configuration
+      setLoading(true);
+      setHasChanges(true);
+      setLastUpdateSuccess(false);
+
+      try {
+        const updatePayload = { [mapping.path]: value };
+        const response = await fetch(`${apiUrl}/ocpp-client/config`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(updatePayload),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        setLastUpdateSuccess(true);
+        // Refresh configuration after successful update
+        await fetchAllConfigurations();
+      } catch (err) {
+        console.error('Error updating OCPP configuration:', err);
+        setError(err.message);
+        setLastUpdateSuccess(false);
+      } finally {
+        setLoading(false);
+      }
+    },
+    500
+  );
+
+  const { debouncedCallback: debouncedUpdateUserConfig } = useDebounce(
+    async (key, value) => {
+      const mapping = configKeyMapping[key];
+      if (!mapping || mapping.source !== 'userconfig') {
+        console.error('Invalid UserConfig key:', key);
+        return;
+      }
+
+      setLoading(true);
+      setHasChanges(true);
+      setLastUpdateSuccess(false);
+
+      try {
+        // Get current userconfig to maintain structure
+        const currentUserConfig = rawConfig.userconfig || {};
+        const updatedUserConfig = { ...currentUserConfig };
+        
+        // Set the nested value
+        setNestedValue(updatedUserConfig, mapping.path, value);
+
+        // Define both API endpoints
+        const endpoints = [
+          'http://10.20.27.100/api/system/userconfig',
+          'http://10.20.27.101/api/system/userconfig'
+        ];
+
+        // Create fetch promises for both endpoints
+        const fetchPromises = endpoints.map(endpoint => 
+          fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(updatedUserConfig),
+          })
+        );
+
+        // Execute both requests in parallel
+        const responses = await Promise.all(fetchPromises);
+
+        // Check if all responses are successful
+        const failedEndpoints = [];
+        responses.forEach((response, index) => {
+          if (!response.ok) {
+            failedEndpoints.push({
+              endpoint: endpoints[index],
+              status: response.status,
+              statusText: response.statusText
+            });
+          }
+        });
+
+        if (failedEndpoints.length > 0) {
+          const errorMessages = failedEndpoints.map(
+            failed => `${failed.endpoint}: ${failed.status} ${failed.statusText}`
+          );
+          throw new Error(`Failed to update endpoints: ${errorMessages.join(', ')}`);
+        }
+
+        setLastUpdateSuccess(true);
+        console.log('Successfully updated UserConfig on both endpoints:', endpoints);
+        
+        // Refresh configuration after successful update to both endpoints
+        await fetchAllConfigurations();
+      } catch (err) {
+        console.error('Error updating UserConfig configuration:', err);
+        setError(err.message);
+        setLastUpdateSuccess(false);
+      } finally {
+        setLoading(false);
+      }
+    },
+    500
+  );
+
+
+  // Update OCPP configuration (original function for immediate calls)
   const updateOcppConfig = useCallback(async (key, value) => {
     const mapping = configKeyMapping[key];
     if (!mapping || mapping.source !== 'ocpp') {
@@ -1569,7 +1730,8 @@ const Setting = React.memo(() => {
         if (mapping && mapping.syncWith) {
           await updateSynchronizedConfig(key, value);
         } else {
-          await updateUserConfig(key, value);
+          // Use debounced API call for better performance
+          debouncedUpdateUserConfig(key, value);
         }
         console.log(`Successfully updated hardware config: ${key}`);
       } catch (error) {
@@ -1585,7 +1747,7 @@ const Setting = React.memo(() => {
         delete updateTimeouts.current[updateKey];
       }
     }, 300); // Increased debounce time for stability
-  }, [hardwareConfig, updateUserConfig, updateSynchronizedConfig, configKeyMapping]);
+  }, [hardwareConfig, debouncedUpdateUserConfig, updateSynchronizedConfig, configKeyMapping]);
 
   const memoizedUpdateOcppConfig = React.useCallback((key, value) => {
     // Prevent unnecessary updates if value hasn't changed
@@ -1618,7 +1780,8 @@ const Setting = React.memo(() => {
         if (mapping && mapping.syncWith) {
           await updateSynchronizedConfig(key, value);
         } else {
-          await updateOcppConfig(key, value);
+          // Use debounced API call for better performance
+          debouncedUpdateOcppConfig(key, value);
         }
         console.log(`Successfully updated OCPP config: ${key}`);
       } catch (error) {
@@ -1634,7 +1797,7 @@ const Setting = React.memo(() => {
         delete updateTimeouts.current[updateKey];
       }
     }, 300); // Increased debounce time for stability
-  }, [softwareConfig, updateOcppConfig, updateSynchronizedConfig, configKeyMapping]);
+  }, [softwareConfig, debouncedUpdateOcppConfig, updateSynchronizedConfig, configKeyMapping]);
 
   // Memoized callback creators for each setting
   const hardwareCallbacks = React.useMemo(() => {
@@ -1705,10 +1868,69 @@ const Setting = React.memo(() => {
       { value: 'tripleCombo', label: 'tripleCombo' }
     ], []);
 
+    // Create debounced version for dlbMode auto-module updates
+    const { debouncedCallback: debouncedAutoModuleUpdate } = useDebounce(
+      async (autoModules) => {
+        try {
+          // Get current userconfig to maintain structure
+          const currentUserConfig = rawConfig.userconfig || {};
+          const updatedUserConfig = { ...currentUserConfig };
+          
+          // Set the num_of_modules value
+          if (!updatedUserConfig.ccs) updatedUserConfig.ccs = {};
+          updatedUserConfig.ccs.num_of_modules = autoModules;
+
+          // Define both API endpoints
+          const endpoints = [
+            'http://10.20.27.100/api/system/userconfig',
+            'http://10.20.27.101/api/system/userconfig'
+          ];
+
+          // Create fetch promises for both endpoints
+          const fetchPromises = endpoints.map(endpoint => 
+            fetch(endpoint, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(updatedUserConfig),
+            })
+          );
+
+          // Execute both requests in parallel
+          const responses = await Promise.all(fetchPromises);
+
+          // Check if all responses are successful
+          const failedEndpoints = [];
+          responses.forEach((response, index) => {
+            if (!response.ok) {
+              failedEndpoints.push({
+                endpoint: endpoints[index],
+                status: response.status,
+                statusText: response.statusText
+              });
+            }
+          });
+
+          if (failedEndpoints.length > 0) {
+            const errorMessages = failedEndpoints.map(
+              failed => `${failed.endpoint}: ${failed.status} ${failed.statusText}`
+            );
+            console.error(`Failed to auto-update num_of_modules on endpoints: ${errorMessages.join(', ')}`);
+          } else {
+            console.log(`Successfully auto-set num_of_modules to ${autoModules} on both endpoints`);
+          }
+        } catch (err) {
+          console.error('Error auto-updating num_of_modules:', err);
+        }
+      },
+      500
+    );
+
     // dlbMode value change handler - always created but only used when needed
     const dlbComboHandleValueChange = React.useCallback(async (newValue) => {
-        // First update the dlbMode
-        await handleValueChange(newValue);
+        // First update the dlbMode using debounced API call
+        debouncedUpdateUserConfig('dlbMode', newValue);
         
         // Then automatically set num_of_modules based on dlbMode
         let autoModules = null;
@@ -1718,62 +1940,11 @@ const Setting = React.memo(() => {
           autoModules = 4;
         }
         
-        // If we need to auto-set modules, update both userconfigs
+        // If we need to auto-set modules, use debounced update
         if (autoModules !== null) {
-          try {
-            // Get current userconfig to maintain structure
-            const currentUserConfig = rawConfig.userconfig || {};
-            const updatedUserConfig = { ...currentUserConfig };
-            
-            // Set the num_of_modules value
-            if (!updatedUserConfig.ccs) updatedUserConfig.ccs = {};
-            updatedUserConfig.ccs.num_of_modules = autoModules;
-
-            // Define both API endpoints
-            const endpoints = [
-              'http://10.20.27.100/api/system/userconfig',
-              'http://10.20.27.101/api/system/userconfig'
-            ];
-
-            // Create fetch promises for both endpoints
-            const fetchPromises = endpoints.map(endpoint => 
-              fetch(endpoint, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(updatedUserConfig),
-              })
-            );
-
-            // Execute both requests in parallel
-            const responses = await Promise.all(fetchPromises);
-
-            // Check if all responses are successful
-            const failedEndpoints = [];
-            responses.forEach((response, index) => {
-              if (!response.ok) {
-                failedEndpoints.push({
-                  endpoint: endpoints[index],
-                  status: response.status,
-                  statusText: response.statusText
-                });
-              }
-            });
-
-            if (failedEndpoints.length > 0) {
-              const errorMessages = failedEndpoints.map(
-                failed => `${failed.endpoint}: ${failed.status} ${failed.statusText}`
-              );
-              console.error(`Failed to auto-update num_of_modules on endpoints: ${errorMessages.join(', ')}`);
-            } else {
-              console.log(`Successfully auto-set num_of_modules to ${autoModules} for ${newValue} on both endpoints`);
-            }
-          } catch (err) {
-            console.error('Error auto-updating num_of_modules:', err);
-          }
+          debouncedAutoModuleUpdate(autoModules);
         }
-    }, [handleValueChange, rawConfig]);
+    }, [debouncedUpdateUserConfig, debouncedAutoModuleUpdate]);
 
     // CRITICAL FIX: Use stable reference for dlbMode value to prevent cross-dependencies
     const dlbComboValue = React.useMemo(() => {

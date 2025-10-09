@@ -119,12 +119,13 @@ function Navbar(props) {
           alignItems: "center",
         }}
       >
-        {/* <label
+        <label
           style={{
             position: "relative",
             display: "inline-block",
             width: "60px",
             height: "32px",
+            marginRight: "20px",
           }}
         >
           <input
@@ -144,6 +145,7 @@ function Navbar(props) {
               backgroundColor: theme === "dark" ? "#4caf50" : "#ccc",
               transition: "0.4s",
               borderRadius: "34px",
+              boxShadow: "0px 2px 9px rgba(0, 0, 0, 0.3)",
             }}
           >
             <span
@@ -157,10 +159,11 @@ function Navbar(props) {
                 backgroundColor: "#fff",
                 transition: "0.4s",
                 borderRadius: "50%",
+                boxShadow: "0px 1px 3px rgba(0, 0, 0, 0.3)",
               }}
             ></span>
           </span>
-        </label> */}
+        </label>
 
         <Title style={{ fontSize: "4.5vh", fontWeight: "bold", margin: 0 }}>
           {heading}
@@ -213,7 +216,7 @@ function Navbar(props) {
             theme={theme}
             onClick={handleSettingsClick}
             iconType="SettingOutlined"
-            showStrikethroughWhenDisabled={false} // custom visual-only disabling
+            showStrikethroughWhenDisabled={true} // custom visual-only disabling
           />
 
           {!isLanguageDisabled ? (

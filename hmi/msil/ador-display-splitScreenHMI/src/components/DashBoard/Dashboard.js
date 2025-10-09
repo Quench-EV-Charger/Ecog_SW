@@ -18,6 +18,7 @@ import {
   setActiveConnector,
 } from "../../redux/chargingSlice";
 import { timeout } from "../../Utilis/UtilityFunction";
+import { startupApiCall } from "../../services/servicesApi";
 import ErrorOverlay from "../ErrorsScreen/ErrorOverlay.js";
 import RfidDisconnectedPopup from "../OutletCard/GunAlerts/RfidDisconnectedPopup.js";
 import EVChargerStatus from "../ErrorsScreen/EvChargerStatus.js";
@@ -118,6 +119,27 @@ function Dashboard() {
       dispatch(setSECCreachable(false)); // Important: Mark as unreachable
     }
   }, [config?.checkSECC, activeConnector, dispatch, SECCreachable]);
+
+  // Startup API call - executes once when component mounts
+  useEffect(() => {
+    const executeStartupApiCall = async () => {
+      if (config && config.API) {
+        try {
+          // Use the API endpoint from config, or fallback to a default endpoint
+          const apiEndpoint = `${config.API}/store/charger-config`;
+          await startupApiCall(config, apiEndpoint);
+        } catch (error) {
+          // Error is already logged in the startupApiCall function
+          console.log("Startup API call failed, continuing with application startup");
+        }
+      }
+    };
+
+    // Only execute if config is available
+    if (config) {
+      executeStartupApiCall();
+    }
+  }, [config]); // Depend on config to ensure it's loaded before API call
 
   useEffect(() => {
     if (config?.checkSECC && !intervalIdRef.current) {

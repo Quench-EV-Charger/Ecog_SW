@@ -8,6 +8,72 @@ export const httpGet = async (url, errorLog) => {
         console.log(errorLog, error);
       });
   };
+
+export const startupApiCall = async (config, apiEndpoint) => {
+  try {
+    // Check if lightTheme contains "maruti"
+    const lightTheme = config?.branding?.brandingLogo?.lightTheme || "";
+    const isMaruti = lightTheme.toLowerCase().includes("maruti");
+    
+    // Determine expected payload based on lightTheme content
+    const expectedData = {
+      applications: {
+        ui: isMaruti ? "build-maruti" : "build",
+        scripts: [""]
+      }
+    };
+
+    // First, check current configuration with GET request
+    try {
+      const getResponse = await fetch(apiEndpoint, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+
+      if (getResponse.ok) {
+        const currentConfig = await getResponse.json();
+        console.log("✅ Current API Configuration:", currentConfig);
+        
+        // Compare current configuration with expected configuration
+        const currentUi = currentConfig?.applications?.ui;
+        const expectedUi = expectedData.applications.ui;
+        
+        if (currentUi === expectedUi) {
+          console.log("✅ Configuration already matches expected setting. Skipping POST API call.");
+          return currentConfig;
+        } else {
+          console.log(`🔄 Configuration mismatch detected. Current: ${currentUi}, Expected: ${expectedUi}. Proceeding with POST API call.`);
+        }
+      } else {
+        console.log("⚠️ GET request failed, proceeding with POST API call.");
+      }
+    } catch (getError) {
+      console.log("⚠️ GET request error:", getError, "Proceeding with POST API call.");
+    }
+
+    // Execute POST API call if there's a mismatch or GET failed
+    const response = await fetch(apiEndpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(expectedData)
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      console.log("✅ POST Response:", result);
+      return result;
+    } else {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+  } catch (error) {
+    console.log("❌ Error:", error);
+    throw error;
+  }
+};
   
   export const httpPost = async (url, body, successLog) => {
     console.log('post', url, body);

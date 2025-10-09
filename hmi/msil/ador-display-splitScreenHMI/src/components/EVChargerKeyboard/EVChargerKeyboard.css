@@ -1,0 +1,483 @@
+/* EV Charger Keyboard - Professional HMI Styles */
+:root {
+  /* Professional HMI Color Palette */
+  --ev-kb-primary: #ffffff;
+  --ev-kb-secondary: #f8f9fa;
+  --ev-kb-accent: #1890ff;
+  --ev-kb-accent-hover: #40a9ff;
+  --ev-kb-text: #262626;
+  --ev-kb-text-secondary: #8c8c8c;
+  --ev-kb-border: #d9d9d9;
+  --ev-kb-border-light: #f0f0f0;
+  --ev-kb-success: #52c41a;
+  --ev-kb-warning: #faad14;
+  --ev-kb-danger: #ff4d4f;
+  
+  /* Dark Theme Colors */
+  --ev-kb-dark-primary: #141414;
+  --ev-kb-dark-secondary: #1f1f1f;
+  --ev-kb-dark-accent: #1890ff;
+  --ev-kb-dark-accent-hover: #40a9ff;
+  --ev-kb-dark-text: #ffffff;
+  --ev-kb-dark-text-secondary: #a6a6a6;
+  --ev-kb-dark-border: #434343;
+  --ev-kb-dark-border-light: #303030;
+  
+  /* Spacing & Sizing */
+  --ev-kb-padding-sm: 0.5rem;
+  --ev-kb-padding-md: 0.75rem;
+  --ev-kb-padding-lg: 1rem;
+  --ev-kb-border-radius: 8px;
+  --ev-kb-border-radius-sm: 6px;
+  --ev-kb-key-size: 48px;
+  --ev-kb-key-size-sm: 40px;
+  
+  /* Typography */
+  --ev-kb-font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif;
+  --ev-kb-font-size-base: 14px;
+  --ev-kb-font-size-sm: 12px;
+  --ev-kb-font-size-lg: 16px;
+  --ev-kb-font-weight: 500;
+  --ev-kb-font-weight-bold: 600;
+  
+  /* Shadows */
+  --ev-kb-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --ev-kb-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --ev-kb-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+  
+  /* Transitions */
+  --ev-kb-transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --ev-kb-transition-fast: all 0.15s ease-out;
+}
+
+/* Overlay - Full Screen Coverage */
+.ev-keyboard-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--ev-kb-padding-lg);
+  box-sizing: border-box;
+}
+
+/* Main Container */
+.ev-keyboard-container {
+  background: var(--ev-kb-primary);
+  border: 1px solid var(--ev-kb-border);
+  border-radius: var(--ev-kb-border-radius);
+  box-shadow: var(--ev-kb-shadow-lg);
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--ev-kb-font-family);
+}
+
+/* Dark Theme Styles */
+.ev-keyboard-overlay.dark .ev-keyboard-container {
+  background: var(--ev-kb-dark-primary);
+  border-color: var(--ev-kb-dark-border);
+  color: var(--ev-kb-dark-text);
+}
+
+/* Header */
+.ev-keyboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--ev-kb-padding-md) var(--ev-kb-padding-lg);
+  border-bottom: 1px solid var(--ev-kb-border-light);
+  background: var(--ev-kb-secondary);
+}
+
+.dark .ev-keyboard-header {
+  background: var(--ev-kb-dark-secondary);
+  border-bottom-color: var(--ev-kb-dark-border-light);
+}
+
+.keyboard-title {
+  display: flex;
+  align-items: center;
+  gap: var(--ev-kb-padding-sm);
+  font-size: var(--ev-kb-font-size-lg);
+  font-weight: var(--ev-kb-font-weight-bold);
+  color: var(--ev-kb-text);
+}
+
+.dark .keyboard-title {
+  color: var(--ev-kb-dark-text);
+}
+
+.keyboard-icon {
+  font-size: 18px;
+}
+
+/* Close Button */
+.ev-keyboard-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--ev-kb-border-radius-sm);
+  background: transparent;
+  color: var(--ev-kb-text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: bold;
+  transition: var(--ev-kb-transition);
+}
+
+.ev-keyboard-close:hover {
+  background: var(--ev-kb-danger);
+  color: white;
+  transform: scale(1.1);
+}
+
+.dark .ev-keyboard-close {
+  color: var(--ev-kb-dark-text-secondary);
+}
+
+.dark .ev-keyboard-close:hover {
+  background: var(--ev-kb-danger);
+  color: white;
+}
+
+/* Display Area */
+.ev-keyboard-display {
+  padding: var(--ev-kb-padding-lg);
+  border-bottom: 1px solid var(--ev-kb-border-light);
+  background: var(--ev-kb-secondary);
+}
+
+.dark .ev-keyboard-display {
+  background: var(--ev-kb-dark-secondary);
+  border-bottom-color: var(--ev-kb-dark-border-light);
+}
+
+.display-label {
+  font-size: var(--ev-kb-font-size-sm);
+  color: var(--ev-kb-text-secondary);
+  margin-bottom: 4px;
+  font-weight: var(--ev-kb-font-weight);
+}
+
+.dark .display-label {
+  color: var(--ev-kb-dark-text-secondary);
+}
+
+.display-value {
+  font-size: var(--ev-kb-font-size-lg);
+  color: var(--ev-kb-text);
+  min-height: 24px;
+  padding: var(--ev-kb-padding-sm);
+  background: var(--ev-kb-primary);
+  border: 1px solid var(--ev-kb-border);
+  border-radius: var(--ev-kb-border-radius-sm);
+  word-break: break-all;
+}
+
+.dark .display-value {
+  background: var(--ev-kb-dark-primary);
+  border-color: var(--ev-kb-dark-border);
+  color: var(--ev-kb-dark-text);
+}
+
+.char-counter {
+  font-size: var(--ev-kb-font-size-sm);
+  color: var(--ev-kb-text-secondary);
+  text-align: right;
+  margin-top: 4px;
+}
+
+.dark .char-counter {
+  color: var(--ev-kb-dark-text-secondary);
+}
+
+/* Control Bar */
+.ev-keyboard-controls {
+  display: flex;
+  gap: var(--ev-kb-padding-sm);
+  padding: var(--ev-kb-padding-md) var(--ev-kb-padding-lg);
+  border-bottom: 1px solid var(--ev-kb-border-light);
+  background: var(--ev-kb-secondary);
+}
+
+.dark .ev-keyboard-controls {
+  background: var(--ev-kb-dark-secondary);
+  border-bottom-color: var(--ev-kb-dark-border-light);
+}
+
+.control-btn {
+  height: 36px;
+  padding: 0 var(--ev-kb-padding-md);
+  border: 1px solid var(--ev-kb-border);
+  border-radius: var(--ev-kb-border-radius-sm);
+  background: var(--ev-kb-primary);
+  color: var(--ev-kb-text);
+  font-size: var(--ev-kb-font-size-sm);
+  font-weight: var(--ev-kb-font-weight);
+  cursor: pointer;
+  transition: var(--ev-kb-transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+}
+
+.control-btn:hover {
+  background: var(--ev-kb-accent);
+  color: white;
+  border-color: var(--ev-kb-accent);
+  transform: translateY(-1px);
+}
+
+.control-btn.active {
+  background: var(--ev-kb-accent);
+  color: white;
+  border-color: var(--ev-kb-accent);
+}
+
+.dark .control-btn {
+  background: var(--ev-kb-dark-primary);
+  border-color: var(--ev-kb-dark-border);
+  color: var(--ev-kb-dark-text);
+}
+
+.dark .control-btn:hover,
+.dark .control-btn.active {
+  background: var(--ev-kb-dark-accent);
+  border-color: var(--ev-kb-dark-accent);
+  color: white;
+}
+
+.clear-btn:hover {
+  background: var(--ev-kb-warning) !important;
+  border-color: var(--ev-kb-warning) !important;
+}
+
+/* Keys Grid */
+.ev-keyboard-keys {
+  padding: var(--ev-kb-padding-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ev-kb-padding-sm);
+  flex: 1;
+  overflow-y: auto;
+}
+
+.key-row {
+  display: flex;
+  gap: var(--ev-kb-padding-sm);
+  justify-content: center;
+}
+
+/* Individual Keys */
+.key {
+  height: var(--ev-kb-key-size);
+  min-width: var(--ev-kb-key-size);
+  border: 1px solid var(--ev-kb-border);
+  border-radius: var(--ev-kb-border-radius-sm);
+  background: var(--ev-kb-primary);
+  color: var(--ev-kb-text);
+  font-size: var(--ev-kb-font-size-base);
+  font-weight: var(--ev-kb-font-weight);
+  cursor: pointer;
+  transition: var(--ev-kb-transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  flex: 1;
+  max-width: 60px;
+}
+
+.key:hover {
+  background: var(--ev-kb-accent-hover);
+  color: white;
+  border-color: var(--ev-kb-accent-hover);
+  transform: translateY(-2px);
+  box-shadow: var(--ev-kb-shadow-md);
+}
+
+.key:active {
+  transform: translateY(0);
+  box-shadow: var(--ev-kb-shadow-sm);
+}
+
+.key.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: var(--ev-kb-border-light);
+}
+
+.key.disabled:hover {
+  transform: none;
+  background: var(--ev-kb-border-light);
+  color: var(--ev-kb-text-secondary);
+  border-color: var(--ev-kb-border);
+}
+
+.dark .key {
+  background: var(--ev-kb-dark-secondary);
+  border-color: var(--ev-kb-dark-border);
+  color: var(--ev-kb-dark-text);
+}
+
+.dark .key:hover {
+  background: var(--ev-kb-dark-accent-hover);
+  border-color: var(--ev-kb-dark-accent-hover);
+  color: white;
+}
+
+.dark .key.disabled {
+  background: var(--ev-kb-dark-border-light);
+  color: var(--ev-kb-dark-text-secondary);
+}
+
+/* Action Bar */
+.ev-keyboard-actions {
+  display: flex;
+  gap: var(--ev-kb-padding-sm);
+  padding: var(--ev-kb-padding-lg);
+  border-top: 1px solid var(--ev-kb-border-light);
+  background: var(--ev-kb-secondary);
+}
+
+.dark .ev-keyboard-actions {
+  background: var(--ev-kb-dark-secondary);
+  border-top-color: var(--ev-kb-dark-border-light);
+}
+
+.action-btn {
+  height: var(--ev-kb-key-size);
+  padding: 0 var(--ev-kb-padding-lg);
+  border: 1px solid var(--ev-kb-border);
+  border-radius: var(--ev-kb-border-radius-sm);
+  background: var(--ev-kb-primary);
+  color: var(--ev-kb-text);
+  font-size: var(--ev-kb-font-size-base);
+  font-weight: var(--ev-kb-font-weight);
+  cursor: pointer;
+  transition: var(--ev-kb-transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ev-kb-padding-sm);
+  flex: 1;
+}
+
+.action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--ev-kb-shadow-md);
+}
+
+.backspace-btn:hover {
+  background: var(--ev-kb-warning);
+  color: white;
+  border-color: var(--ev-kb-warning);
+}
+
+.space-btn:hover {
+  background: var(--ev-kb-accent);
+  color: white;
+  border-color: var(--ev-kb-accent);
+}
+
+.enter-btn:hover {
+  background: var(--ev-kb-success);
+  color: white;
+  border-color: var(--ev-kb-success);
+}
+
+.dark .action-btn {
+  background: var(--ev-kb-dark-primary);
+  border-color: var(--ev-kb-dark-border);
+  color: var(--ev-kb-dark-text);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .ev-keyboard-overlay {
+    padding: var(--ev-kb-padding-sm);
+  }
+  
+  .ev-keyboard-container {
+    max-width: 100%;
+    max-height: 95vh;
+  }
+  
+  .key {
+    height: var(--ev-kb-key-size-sm);
+    min-width: var(--ev-kb-key-size-sm);
+    font-size: var(--ev-kb-font-size-sm);
+  }
+  
+  .action-btn {
+    height: var(--ev-kb-key-size-sm);
+    font-size: var(--ev-kb-font-size-sm);
+  }
+}
+
+@media (max-width: 480px) {
+  .ev-keyboard-keys {
+    padding: var(--ev-kb-padding-md);
+  }
+  
+  .key-row {
+    gap: 4px;
+  }
+  
+  .key {
+    height: 36px;
+    min-width: 36px;
+    font-size: 12px;
+  }
+  
+  .ev-keyboard-header,
+  .ev-keyboard-controls,
+  .ev-keyboard-actions {
+    padding: var(--ev-kb-padding-sm) var(--ev-kb-padding-md);
+  }
+}
+
+/* Accessibility */
+.key:focus-visible,
+.control-btn:focus-visible,
+.action-btn:focus-visible {
+  outline: 2px solid var(--ev-kb-accent);
+  outline-offset: 2px;
+}
+
+.dark .key:focus-visible,
+.dark .control-btn:focus-visible,
+.dark .action-btn:focus-visible {
+  outline-color: var(--ev-kb-dark-accent);
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+  .key,
+  .control-btn,
+  .action-btn {
+    border-width: 2px;
+  }
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

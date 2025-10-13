@@ -125,7 +125,7 @@ class OutletSession extends Component {
 
         <span style={S.StatusText}>{getStatusText(eachItem)}</span>
 
-        {context.chargingMode === 0 ? (
+        {context.chargingMode == 0 ? (
           <div style={S.ButtonContainer}>
             <Button
               style={S.Button(eachItem, isDisabled)}
@@ -134,7 +134,7 @@ class OutletSession extends Component {
               {getButtonText(eachItem)}
             </Button>
           </div>
-        ) : context.chargingMode === 1 && eachItem.outlet === 1 ? (
+        ) : context.chargingMode == 1 && eachItem.outlet == 1 ? (
           <div style={S.ButtonContainer}>
             <Button
               style={S.Button2(context.chargerState[0], isDisabled)}

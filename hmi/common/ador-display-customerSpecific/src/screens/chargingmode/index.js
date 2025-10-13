@@ -57,7 +57,7 @@ export class ChargingMode extends React.Component {
     this.context.publishChargingMode(chargingMode);
 
     // Set a timer to revert to regular mode after 5 minutes if dual VCCU conditions are met
-    if (chargingMode === "1") {
+    if (chargingMode == 1) {
       this.startRevertTimer();
     }
   };
@@ -103,9 +103,9 @@ export class ChargingMode extends React.Component {
   isSelected = (buttonmode) => {
     const { selectedMode } = this.state;
     return (
-      (buttonmode === ChargingModes.R && selectedMode === "0") ||
-      (buttonmode === ChargingModes.DVCCU && selectedMode === "1") ||
-      (buttonmode === ChargingModes.SVCCU && selectedMode === "2")
+      (buttonmode === ChargingModes.R && selectedMode == "0") ||
+      (buttonmode === ChargingModes.DVCCU && selectedMode == "1") ||
+      (buttonmode === ChargingModes.SVCCU && selectedMode == "2")
     );
   };
 

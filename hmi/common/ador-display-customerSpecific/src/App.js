@@ -6,6 +6,7 @@ import "antd/dist/antd.css";
 import "./styles/default.css";
 
 import MainProvider from "./providers/MainProvider";
+import { ThemeProvider } from "./providers/ThemeContext";
 import Routing from "./components/Routing";
 import "./styles/index.css";
 import "./i18n.js";
@@ -13,9 +14,11 @@ import "./i18n.js";
 class App extends Component {
   render() {
     return (
-      <MainProvider>
-        <Routing />
-      </MainProvider>
+      <ThemeProvider>
+        <MainProvider>
+          <Routing />
+        </MainProvider>
+      </ThemeProvider>
     );
   }
 }

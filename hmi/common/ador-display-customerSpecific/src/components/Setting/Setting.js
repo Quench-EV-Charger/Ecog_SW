@@ -245,9 +245,9 @@ const ToggleSetting = React.memo(({ icon, label, description, color, enabled, on
   // Memoize toggle handler for smoother transitions
   const handleToggle = React.useCallback(() => {
     if (!disabled) {
-      React.startTransition(() => {
+      // React.startTransition(() => {
         onToggle();
-      });
+      // });
     }
   }, [disabled, onToggle]);
   
@@ -314,17 +314,17 @@ const NumberSetting = React.memo(({ icon, label, description, color, value, onVa
   // Memoize value change handlers to prevent unnecessary re-renders
   const handleIncrement = React.useCallback(() => {
     if (!disabled && value < max) {
-      React.startTransition(() => {
+      // React.startTransition(() => {
         onValueChange(value + 1);
-      });
+      // });
     }
   }, [disabled, value, max, onValueChange]);
 
   const handleDecrement = React.useCallback(() => {
     if (!disabled && value > min) {
-      React.startTransition(() => {
+      // React.startTransition(() => {
         onValueChange(value - 1);
-      });
+      // });
     }
   }, [disabled, value, min, onValueChange]);
 
@@ -406,9 +406,9 @@ const TextSetting = React.memo(
     const handleApply = React.useCallback(
       (e) => {
         if (e) e.stopPropagation();
-        React.startTransition(() => {
+        // React.startTransition(() => {
           onValueChange(tempValue); // Only notify parent when Apply is clicked
-        });
+        // });
         setIsEditing(false);
         setShowKeyboard(false);
       },
@@ -841,7 +841,7 @@ const SettingHeader = React.memo(({
   return (
     <div style={headerStyle}>
       <h2 style={{ ...headingStyle, color: textColor }}>
-        <FaCog style={{ marginRight: "10px", color: "rgb(136 171 226)" }} />
+        <FaCog style={{ marginRight: "10px", color: "#ff0000" }} />
         System Configuration
       </h2>
       
@@ -904,6 +904,74 @@ const ValidationError = React.memo(({ error, isDark }) => {
     </div>
   );
 });
+
+// Full-screen restarting overlay - memoized to only re-render on state/theme changes
+const RestartingScreen = React.memo(({ isRestarting, isDark }) => {
+  const [dots, setDots] = useState('');
+  
+  useEffect(() => {
+    if (!isRestarting) return;
+    const interval = setInterval(() => {
+      setDots(prev => prev.length >= 3 ? '' : prev + '.');
+    }, 500);
+    return () => clearInterval(interval);
+  }, [isRestarting]);
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: isDark ? 'rgba(0, 0, 0, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 9999,
+      backdropFilter: 'blur(8px)',
+      opacity: isRestarting ? 1 : 0,
+      visibility: isRestarting ? 'visible' : 'hidden',
+      transition: 'all 0.3s ease-in-out'
+    }}>
+      {/* Spinning animation */}
+      <div style={{
+        width: '60px',
+        height: '60px',
+        border: `4px solid ${isDark ? 'rgba(136, 171, 226, 0.3)' : 'rgba(255, 0, 0, 0.3)'}`,
+        borderTop: `4px solid ${isDark ? 'rgb(136, 171, 226)' : '#ff0000'}`,
+        borderRadius: '50%',
+        animation: 'spin 1s linear infinite',
+        marginBottom: '20px'
+      }} />
+      
+      {/* Status message */}
+      <div style={{
+        color: isDark ? 'rgb(136, 171, 226)' : '#ff0000',
+        fontSize: '1.2rem',
+        fontWeight: '600',
+        textAlign: 'center',
+        marginBottom: '10px'
+      }}>
+        Restarting Charger{dots}
+      </div>
+      
+      <div style={{
+        color: isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)',
+        fontSize: '0.9rem',
+        textAlign: 'center'
+      }}>
+        Please wait while the system restarts
+      </div>
+    </div>
+  );
+}, (prevProps, nextProps) => (
+  prevProps.isRestarting === nextProps.isRestarting &&
+  prevProps.isDark === nextProps.isDark
+));
+
+// SettingsList is defined inside Setting component to access DynamicSetting
 
 const TabNavigation = React.memo(({ 
   activeTab, 
@@ -1730,11 +1798,11 @@ const Setting = React.memo(() => {
     });
 
     // Batch state updates to prevent multiple re-renders
-    React.startTransition(() => {
+    // React.startTransition(() => {
       setSoftwareConfig(ocppDisplay);
       setHardwareConfig(hardwareDisplay);
       setRawConfig({ ocpp: ocppConfig, userconfig: userConfig });
-    });
+    // });
   }, [configKeyMapping]);
 
   // CRITICAL FIX: Add timeout tracking for debounced updates
@@ -1752,12 +1820,12 @@ const Setting = React.memo(() => {
     console.log(`Updating hardware config: ${key} = ${value}`);
     
     // Optimistically update the UI state immediately
-    React.startTransition(() => {
+    // React.startTransition(() => {
       setHardwareConfig(prev => ({
         ...prev,
         [key]: { ...prev[key], value }
       }));
-    });
+    // });
 
     // Debounce the actual API call to prevent rapid successive calls
     const updateKey = `hardware_${key}`;
@@ -1779,12 +1847,12 @@ const Setting = React.memo(() => {
       } catch (error) {
         console.error(`Failed to update hardware config ${key}:`, error);
         // Revert the optimistic update on error
-        React.startTransition(() => {
+        // React.startTransition(() => {
           setHardwareConfig(prev => ({
             ...prev,
             [key]: { ...prev[key], value: currentValue }
           }));
-        });
+        // });
       } finally {
         delete updateTimeouts.current[updateKey];
       }
@@ -1802,12 +1870,12 @@ const Setting = React.memo(() => {
     console.log(`Updating OCPP config: ${key} = ${value}`);
     
     // Optimistically update the UI state immediately
-    React.startTransition(() => {
+    // React.startTransition(() => {
       setSoftwareConfig(prev => ({
         ...prev,
         [key]: { ...prev[key], value }
       }));
-    });
+    // });
 
     // Debounce the actual API call to prevent rapid successive calls
     const updateKey = `ocpp_${key}`;
@@ -1829,12 +1897,12 @@ const Setting = React.memo(() => {
       } catch (error) {
         console.error(`Failed to update OCPP config ${key}:`, error);
         // Revert the optimistic update on error
-        React.startTransition(() => {
+        // React.startTransition(() => {
           setSoftwareConfig(prev => ({
             ...prev,
             [key]: { ...prev[key], value: currentValue }
           }));
-        });
+        // });
       } finally {
         delete updateTimeouts.current[updateKey];
       }
@@ -2063,10 +2131,10 @@ const Setting = React.memo(() => {
         
         // Use longer debounce to prevent flickering
         const timeoutId = setTimeout(() => {
-          React.startTransition(() => {
+          // React.startTransition(() => {
             handleValueChange(newValue);
             setPendingUpdate(null);
-          });
+          // });
         }, 100); // Increased debounce time
         
         return () => clearTimeout(timeoutId);
@@ -2226,79 +2294,43 @@ const Setting = React.memo(() => {
   }, [refreshConfiguration]);
 
   const handleHardwareTabClick = React.useCallback(() => {
-    React.startTransition(() => {
+    // React.startTransition(() => {
       setActiveTab("hardware");
-    });
+    // });
   }, []);
 
   const handleOcppTabClick = React.useCallback(() => {
-    React.startTransition(() => {
+    // React.startTransition(() => {
       setActiveTab("ocpp");
-    });
+    // });
   }, []);
 
-  // RestartingScreen component with animation
-  const RestartingScreen = () => {
-    const [dots, setDots] = useState('');
-    
-    useEffect(() => {
-      const interval = setInterval(() => {
-        setDots(prev => prev.length >= 3 ? '' : prev + '.');
-      }, 500);
-      
-      return () => clearInterval(interval);
-    }, []);
+  // RestartingScreen moved out and memoized above
 
+  // Memoized settings list to minimize re-renders of scrollable container
+  const SettingsList = React.useMemo(() => React.memo(({ data, category, isDark, listStyle, callbacks }) => {
+    const entries = React.useMemo(() => Object.entries(data), [data]);
     return (
-      <div style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: isDark ? 'rgba(0, 0, 0, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 9999,
-        backdropFilter: 'blur(8px)',
-        opacity: isRestarting ? 1 : 0,
-        visibility: isRestarting ? 'visible' : 'hidden',
-        transition: 'all 0.3s ease-in-out'
-      }}>
-        {/* Spinning animation */}
-        <div style={{
-          width: '60px',
-          height: '60px',
-          border: `4px solid ${isDark ? 'rgba(136, 171, 226, 0.3)' : 'rgba(255, 0, 0, 0.3)'}`,
-          borderTop: `4px solid ${isDark ? 'rgb(136, 171, 226)' : '#ff0000'}`,
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite',
-          marginBottom: '20px'
-        }} />
-        
-        {/* Status message */}
-        <div style={{
-          color: isDark ? 'rgb(136, 171, 226)' : '#ff0000',
-          fontSize: '1.2rem',
-          fontWeight: '600',
-          textAlign: 'center',
-          marginBottom: '10px'
-        }}>
-          Restarting Charger{dots}
-        </div>
-        
-        <div style={{
-          color: isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)',
-          fontSize: '0.9rem',
-          textAlign: 'center'
-        }}>
-          Please wait while the system restarts
-        </div>
+      <div style={listStyle}>
+        {entries.map(([key, configItem]) => (
+          <DynamicSetting
+            key={key}
+            configKey={key}
+            settingData={configItem}
+            onValueChange={callbacks?.[key]}
+            category={category}
+            isDark={isDark}
+          />
+        ))}
       </div>
     );
-  };
+  }, (prevProps, nextProps) => (
+    prevProps.data === nextProps.data &&
+    prevProps.category === nextProps.category &&
+    prevProps.isDark === nextProps.isDark &&
+    prevProps.listStyle === nextProps.listStyle &&
+    prevProps.callbacks === nextProps.callbacks
+  )), []);
 
   if (!isAuthenticated) {
     return <PasswordProtection onAuthenticated={() => setIsAuthenticated(true)} theme={theme} />;
@@ -2307,7 +2339,7 @@ const Setting = React.memo(() => {
   return (
     <>
       <Navbar heading="Settings" theme={theme} />
-      <div style={{ ...styles.container, backgroundColor, color: textColor }}>
+      <div style={styles.container}>
       {/* Add CSS keyframes for spinning animation */}
       <style>
         {`
@@ -2319,7 +2351,7 @@ const Setting = React.memo(() => {
       </style>
       
       {/* Restarting Screen Overlay */}
-      <RestartingScreen />
+      <RestartingScreen isRestarting={isRestarting} isDark={isDark} />
       {/* Header */}
       <SettingHeader
         textColor={textColor}
@@ -2370,35 +2402,25 @@ const Setting = React.memo(() => {
           <>
             {activeTab === "hardware" && (
               <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-                <div style={styles.scrollableContent}>
-                  {Object.entries(hardwareConfig).map(([key, configItem]) => (
-                    <DynamicSetting
-                      key={key}
-                      configKey={key}
-                      settingData={configItem}
-                      onValueChange={hardwareCallbacks[key]}
-                      category="hardware"
-                      isDark={isDark}
-                    />
-                  ))}
-                </div>
+                <SettingsList
+                  data={hardwareConfig}
+                  category="hardware"
+                  isDark={isDark}
+                  callbacks={hardwareCallbacks}
+                  listStyle={styles.scrollableContent}
+                />
               </div>
             )}
 
             {activeTab === "ocpp" && (
               <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-                <div style={styles.scrollableContent}>
-                  {Object.entries(softwareConfig).map(([key, configItem]) => (
-                    <DynamicSetting
-                      key={key}
-                      configKey={key}
-                      settingData={configItem}
-                      onValueChange={ocppCallbacks[key]}
-                      category="ocpp"
-                      isDark={isDark}
-                    />
-                  ))}
-                </div>
+                <SettingsList
+                  data={softwareConfig}
+                  category="ocpp"
+                  isDark={isDark}
+                  callbacks={ocppCallbacks}
+                  listStyle={styles.scrollableContent}
+                />
               </div>
             )}
           </>
@@ -2429,7 +2451,7 @@ const getStyles = (isDark, textColor, backgroundColor) => ({
     alignItems: "center",
     marginBottom: "2rem",
     paddingBottom: "1rem",
-    borderBottom: "2px solid rgba(136, 171, 226, 0.3)",
+    borderBottom: "2px solid #ff0000",
     flexShrink: 0,
     boxSizing: "border-box",
     maxWidth: "100%",

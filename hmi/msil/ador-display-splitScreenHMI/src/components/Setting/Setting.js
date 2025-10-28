@@ -9,7 +9,8 @@ import {
   FaEye,
   FaEyeSlash,
   FaRedo,
-  FaSync
+  FaSync,
+  FaPlug
 } from "react-icons/fa";
 import { ThemeContext } from "../ThemeContext/ThemeProvider";
 import EVChargerKeyboard from "../EVChargerKeyboard/EVChargerKeyboard";
@@ -907,6 +908,7 @@ const TabNavigation = React.memo(({
   isDark, 
   onHardwareTabClick, 
   onOcppTabClick,
+  onOutletTabClick,
   tabContainerStyle,
   tabStyle
 }) => {
@@ -936,6 +938,19 @@ const TabNavigation = React.memo(({
     cursor: loading ? "not-allowed" : "pointer"
   }), [activeTab, isDark, loading, tabStyle]);
 
+  const outletTabStyle = React.useMemo(() => ({
+    ...tabStyle,
+    backgroundColor: activeTab === "outlet" 
+      ? (isDark ? "rgb(136 171 226)" : "#ff0000")
+      : "transparent",
+    color: activeTab === "outlet" 
+      ? "#ffffff" 
+      : (isDark ? "rgb(136 171 226)" : "#ff0000"),
+    borderColor: isDark ? "rgb(136 171 226)" : "#ff0000",
+    opacity: loading ? 0.5 : 1,
+    cursor: loading ? "not-allowed" : "pointer"
+  }), [activeTab, isDark, loading, tabStyle]);
+
   return (
     <div style={tabContainerStyle}>
       <button
@@ -953,6 +968,14 @@ const TabNavigation = React.memo(({
       >
         <FaDesktop style={{ marginRight: "8px" }} />
         OCPP Config
+      </button>
+      <button
+        onClick={onOutletTabClick}
+        disabled={loading}
+        style={outletTabStyle}
+      >
+        <FaPlug style={{ marginRight: "8px" }} />
+        Outlet Config
       </button>
     </div>
   );
@@ -1003,6 +1026,7 @@ const Setting = React.memo(() => {
   // Configuration State - will be populated from API
   const [softwareConfig, setSoftwareConfig] = useState({});
   const [hardwareConfig, setHardwareConfig] = useState({});
+  const [outletConfig, setOutletConfig] = useState({});
   const [rawConfig, setRawConfig] = useState({});
   
   // Configuration validation state for cross-endpoint comparison
@@ -1043,6 +1067,7 @@ const Setting = React.memo(() => {
     'num_of_modules': { source: 'userconfig', path: 'ccs.num_of_modules' },
     'Convertor Type': { source: 'userconfig', path: 'ccs.intcc.conv' },
     'imd': { source: 'userconfig', path: 'ccs.stack.imd' },
+    'no of outlet': { source: 'outletConfig', path: 'ccs.no_of_outlet' },
   };
 
   // Helper function to get nested value from object using dot notation
@@ -1132,11 +1157,12 @@ const Setting = React.memo(() => {
     setError(null);
 
     try {
-      // Fetch configurations from all three endpoints in parallel
-      const [ocppResponse, userConfig100Response, userConfig101Response] = await Promise.all([
+      // Fetch configurations from all endpoints in parallel (including outlet)
+      const [ocppResponse, userConfig100Response, userConfig101Response, outletResponse] = await Promise.all([
         fetch(`${apiUrl}/ocpp-client/config`),
         fetch(`http://10.20.27.100/api/system/userconfig`),
-        fetch(`http://10.20.27.101/api/system/userconfig`)
+        fetch(`http://10.20.27.101/api/system/userconfig`),
+        fetch(`${apiUrl}/outlets`)
       ]);
 
       if (!ocppResponse.ok) {
@@ -1152,6 +1178,12 @@ const Setting = React.memo(() => {
       const ocppData = await ocppResponse.json();
       let userConfig100Data = await userConfig100Response.json();
       let userConfig101Data = await userConfig101Response.json();
+      let outletData = null;
+      if (outletResponse && outletResponse.ok) {
+        outletData = await outletResponse.json();
+      } else {
+        console.error('Failed to GET outlets:', outletResponse?.status, outletResponse?.statusText);
+      }
       
       // Add default dlbMode if not present in userconfig responses and update backend
       userConfig100Data = await addDefaultDlbMode(userConfig100Data, 'http://10.20.27.100/api/system/userconfig');
@@ -1174,6 +1206,20 @@ const Setting = React.memo(() => {
       
       // Categorize configuration from both sources (using 100 as primary)
       categorizeConfiguration(ocppData, userConfig100Data);
+
+      // Populate outletConfig from GET /outlets
+      const outletCount = Array.isArray(outletData) ? outletData.length : (outletData?.length || 0);
+      const noOfOutletDisplay = outletCount <= 1 ? 1 : 2;
+      setOutletConfig({
+        'no of outlet': {
+          value: noOfOutletDisplay,
+          source: 'outletConfig',
+          path: 'ccs.no_of_outlet'
+        }
+      });
+
+      // Extend raw config with outlet data
+      setRawConfig(prev => ({ ...prev, outlet: outletData }));
     } catch (err) {
        console.error('Error fetching configuration:', err);
        // Clear any existing configuration on error
@@ -1193,11 +1239,12 @@ const Setting = React.memo(() => {
     setError(null);
 
     try {
-      // Fetch configurations from all three endpoints in parallel
-      const [ocppResponse, userConfig100Response, userConfig101Response] = await Promise.all([
+      // Fetch configurations from all endpoints in parallel (including outlet)
+      const [ocppResponse, userConfig100Response, userConfig101Response, outletResponse] = await Promise.all([
         fetch(`${apiUrl}/ocpp-client/config`),
         fetch(`http://10.20.27.100/api/system/userconfig`),
-        fetch(`http://10.20.27.101/api/system/userconfig`)
+        fetch(`http://10.20.27.101/api/system/userconfig`),
+        fetch(`${apiUrl}/outlets`)
       ]);
 
       if (!ocppResponse.ok) {
@@ -1213,10 +1260,20 @@ const Setting = React.memo(() => {
       const ocppData = await ocppResponse.json();
       let userConfig100Data = await userConfig100Response.json();
       let userConfig101Data = await userConfig101Response.json();
+      let outletData = null;
+      if (outletResponse && outletResponse.ok) {
+        outletData = await outletResponse.json();
+      } else {
+        console.error('Failed to GET outlets:', outletResponse?.status, outletResponse?.statusText);
+      }
       
       // Add default dlbMode if not present in userconfig responses and update backend
       userConfig100Data = await addDefaultDlbMode(userConfig100Data, 'http://10.20.27.100/api/system/userconfig');
       userConfig101Data = await addDefaultDlbMode(userConfig101Data, 'http://10.20.27.101/api/system/userconfig');
+
+       // Add default imd if not present in userconfig responses and update backend
+      userConfig100Data = await addDefaultImd(userConfig100Data, 'http://10.20.27.100/api/system/userconfig');
+      userConfig101Data = await addDefaultImd(userConfig101Data, 'http://10.20.27.101/api/system/userconfig');
       
       // Store all configurations for validation
       const allConfigs = {
@@ -1230,7 +1287,18 @@ const Setting = React.memo(() => {
       
       // Categorize configuration from both sources (using 100 as primary)
       categorizeConfiguration(ocppData, userConfig100Data);
-      
+
+      // Populate outletConfig from GET /outlets
+      const outletCount = Array.isArray(outletData) ? outletData.length : (outletData?.length || 0);
+      const noOfOutletDisplay = outletCount <= 1 ? 1 : 2;
+      setOutletConfig({
+        'no of outlet': {
+          value: noOfOutletDisplay,
+          source: 'outletConfig',
+          path: 'ccs.no_of_outlet'
+        }
+      });
+
       // Reset change tracking after successful refresh
       setHasChanges(false);
       setLastUpdateSuccess(true);
@@ -1914,6 +1982,94 @@ const Setting = React.memo(() => {
       { value: 'gongyuan', label: 'gongyuan' }
     ], []);
 
+    // No of outlet options - fixed list for userconfig ccs.no_of_outlet
+    const noOfOutletOptions = React.useMemo(() => [
+      { value: 1, label: '1' },
+      { value: 2, label: '2' }
+    ], []);
+
+    // No of outlet value change handler - triggers outlet/controllers API updates then persists value
+    const noOfOutletHandleValueChange = React.useCallback(async (newValue) => {
+      // Mark change and begin loading, disable restart until success
+      setLoading(true);
+      setHasChanges(true);
+      setLastUpdateSuccess(false);
+      try {
+        const outletPayload = newValue === 1
+          ? [
+              { type: 'CCS', ip: '10.20.27.100', outletId: 1, port: 5683, out_of_order: false, ocmf: false }
+            ]
+          : [
+              { type: 'CCS', ip: '10.20.27.100', outletId: 1, port: 5683, out_of_order: false, ocmf: false },
+              { type: 'CCS', ip: '10.20.27.101', outletId: 2, port: 5683, out_of_order: false, ocmf: false }
+            ];
+        const controllersPayload = newValue === 1
+          ? [
+              { id: 1, ip: '10.20.27.100' }
+            ]
+          : [
+              { id: 1, ip: '10.20.27.100' },
+              { id: 2, ip: '10.20.27.101' }
+            ];
+
+        const responses = await Promise.all([
+          fetch(`${apiUrl}/outlets`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(outletPayload)
+          }),
+          fetch(`${apiUrl}/controllers`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(controllersPayload)
+          })
+        ]);
+
+        const failed = responses.filter(r => !r.ok);
+        if (failed.length > 0) {
+          console.error('Failed to update outlet/controllers:', failed.map(r => `${r.status} ${r.statusText}`).join(', '));
+          setLastUpdateSuccess(false);
+        } else {
+          console.log('Successfully updated outlet/controllers for no of outlet:', newValue);
+          setLastUpdateSuccess(true);
+          // Refresh configuration after successful update
+          await fetchAllConfigurations();
+        }
+      } catch (err) {
+        console.error('Error updating outlet/controllers:', err);
+        setLastUpdateSuccess(false);
+      } finally {
+        setLoading(false);
+        // Update local display state from selection
+        setNoOfOutletDisplayValue(newValue);
+      }
+    }, [apiUrl, fetchAllConfigurations]);
+
+    // Local display state for 'no of outlet' driven by GET
+    const [noOfOutletDisplayValue, setNoOfOutletDisplayValue] = React.useState(null);
+
+    // Fetch current outlets via GET and map to display value (1 or 2)
+    React.useEffect(() => {
+      if (configKey !== 'no of outlet') return;
+      const fetchOutlets = async () => {
+        try {
+          const response = await fetch(`${apiUrl}/outlets`);
+          if (response.ok) {
+            const data = await response.json();
+            const count = Array.isArray(data) ? data.length : (data?.length || 0);
+            setNoOfOutletDisplayValue(count <= 1 ? 1 : 2);
+          } else {
+            console.error('Failed to GET outlets:', response.status, response.statusText);
+            setNoOfOutletDisplayValue(1);
+          }
+        } catch (err) {
+          console.error('Error fetching outlets:', err);
+          setNoOfOutletDisplayValue(1);
+        }
+      };
+      fetchOutlets();
+    }, [configKey, apiUrl]);
+ 
     const { debouncedCallback: debouncedAutoModuleUpdate } = useDebounce(
       async (autoModules) => {
         try {
@@ -2143,6 +2299,22 @@ const Setting = React.memo(() => {
       );
     }
 
+    if (configKey === 'no of outlet') {
+      return (
+        <div>
+          <DropdownSetting
+            icon={icon}
+            label={label}
+            color={color}
+            value={noOfOutletDisplayValue ?? value}
+            onValueChange={noOfOutletHandleValueChange}
+            options={noOfOutletOptions}
+          />
+          <ValidationError error={validationError} isDark={isDark} />
+        </div>
+      );
+    }
+
     if (inputType === 'toggle') {
       return (
         <div>
@@ -2272,6 +2444,12 @@ const Setting = React.memo(() => {
     });
   }, []);
 
+  const handleOutletTabClick = React.useCallback(() => {
+    React.startTransition(() => {
+      setActiveTab("outlet");
+    });
+  }, []);
+
   // RestartingScreen component with animation
   const RestartingScreen = () => {
     const [dots, setDots] = useState('');
@@ -2375,6 +2553,7 @@ const Setting = React.memo(() => {
           isDark={isDark}
           onHardwareTabClick={handleHardwareTabClick}
           onOcppTabClick={handleOcppTabClick}
+          onOutletTabClick={handleOutletTabClick}
           tabContainerStyle={styles.tabContainer}
           tabStyle={styles.tab}
         />
@@ -2431,6 +2610,24 @@ const Setting = React.memo(() => {
                       isDark={isDark}
                     />
                   ))}
+                </div>
+              </div>
+            )}
+
+            {activeTab === "outlet" && (
+              <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                <div style={styles.scrollableContent}>
+                  {Object.entries(outletConfig)
+                    .map(([key, configItem]) => (
+                      <DynamicSetting
+                        key={key}
+                        configKey={key}
+                        settingData={configItem}
+                        onValueChange={hardwareCallbacks[key]}
+                        category="outlet"
+                        isDark={isDark}
+                      />
+                    ))}
                 </div>
               </div>
             )}

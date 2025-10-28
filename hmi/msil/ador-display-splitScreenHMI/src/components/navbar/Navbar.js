@@ -119,7 +119,7 @@ function Navbar(props) {
           alignItems: "center",
         }}
       >
-        <label
+        {/* <label
           style={{
             position: "relative",
             display: "inline-block",
@@ -163,7 +163,7 @@ function Navbar(props) {
               }}
             ></span>
           </span>
-        </label>
+        </label> */}
 
         <Title style={{ fontSize: "4.5vh", fontWeight: "bold", margin: 0 }}>
           {heading}

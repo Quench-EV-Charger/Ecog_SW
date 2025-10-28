@@ -1032,6 +1032,7 @@ const Setting = React.memo(() => {
     'emulatedMetering': { source: 'ocpp', path: 'emulatedMetering' },
     'underVoltageThreshold': { source: 'ocpp', path: 'underVoltageThreshold' },
     'overVoltageThreshold': { source: 'ocpp', path: 'overVoltageThreshold' },
+    'acceptRemoteStartOnPreparingOnly': { source: 'ocpp', path: 'acceptRemoteStartOnPreparingOnly' },
     
     // Keys from UserConfig API (nested paths)
     'powerSaveInIdleMode': { source: 'ocpp', path: 'powerSaveInIdleMode', syncWith: 'userPowerSaveInIdleMode' },
@@ -1039,7 +1040,9 @@ const Setting = React.memo(() => {
     'maxKW': { source: 'userconfig', path: 'ccs.stack.maxKW', syncWith: 'maxPowerLimitInkW' },
     'maxA': { source: 'userconfig', path: 'ccs.stack.maxA', syncWith: 'maxCurrentLimitInAmps' },
     'dlbMode': { source: 'userconfig', path: 'ccs.dlbMode' },
-    'num_of_modules': { source: 'userconfig', path: 'ccs.num_of_modules' }
+    'num_of_modules': { source: 'userconfig', path: 'ccs.num_of_modules' },
+    'Convertor Type': { source: 'userconfig', path: 'ccs.intcc.conv' },
+    'imd': { source: 'userconfig', path: 'ccs.stack.imd' },
   };
 
   // Helper function to get nested value from object using dot notation
@@ -1097,6 +1100,32 @@ const Setting = React.memo(() => {
     return config;
   };
 
+  // Helper function to add default imd and update backend if not present
+  const addDefaultImd = async (userConfig, endpoint) => {
+    const config = JSON.parse(JSON.stringify(userConfig));
+    if (!config.ccs) config.ccs = {};
+    if (!config.ccs.stack) config.ccs.stack = {};
+    if (!config.ccs.stack.imd) {
+      config.ccs.stack.imd = "bender";
+      console.log(`Adding default imd to ${endpoint}`);
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config),
+        });
+        if (!response.ok) {
+          console.error(`Failed to update ${endpoint} with default imd:`, response.status, response.statusText);
+        } else {
+          console.log(`Successfully updated ${endpoint} with default imd`);
+        }
+      } catch (error) {
+        console.error(`Error updating ${endpoint} with default imd:`, error);
+      }
+    }
+    return config;
+  };
+
   // API Functions
   const fetchAllConfigurations = useCallback(async () => {
     setLoading(true);
@@ -1127,6 +1156,11 @@ const Setting = React.memo(() => {
       // Add default dlbMode if not present in userconfig responses and update backend
       userConfig100Data = await addDefaultDlbMode(userConfig100Data, 'http://10.20.27.100/api/system/userconfig');
       userConfig101Data = await addDefaultDlbMode(userConfig101Data, 'http://10.20.27.101/api/system/userconfig');
+
+      // Add default imd if not present in userconfig responses and update backend
+      userConfig100Data = await addDefaultImd(userConfig100Data, 'http://10.20.27.100/api/system/userconfig');
+      userConfig101Data = await addDefaultImd(userConfig101Data, 'http://10.20.27.101/api/system/userconfig');
+
       
       // Store all configurations for validation
       const allConfigs = {
@@ -1868,7 +1902,18 @@ const Setting = React.memo(() => {
       { value: 'tripleCombo', label: 'tripleCombo' }
     ], []);
 
-    // Create debounced version for dlbMode auto-module updates
+    // Converter Type options - fixed list for userconfig ccs.intcc.conv
+    const converterTypeOptions = React.useMemo(() => [
+      { value: 'infy', label: 'infy' },
+      { value: 'uugp', label: 'uugp' }
+    ], []);
+
+    // IMD options - fixed list for userconfig ccs.stack.imd
+    const imdOptions = React.useMemo(() => [
+      { value: 'bender', label: 'bender' },
+      { value: 'gongyuan', label: 'gongyuan' }
+    ], []);
+
     const { debouncedCallback: debouncedAutoModuleUpdate } = useDebounce(
       async (autoModules) => {
         try {
@@ -2060,6 +2105,38 @@ const Setting = React.memo(() => {
             onValueChange={numModulesHandleValueChange}
             options={options}
             disabled={isDisabled}
+          />
+          <ValidationError error={validationError} isDark={isDark} />
+        </div>
+      );
+    }
+
+    if (configKey === 'Convertor Type') {
+      return (
+        <div>
+          <DropdownSetting
+            icon={icon}
+            label={label}
+            color={color}
+            value={value}
+            onValueChange={handleValueChange}
+            options={converterTypeOptions}
+          />
+          <ValidationError error={validationError} isDark={isDark} />
+        </div>
+      );
+    }
+
+    if (configKey === 'imd') {
+      return (
+        <div>
+          <DropdownSetting
+            icon={icon}
+            label={label}
+            color={color}
+            value={value}
+            onValueChange={handleValueChange}
+            options={imdOptions}
           />
           <ValidationError error={validationError} isDark={isDark} />
         </div>

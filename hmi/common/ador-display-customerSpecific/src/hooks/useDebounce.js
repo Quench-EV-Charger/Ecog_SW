@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 
 /**
  * Custom hook for debouncing function calls with cancellation support
@@ -9,6 +9,12 @@ import { useCallback, useRef } from 'react';
 export const useDebounce = (callback, delay = 500) => {
   const timeoutRef = useRef(null);
   const pendingArgsRef = useRef(null);
+  const callbackRef = useRef(callback);
+
+  // Always keep the latest callback reference to avoid stale closures
+  useEffect(() => {
+    callbackRef.current = callback;
+  }, [callback]);
 
   // Cancel any pending debounced calls
   const cancel = useCallback(() => {
@@ -30,12 +36,13 @@ export const useDebounce = (callback, delay = 500) => {
     // Set new timeout
     timeoutRef.current = setTimeout(() => {
       if (pendingArgsRef.current) {
-        callback(...pendingArgsRef.current);
+        // Use latest callback reference to ensure fresh state is read
+        callbackRef.current(...pendingArgsRef.current);
         pendingArgsRef.current = null;
       }
       timeoutRef.current = null;
     }, delay);
-  }, [callback, delay, cancel]);
+  }, [delay, cancel]);
 
   // Cleanup on unmount
   const cleanup = useCallback(() => {

@@ -1476,21 +1476,26 @@ const Setting = React.memo(() => {
       setLastUpdateSuccess(false);
 
       try {
-        // Get current userconfig to maintain structure
-        const currentUserConfig = rawConfig.userconfig || {};
-        const updatedUserConfig = { ...currentUserConfig };
-        
-        // Set the nested value
-        setNestedValue(updatedUserConfig, mapping.path, value);
-
         // Define both API endpoints
         const endpoints = [
           'http://10.20.27.100/api/system/userconfig',
           'http://10.20.27.101/api/system/userconfig'
         ];
 
-        // Create fetch promises for both endpoints
-        const fetchPromises = endpoints.map(endpoint => 
+        // Prefetch latest userconfig from both endpoints
+        const getResponses = await Promise.all(endpoints.map(endpoint => fetch(endpoint)));
+        const latest100 = getResponses[0] && getResponses[0].ok ? await getResponses[0].json() : null;
+        const latest101 = getResponses[1] && getResponses[1].ok ? await getResponses[1].json() : null;
+
+        // Choose a base: prefer SECC (100), then LE (101), then local rawConfig fallback
+        const baseUserConfig = latest100 || latest101 || (rawConfig.userconfig || {});
+        const updatedUserConfig = JSON.parse(JSON.stringify(baseUserConfig));
+        
+        // Set the nested value
+        setNestedValue(updatedUserConfig, mapping.path, value);
+
+        // Create POST promises for both endpoints with the merged latest config
+        const postPromises = endpoints.map(endpoint =>
           fetch(endpoint, {
             method: 'POST',
             headers: {
@@ -1501,7 +1506,7 @@ const Setting = React.memo(() => {
         );
 
         // Execute both requests in parallel
-        const responses = await Promise.all(fetchPromises);
+        const responses = await Promise.all(postPromises);
 
         // Check if all responses are successful
         const failedEndpoints = [];
@@ -1590,21 +1595,26 @@ const Setting = React.memo(() => {
     setLastUpdateSuccess(false);
 
     try {
-      // Get current userconfig to maintain structure
-      const currentUserConfig = rawConfig.userconfig || {};
-      const updatedUserConfig = { ...currentUserConfig };
-      
-      // Set the nested value
-      setNestedValue(updatedUserConfig, mapping.path, value);
-
       // Define both API endpoints
       const endpoints = [
         'http://10.20.27.100/api/system/userconfig',
         'http://10.20.27.101/api/system/userconfig'
       ];
 
-      // Create fetch promises for both endpoints
-      const fetchPromises = endpoints.map(endpoint => 
+      // Prefetch latest userconfig from both endpoints
+      const getResponses = await Promise.all(endpoints.map(endpoint => fetch(endpoint)));
+      const latest100 = getResponses[0] && getResponses[0].ok ? await getResponses[0].json() : null;
+      const latest101 = getResponses[1] && getResponses[1].ok ? await getResponses[1].json() : null;
+
+      // Choose a base: prefer SECC (100), then LE (101), then local rawConfig fallback
+      const baseUserConfig = latest100 || latest101 || (rawConfig.userconfig || {});
+      const updatedUserConfig = JSON.parse(JSON.stringify(baseUserConfig));
+      
+      // Set the nested value
+      setNestedValue(updatedUserConfig, mapping.path, value);
+
+      // Create POST promises for both endpoints with the merged latest config
+      const postPromises = endpoints.map(endpoint => 
         fetch(endpoint, {
           method: 'POST',
           headers: {
@@ -1615,7 +1625,7 @@ const Setting = React.memo(() => {
       );
 
       // Execute both requests in parallel
-      const responses = await Promise.all(fetchPromises);
+      const responses = await Promise.all(postPromises);
 
       // Check if all responses are successful
       const failedEndpoints = [];
@@ -2061,6 +2071,10 @@ const Setting = React.memo(() => {
       [category, memoizedUpdateOcppConfig, memoizedUpdateHardwareConfig]
     );
 
+    const [dlbComboValue, setDlbComboValue] = React.useState(null);
+    const lastNonNullDlbRef = React.useRef(null);
+
+
     // Check for validation errors for this specific config key
     const validationError = React.useMemo(() => {
       // Map display keys to validation keys
@@ -2192,107 +2206,168 @@ const Setting = React.memo(() => {
       fetchOutlets();
     }, [configKey, apiUrl]);
 
-    // Create debounced version for dlbMode auto-module updates
-    const { debouncedCallback: debouncedAutoModuleUpdate } = useDebounce(
-      async (autoModules) => {
-        try {
-          // Get current userconfig to maintain structure
-          const currentUserConfig = rawConfig.userconfig || {};
-          const updatedUserConfig = { ...currentUserConfig };
-          
-          // Set the num_of_modules value
-          if (!updatedUserConfig.ccs) updatedUserConfig.ccs = {};
-          updatedUserConfig.ccs.num_of_modules = autoModules;
-
-          // Define both API endpoints
-          const endpoints = [
-            'http://10.20.27.100/api/system/userconfig',
-            'http://10.20.27.101/api/system/userconfig'
-          ];
-
-          // Create fetch promises for both endpoints
-          const fetchPromises = endpoints.map(endpoint => 
-            fetch(endpoint, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(updatedUserConfig),
-            })
-          );
-
-          // Execute both requests in parallel
-          const responses = await Promise.all(fetchPromises);
-
-          // Check if all responses are successful
-          const failedEndpoints = [];
-          responses.forEach((response, index) => {
-            if (!response.ok) {
-              failedEndpoints.push({
-                endpoint: endpoints[index],
-                status: response.status,
-                statusText: response.statusText
-              });
-            }
-          });
-
-          if (failedEndpoints.length > 0) {
-            const errorMessages = failedEndpoints.map(
-              failed => `${failed.endpoint}: ${failed.status} ${failed.statusText}`
-            );
-            console.error(`Failed to auto-update num_of_modules on endpoints: ${errorMessages.join(', ')}`);
-          } else {
-            console.log(`Successfully auto-set num_of_modules to ${autoModules} on both endpoints`);
-          }
-        } catch (err) {
-          console.error('Error auto-updating num_of_modules:', err);
-        }
-      },
-      500
-    );
-
-    // dlbMode value change handler - always created but only used when needed
+    // dlbMode value change handler - immediate updates without debouncing
     const dlbComboHandleValueChange = React.useCallback(async (newValue) => {
-        // First update the dlbMode using debounced API call
-        debouncedUpdateUserConfig('dlbMode', newValue);
-        
-        // Then automatically set num_of_modules based on dlbMode
-        let autoModules = null;
-        if (newValue === 'dualCombo') {
-          autoModules = 3;
-        } else if (newValue === 'tripleCombo') {
-          autoModules = 4;
+        try {
+          console.log(`[dlbMode change] Updating dlbMode to: ${newValue}`);
+          
+          // First update the UI state immediately so dependent UI recomputes without waiting
+          setDlbComboValue(newValue);
+          if (newValue != null) { lastNonNullDlbRef.current = newValue; }
+          
+          // Then update the dlbMode in backend
+          await updateUserConfig('dlbMode', newValue);
+          console.log(`[dlbMode change] dlbMode updated successfully`);
+          
+          // Then automatically set num_of_modules based on dlbMode
+          let autoModules = null;
+          if (newValue === 'dualCombo') {
+            autoModules = 3;
+          } else if (newValue === 'tripleCombo') {
+            autoModules = 4;
+          } else {
+            autoModules = 2
+          }
+          
+          // If we need to auto-set modules, update immediately
+          if (autoModules !== null) {
+            console.log(`[dlbMode change] Auto-setting num_of_modules to: ${autoModules}`);
+            await updateUserConfig('num_of_modules', autoModules);
+            console.log(`[dlbMode change] num_of_modules updated successfully`);
+          }
+          await fetchAllConfigurations();
+        } catch (err) {
+          console.error('Error updating dlbMode and num_of_modules:', err);
         }
-        
-        // If we need to auto-set modules, use debounced update
-        if (autoModules !== null) {
-          debouncedAutoModuleUpdate(autoModules);
-        }
-    }, [debouncedUpdateUserConfig, debouncedAutoModuleUpdate]);
+    }, [updateUserConfig]);
 
     // CRITICAL FIX: Use stable reference for dlbMode value to prevent cross-dependencies
-    const dlbComboValue = React.useMemo(() => {
-      if (configKey !== 'num_of_modules') return null;
-      
-      // Get dlbMode value from rawConfig to avoid state dependencies
-      const dlbComboFromRaw = rawConfig?.userconfig?.ccs?.dlbMode;
-      if (dlbComboFromRaw) return dlbComboFromRaw;
-      
-      // Fallback to config states only if rawConfig is not available
-      return category === 'hardware' ? 
-        hardwareConfig['dlbMode']?.value : 
-        softwareConfig['dlbMode']?.value;
-    }, [configKey, rawConfig?.userconfig?.ccs?.dlbMode, category, hardwareConfig, softwareConfig]);
+    // Fallback hydrate: fetch userconfig.dlbMode once if ref is empty
+    // const [dlbModeFromApi, setDlbModeFromApi] = useState(null);
+    // useEffect(() => {
+    //   if (configKey !== 'num_of_modules') return;
+    //   const fromRef = rawConfigRef?.current?.userconfig?.ccs?.dlbMode;
+    //   if (fromRef) return;
+    //   let cancelled = false;
+    //   (async () => {
+    //     try {
+    //       const resp = await fetch('http://10.20.27.100/api/system/userconfig');
+    //       if (resp.ok) {
+    //         const data = await resp.json();
+    //         const mode = data?.ccs?.dlbMode;
+    //         if (!cancelled && mode) setDlbModeFromApi(mode);
+    //       } else {
+    //         const resp2 = await fetch('http://10.20.27.101/api/system/userconfig');
+    //         if (resp2.ok) {
+    //           const data2 = await resp2.json();
+    //           const mode2 = data2?.ccs?.dlbMode;
+    //           if (!cancelled && mode2) setDlbModeFromApi(mode2);
+    //         }
+    //       }
+    //     } catch (e) {
+    //       // ignore
+    //     }
+    //   })();
+    //   return () => { cancelled = true; };
+    // }, [configKey, rawConfig?.userconfig?.ccs?.dlbMode]);
+
+  React.useEffect(() => {
+    if (configKey !== 'num_of_modules') return;
+
+    const fetchDlbCombo = async () => {
+      // 1️⃣ First, check current config state (immediate reflection in UI)
+      const currentDlbMode =
+        category === 'hardware'
+          ? hardwareConfig['dlbMode']?.value
+          : softwareConfig['dlbMode']?.value;
+
+      if (currentDlbMode) {
+        console.log('🔍 dlbComboValue - Using current config:', currentDlbMode);
+        setDlbComboValue(currentDlbMode);
+        lastNonNullDlbRef.current = currentDlbMode;
+        return;
+      }
+
+      // 2️⃣ Otherwise, try to fetch from API
+      let dlbComboFromRaw = null;
+
+      try {
+        const resp = await fetch('http://10.20.27.100/api/system/userconfig');
+        if (resp.ok) {
+          const data = await resp.json();
+          dlbComboFromRaw = data?.ccs?.dlbMode || null;
+        } else {
+          const resp2 = await fetch('http://10.20.27.101/api/system/userconfig');
+          if (resp2.ok) {
+            const data2 = await resp2.json();
+            dlbComboFromRaw = data2?.ccs?.dlbMode || null;
+          }
+        }
+      } catch (e) {
+        console.error('Error fetching dlbMode:', e);
+      }
+
+      // 3️⃣ Only set when found — no default
+      const result = dlbComboFromRaw;
+      console.log('🔍 dlbComboValue - Fetched from API:', result);
+      if (result !== null && result !== undefined) {
+        setDlbComboValue(result);
+        lastNonNullDlbRef.current = result;
+      }
+    };
+
+    fetchDlbCombo();
+  }, [configKey, category, hardwareConfig, softwareConfig, rawConfig?.userconfig?.ccs?.dlbMode]);
+
+  // Restore dlbComboValue from last known non-null value if it becomes null
+  React.useEffect(() => {
+    if (configKey === 'dlbMode' && dlbComboValue !== null) {
+      console.log('🔁 Restoring dlbComboValue from ref:', lastNonNullDlbRef.current);
+      lastNonNullDlbRef.current = dlbComboValue
+      setDlbComboValue(dlbComboValue);
+    }
+  }, [configKey, dlbComboValue]);
+
+  async function getDlbModeFromAPI() {
+    try {
+      const resp = await fetch('http://10.20.27.100/api/system/userconfig');
+      if (resp.ok) {
+        const data = await resp.json();
+        return data?.ccs?.dlbMode || null;
+      } else {
+        const resp2 = await fetch('http://10.20.27.101/api/system/userconfig');
+        if (resp2.ok) {
+          const data2 = await resp2.json();
+          return data2?.ccs?.dlbMode || null;
+        }
+      }
+    } catch (e) {
+      console.error('Error fetching dlbMode:', e);
+      return null;
+    }
+  }
+
+  const [dlbModeFromApi, setDlbModeFromApi] = React.useState(null);
+  React.useEffect(() => {
+    if (configKey !== 'num_of_modules') return;
+    let cancelled = false;
+    (async () => {
+      const mode = await getDlbModeFromAPI();
+      if (!cancelled) setDlbModeFromApi(mode);
+    })();
+    return () => { cancelled = true; };
+  });
 
     // num_of_modules computed options and state - always computed but only used when needed
-    const numModulesConfig = React.useMemo(() => {
+    const numModulesConfig = (() => {
       if (configKey !== 'num_of_modules') return null;
       
       let isDisabled = false;
       let defaultValue = value;
       let options = [];
+      const dlbModeActual = dlbModeFromApi
 
-      if (dlbComboValue === 'singleCombo') {
+      if (dlbModeActual === 'singleCombo') {
         // Enable dropdown with options 2, 4, 6, 8 and default to 2
         options = [
           { value: 2, label: '2' },
@@ -2305,18 +2380,18 @@ const Setting = React.memo(() => {
         if (!options.some(option => option.value === value)) {
           defaultValue = 2;
         }
-      } else if (dlbComboValue === 'dualCombo') {
+      } else if (dlbModeActual === 'dualCombo') {
         // Set to 3 and disable
         defaultValue = 3;
         isDisabled = true;
-      } else if (dlbComboValue === 'tripleCombo') {
+      } else if (dlbModeActual === 'tripleCombo') {
         // Set to 4 and disable
         defaultValue = 4;
         isDisabled = true;
       }
 
       return { isDisabled, defaultValue, options };
-    }, [configKey, dlbComboValue, value]);
+    })();
 
     // num_of_modules value change handler - always created but only used when needed
     const numModulesHandleValueChange = React.useCallback((newValue) => {
@@ -2331,12 +2406,14 @@ const Setting = React.memo(() => {
       
       const { options } = numModulesConfig;
       let newValue = null;
+
+      const dlbModeActual =  dlbModeFromApi
       
-      if (dlbComboValue === 'singleCombo' && !options.some(option => option.value === value)) {
+      if (dlbModeActual === 'singleCombo' && !options.some(option => option.value === value)) {
         newValue = 2;
-      } else if (dlbComboValue === 'dualCombo' && value !== 3) {
+      } else if (dlbModeActual === 'dualCombo' && value !== 3) {
         newValue = 3;
-      } else if (dlbComboValue === 'tripleCombo' && value !== 4) {
+      } else if (dlbModeActual === 'tripleCombo' && value !== 4) {
         newValue = 4;
       }
       
@@ -2374,13 +2451,16 @@ const Setting = React.memo(() => {
 
     if (configKey === 'num_of_modules' && numModulesConfig) {
       const { isDisabled, defaultValue, options } = numModulesConfig;
+      // Use the actual current value, but fall back to defaultValue if value is invalid
+      const displayValue = (isDisabled || !options.some(opt => opt.value === value)) ? defaultValue : value;
+      
       return (
         <div>
           <DropdownSetting
             icon={icon}
             label={label}
             color={color}
-            value={defaultValue}
+            value={displayValue}
             onValueChange={numModulesHandleValueChange}
             options={options}
             disabled={isDisabled}

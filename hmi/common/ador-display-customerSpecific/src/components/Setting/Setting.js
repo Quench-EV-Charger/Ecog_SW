@@ -561,8 +561,8 @@ const TextSetting = React.memo(
       prevProps.label === nextProps.label &&
       prevProps.color === nextProps.color &&
       prevProps.description === nextProps.description &&
-      prevProps.icon?.type === nextProps.icon?.type &&
-      prevProps.onValueChange === nextProps.onValueChange
+      prevProps.onValueChange === nextProps.onValueChange &&
+      (prevProps.icon && prevProps.icon.type) === (nextProps.icon && nextProps.icon.type)
     );
   }
 );
@@ -1063,7 +1063,7 @@ const Setting = React.memo(() => {
   const context = useContext(MainContext);
   
   // Access config from context instead of Redux
-  const config = context?.config;
+  const config = context && context.config;
 
   // Debug logging to identify the issue
   React.useEffect(() => {
@@ -1151,7 +1151,7 @@ const Setting = React.memo(() => {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Memoize API base URL to prevent unnecessary re-renders
-  const apiUrl = React.useMemo(() => config?.API, [config?.API]);
+  const apiUrl = React.useMemo(() => (config && config.API), [config && config.API]);
 
   // Configuration key mapping - defines which keys to display and their API sources
   const configKeyMapping = {
@@ -1294,7 +1294,7 @@ const Setting = React.memo(() => {
       if (outletResponse && outletResponse.ok) {
         outletData = await outletResponse.json();
       } else {
-        console.error('Failed to GET outlets:', outletResponse?.status, outletResponse?.statusText);
+        console.error('Failed to GET outlets:', (outletResponse ? outletResponse.status : undefined), (outletResponse ? outletResponse.statusText : undefined));
       }
       
       // Add default dlbMode if not present in userconfig responses and update backend
@@ -1318,7 +1318,7 @@ const Setting = React.memo(() => {
       // Categorize configuration from both sources (using 100 as primary)
       categorizeConfiguration(ocppData, userConfig100Data);
        // Populate outletConfig from GET /outlets
-      const outletCount = Array.isArray(outletData) ? outletData.length : (outletData?.length || 0);
+      const outletCount = Array.isArray(outletData) ? outletData.length : (((outletData && outletData.length) ? outletData.length : 0));
       const noOfOutletDisplay = outletCount <= 1 ? 1 : 2;
       setOutletConfig({
         'no of outlet': {
@@ -1374,7 +1374,7 @@ const Setting = React.memo(() => {
       if (outletResponse && outletResponse.ok) {
         outletData = await outletResponse.json();
       } else {
-        console.error('Failed to GET outlets:', outletResponse?.status, outletResponse?.statusText);
+        console.error('Failed to GET outlets:', (outletResponse ? outletResponse.status : undefined), (outletResponse ? outletResponse.statusText : undefined));
       }
       
       // Add default dlbMode if not present in userconfig responses and update backend
@@ -1400,7 +1400,7 @@ const Setting = React.memo(() => {
       categorizeConfiguration(ocppData, userConfig100Data);
 
             // Populate outletConfig from GET /outlets
-      const outletCount = Array.isArray(outletData) ? outletData.length : (outletData?.length || 0);
+      const outletCount = Array.isArray(outletData) ? outletData.length : (((outletData && outletData.length) ? outletData.length : 0));
       const noOfOutletDisplay = outletCount <= 1 ? 1 : 2;
       setOutletConfig({
         'no of outlet': {
@@ -1785,8 +1785,8 @@ const Setting = React.memo(() => {
     validationKeys.forEach(({ ocppKey, userconfigKey, displayName }) => {
       // Get values from all three sources
       const ocppValue = ocpp[ocppKey];
-      const userconfig100Value = userconfig100?.ccs?.stack?.[userconfigKey];
-      const userconfig101Value = userconfig101?.ccs?.stack?.[userconfigKey];
+      const userconfig100Value = (userconfig100 && userconfig100.ccs && userconfig100.ccs.stack) ? userconfig100.ccs.stack[userconfigKey] : undefined;
+      const userconfig101Value = (userconfig101 && userconfig101.ccs && userconfig101.ccs.stack) ? userconfig101.ccs.stack[userconfigKey] : undefined;
       
       // Create array of all values for comparison
       const values = [
@@ -1925,7 +1925,7 @@ const Setting = React.memo(() => {
   // CRITICAL FIX: Optimized memoized callback functions to prevent cascading re-renders
   const memoizedUpdateHardwareConfig = React.useCallback((key, value) => {
     // Prevent unnecessary updates if value hasn't changed
-    const currentValue = hardwareConfig[key]?.value;
+    const currentValue = (hardwareConfig && hardwareConfig[key]) ? hardwareConfig[key].value : undefined;
     if (currentValue === value) {
       console.log(`Skipping update for ${key} - value unchanged:`, value);
       return;
@@ -1975,7 +1975,7 @@ const Setting = React.memo(() => {
 
   const memoizedUpdateOcppConfig = React.useCallback((key, value) => {
     // Prevent unnecessary updates if value hasn't changed
-    const currentValue = softwareConfig[key]?.value;
+    const currentValue = (softwareConfig && softwareConfig[key]) ? softwareConfig[key].value : undefined;
     if (currentValue === value) {
       console.log(`Skipping update for ${key} - value unchanged:`, value);
       return;
@@ -2192,7 +2192,7 @@ const Setting = React.memo(() => {
           const response = await fetch(`${apiUrl}/outlets`);
           if (response.ok) {
             const data = await response.json();
-            const count = Array.isArray(data) ? data.length : (data?.length || 0);
+            const count = Array.isArray(data) ? data.length : (((data && data.length) ? data.length : 0));
             setNoOfOutletDisplayValue(count <= 1 ? 1 : 2);
           } else {
             console.error('Failed to GET outlets:', response.status, response.statusText);
@@ -2278,8 +2278,8 @@ const Setting = React.memo(() => {
       // 1️⃣ First, check current config state (immediate reflection in UI)
       const currentDlbMode =
         category === 'hardware'
-          ? hardwareConfig['dlbMode']?.value
-          : softwareConfig['dlbMode']?.value;
+          ? (hardwareConfig['dlbMode'] && hardwareConfig['dlbMode'].value)
+          : (softwareConfig['dlbMode'] && softwareConfig['dlbMode'].value);
 
       if (currentDlbMode) {
         console.log('🔍 dlbComboValue - Using current config:', currentDlbMode);
@@ -2295,12 +2295,12 @@ const Setting = React.memo(() => {
         const resp = await fetch('http://10.20.27.100/api/system/userconfig');
         if (resp.ok) {
           const data = await resp.json();
-          dlbComboFromRaw = data?.ccs?.dlbMode || null;
+          dlbComboFromRaw = (data && data.ccs && data.ccs.dlbMode) ? data.ccs.dlbMode : null;
         } else {
           const resp2 = await fetch('http://10.20.27.101/api/system/userconfig');
           if (resp2.ok) {
             const data2 = await resp2.json();
-            dlbComboFromRaw = data2?.ccs?.dlbMode || null;
+            dlbComboFromRaw = (data2 && data2.ccs && data2.ccs.dlbMode) ? data2.ccs.dlbMode : null;
           }
         }
       } catch (e) {
@@ -2317,7 +2317,7 @@ const Setting = React.memo(() => {
     };
 
     fetchDlbCombo();
-  }, [configKey, category, hardwareConfig, softwareConfig, rawConfig?.userconfig?.ccs?.dlbMode]);
+  }, [configKey, category, hardwareConfig, softwareConfig, (rawConfig && rawConfig.userconfig && rawConfig.userconfig.ccs && rawConfig.userconfig.ccs.dlbMode)]);
 
   // Restore dlbComboValue from last known non-null value if it becomes null
   React.useEffect(() => {
@@ -2333,12 +2333,12 @@ const Setting = React.memo(() => {
       const resp = await fetch('http://10.20.27.100/api/system/userconfig');
       if (resp.ok) {
         const data = await resp.json();
-        return data?.ccs?.dlbMode || null;
+        return (data && data.ccs && data.ccs.dlbMode) ? data.ccs.dlbMode : null;
       } else {
         const resp2 = await fetch('http://10.20.27.101/api/system/userconfig');
         if (resp2.ok) {
           const data2 = await resp2.json();
-          return data2?.ccs?.dlbMode || null;
+          return (data2 && data2.ccs && data2.ccs.dlbMode) ? data2.ccs.dlbMode : null;
         }
       }
     } catch (e) {
@@ -2509,7 +2509,7 @@ const Setting = React.memo(() => {
             icon={icon}
             label={label}
             color={color}
-            value={noOfOutletDisplayValue ?? value}
+            value={(noOfOutletDisplayValue != null) ? noOfOutletDisplayValue : value}
             onValueChange={noOfOutletHandleValueChange}
             options={noOfOutletOptions}
           />
@@ -2596,8 +2596,8 @@ const Setting = React.memo(() => {
     if (prevProps.onValueChange !== nextProps.onValueChange) return false;
     
     // Deep comparison only for the value that matters
-    const prevValue = prevProps.settingData?.value;
-    const nextValue = nextProps.settingData?.value;
+    const prevValue = (prevProps.settingData ? prevProps.settingData.value : undefined);
+    const nextValue = (nextProps.settingData ? nextProps.settingData.value : undefined);
     
     // For primitive values, direct comparison
     if (typeof prevValue !== 'object' && typeof nextValue !== 'object') {
@@ -2664,7 +2664,7 @@ const Setting = React.memo(() => {
             key={key}
             configKey={key}
             settingData={configItem}
-            onValueChange={callbacks?.[key]}
+            onValueChange={(callbacks && callbacks[key])}
             category={category}
             isDark={isDark}
           />

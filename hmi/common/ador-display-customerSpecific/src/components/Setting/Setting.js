@@ -1612,8 +1612,8 @@ const Setting = React.memo(() => {
 
       // Prefetch latest userconfig from both endpoints
       const getResponses = await Promise.all(endpoints.map(endpoint => fetch(endpoint)));
-      const latest100 = getResponses[0]?.ok ? await getResponses[0].json() : null;
-      const latest101 = getResponses[1]?.ok ? await getResponses[1].json() : null;
+      const latest100 = getResponses[0] && getResponses[0].ok ? await getResponses[0].json() : null;
+      const latest101 = getResponses[1] && getResponses[1].ok ? await getResponses[1].json() : null;
 
       // Use fallback if either is null
       const base100 = latest100 || rawConfig;
@@ -2265,35 +2265,6 @@ const Setting = React.memo(() => {
         }
     }, [updateUserConfig]);
 
-    // CRITICAL FIX: Use stable reference for dlbMode value to prevent cross-dependencies
-    // Fallback hydrate: fetch userconfig.dlbMode once if ref is empty
-    // const [dlbModeFromApi, setDlbModeFromApi] = useState(null);
-    // useEffect(() => {
-    //   if (configKey !== 'num_of_modules') return;
-    //   const fromRef = rawConfigRef?.current?.userconfig?.ccs?.dlbMode;
-    //   if (fromRef) return;
-    //   let cancelled = false;
-    //   (async () => {
-    //     try {
-    //       const resp = await fetch('http://10.20.27.100/api/system/userconfig');
-    //       if (resp.ok) {
-    //         const data = await resp.json();
-    //         const mode = data?.ccs?.dlbMode;
-    //         if (!cancelled && mode) setDlbModeFromApi(mode);
-    //       } else {
-    //         const resp2 = await fetch('http://10.20.27.101/api/system/userconfig');
-    //         if (resp2.ok) {
-    //           const data2 = await resp2.json();
-    //           const mode2 = data2?.ccs?.dlbMode;
-    //           if (!cancelled && mode2) setDlbModeFromApi(mode2);
-    //         }
-    //       }
-    //     } catch (e) {
-    //       // ignore
-    //     }
-    //   })();
-    //   return () => { cancelled = true; };
-    // }, [configKey, rawConfig?.userconfig?.ccs?.dlbMode]);
 
   React.useEffect(() => {
     if (configKey !== 'num_of_modules') return;

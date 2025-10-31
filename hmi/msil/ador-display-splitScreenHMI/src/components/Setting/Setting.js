@@ -18,7 +18,7 @@ import { useStableCallback } from "../../hooks/useStableCallback";
 import { useDebounce } from "../../hooks/useDebounce";
 
 // Password Protection Component
-const PasswordProtection = ({ onAuthenticated, theme }) => {
+const PasswordProtection = ({ onAuthenticated, theme, onRestartCharger }) => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -210,6 +210,32 @@ const PasswordProtection = ({ onAuthenticated, theme }) => {
           maxLength={50}
           secureMode={true}
         />
+
+        <button
+          type="button"
+          onClick={onRestartCharger}
+          disabled={isLocked}
+          style={{
+            width: "100%",
+            padding: "12px",
+            marginTop: "12px",
+            background: isDark ? "rgb(136 171 226)" : "#ff0000",
+            color: "#ffffff",
+            border: "none",
+            borderRadius: "8px",
+            fontSize: "1rem",
+            cursor: isLocked ? "not-allowed" : "pointer",
+            transition: "all 0.3s ease",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "8px",
+            opacity: isLocked ? 0.5 : 1
+          }}
+        >
+          <FaRedo />
+          Restart Charger
+        </button>
 
         {/* <div style={{
           marginTop: "1.5rem",
@@ -2542,7 +2568,20 @@ const Setting = React.memo(() => {
   };
 
   if (!isAuthenticated) {
-    return <PasswordProtection onAuthenticated={() => setIsAuthenticated(true)} theme={theme} />;
+    return (
+      <>
+        <style>
+          {`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}
+        </style>
+        <RestartingScreen />
+        <PasswordProtection onAuthenticated={() => setIsAuthenticated(true)} theme={theme} onRestartCharger={handleRestartCharger} />
+      </>
+    );
   }
 
   return (

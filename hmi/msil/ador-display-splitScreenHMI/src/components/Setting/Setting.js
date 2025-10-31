@@ -374,7 +374,7 @@ const NumberSetting = React.memo(({ icon, label, description, color, value, onVa
 
 // Text Setting Component - Optimized to prevent unnecessary re-renders
 const TextSetting = React.memo(
-  ({ icon, label, description, color, value, onValueChange }) => {
+  ({ icon, label, description, color, value, onValueChange, disabled = false }) => {
     const { theme } = useContext(ThemeContext);
     const isDark = theme === "dark";
     
@@ -425,6 +425,7 @@ const TextSetting = React.memo(
 
     // Input click - enable editing and show keyboard - memoized
     const handleInputClick = React.useCallback((e) => {
+      if (disabled) return;
       e.stopPropagation();
       e.preventDefault();
       setIsEditing(true);
@@ -434,21 +435,23 @@ const TextSetting = React.memo(
       setTimeout(() => {
         inputRef.current?.focus();
       }, 50);
-    }, []);
+    }, [disabled]);
 
     // Input change - memoized
     const handleChange = React.useCallback((e) => {
+      if (disabled) return;
       setTempValue(e.target.value);
       if (!isEditing) setIsEditing(true);
       if (!showKeyboard) setShowKeyboard(true);
-    }, [isEditing, showKeyboard]);
+    }, [isEditing, showKeyboard, disabled]);
 
     // Handle keyboard component input - memoized
     const handleKeyboardInput = React.useCallback((newValue) => {
+      if (disabled) return;
       setTempValue(newValue);
       if (!isEditing) setIsEditing(true);
       if (!showKeyboard) setShowKeyboard(true);
-    }, [isEditing, showKeyboard]);
+    }, [isEditing, showKeyboard, disabled]);
 
     // Handle closing the keyboard - memoized
     const handleCloseKeyboard = React.useCallback(() => {
@@ -514,10 +517,15 @@ const TextSetting = React.memo(
               onChange={handleChange}
               onClick={handleInputClick}
               placeholder="Enter value..."
-              style={inputStyle}
+              disabled={disabled}
+              style={{
+                ...inputStyle,
+                opacity: disabled ? 0.6 : 1,
+                cursor: disabled ? "not-allowed" : "text"
+              }}
             />
 
-            {isEditing && (
+            {isEditing && !disabled && (
               <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
                 <button
                   onClick={handleCancel}
@@ -538,7 +546,7 @@ const TextSetting = React.memo(
 
         {/* Virtual Keyboard Component */}
         <EVChargerKeyboard
-          isVisible={showKeyboard}
+          isVisible={showKeyboard && !disabled}
           onClose={handleCloseKeyboard}
           targetRef={inputRef}
           onInput={handleKeyboardInput}
@@ -558,7 +566,8 @@ const TextSetting = React.memo(
       prevProps.color === nextProps.color &&
       prevProps.description === nextProps.description &&
       prevProps.icon?.type === nextProps.icon?.type &&
-      prevProps.onValueChange === nextProps.onValueChange
+      prevProps.onValueChange === nextProps.onValueChange &&
+      prevProps.disabled === nextProps.disabled
     );
   }
 );
@@ -2398,6 +2407,7 @@ const Setting = React.memo(() => {
             color={color}
             value={value}
             onValueChange={handleValueChange}
+            disabled={configKey === 'OCPPEndpointToBackend'}
           />
           <ValidationError error={validationError} isDark={isDark} />
         </div>

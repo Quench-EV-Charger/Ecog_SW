@@ -18,7 +18,7 @@ import { useStableCallback } from "../../hooks/useStableCallback";
 import { useDebounce } from "../../hooks/useDebounce";
 
 // Password Protection Component
-const PasswordProtection = ({ onAuthenticated, theme }) => {
+const PasswordProtection = ({ onAuthenticated, theme, onRestartCharger, isRestarting }) => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -90,6 +90,8 @@ const PasswordProtection = ({ onAuthenticated, theme }) => {
       justifyContent: "center",
       minHeight: "75vh"
     }}>
+      {/* Restarting overlay on password screen */}
+      <RestartingScreen isRestarting={isRestarting} isDark={isDark} />
       <div style={{
         // background: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
         padding: "2rem",
@@ -212,6 +214,32 @@ const PasswordProtection = ({ onAuthenticated, theme }) => {
           maxLength={50}
           secureMode={true}
         />
+
+        {/* Restart Charger button below password form */}
+        <button
+          type="button"
+          onClick={onRestartCharger}
+          disabled={isLocked}
+          style={{
+            width: "100%",
+            marginTop: "12px",
+            padding: "12px",
+            background: isLocked ? "#666666" : (isDark ? "rgb(136 171 226)" : "#ff0000"),
+            color: "#ffffff",
+            border: "none",
+            borderRadius: "8px",
+            fontSize: "1rem",
+            cursor: isLocked ? "not-allowed" : "pointer",
+            transition: "all 0.3s ease",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "8px"
+          }}
+        >
+          <FaRedo />
+          Restart Charger
+        </button>
 
         {/* <div style={{
           marginTop: "1.5rem",
@@ -378,7 +406,7 @@ const NumberSetting = React.memo(({ icon, label, description, color, value, onVa
 
 // Text Setting Component - Optimized to prevent unnecessary re-renders
 const TextSetting = React.memo(
-  ({ icon, label, description, color, value, onValueChange }) => {
+  ({ icon, label, description, color, value, onValueChange, disabled = false }) => {
     const theme = "light"
     const isDark = theme === "dark";
     
@@ -407,9 +435,7 @@ const TextSetting = React.memo(
     const handleApply = React.useCallback(
       (e) => {
         if (e) e.stopPropagation();
-        // React.startTransition(() => {
-          onValueChange(tempValue); // Only notify parent when Apply is clicked
-        // });
+        onValueChange(tempValue); // Only notify parent when Apply is clicked
         setIsEditing(false);
         setShowKeyboard(false);
       },
@@ -431,6 +457,7 @@ const TextSetting = React.memo(
     const handleInputClick = React.useCallback((e) => {
       e.stopPropagation();
       e.preventDefault();
+      if (disabled) return;
       setIsEditing(true);
       setShowKeyboard(true);
 
@@ -438,21 +465,23 @@ const TextSetting = React.memo(
       setTimeout(() => {
         if (inputRef.current) inputRef.current.focus();
       }, 50);
-    }, []);
+    }, [disabled]);
 
     // Input change - memoized
     const handleChange = React.useCallback((e) => {
+      if (disabled) return;
       setTempValue(e.target.value);
       if (!isEditing) setIsEditing(true);
       if (!showKeyboard) setShowKeyboard(true);
-    }, [isEditing, showKeyboard]);
+    }, [isEditing, showKeyboard, disabled]);
 
     // Handle keyboard component input - memoized
     const handleKeyboardInput = React.useCallback((newValue) => {
+      if (disabled) return;
       setTempValue(newValue);
       if (!isEditing) setIsEditing(true);
       if (!showKeyboard) setShowKeyboard(true);
-    }, [isEditing, showKeyboard]);
+    }, [isEditing, showKeyboard, disabled]);
 
     // Handle closing the keyboard - memoized
     const handleCloseKeyboard = React.useCallback(() => {
@@ -462,13 +491,18 @@ const TextSetting = React.memo(
     // Memoize dynamic styles to prevent recalculation
     const inputStyle = React.useMemo(() => ({
       ...styles.textInput,
-      border: isEditing
-        ? `2px solid ${color || "#007bff"}`
-        : styles.textInput.border,
-      boxShadow: isEditing
+      border: disabled
+        ? styles.textInput.border
+        : (isEditing
+          ? `2px solid ${color || "#007bff"}`
+          : styles.textInput.border),
+      boxShadow: isEditing && !disabled
         ? `0 0 0 2px ${color || "#007bff"}33`
-        : "none"
-    }), [styles.textInput, isEditing, color]);
+        : "none",
+      backgroundColor: disabled ? (isDark ? "#2b2b2b" : "#f0f0f0") : styles.textInput.backgroundColor,
+      color: disabled ? (isDark ? "#888" : "#666") : styles.textInput.color,
+      cursor: disabled ? "not-allowed" : "text"
+    }), [styles.textInput, isEditing, color, disabled, isDark]);
 
     const cancelButtonStyle = React.useMemo(() => ({
       padding: "6px 12px",
@@ -519,9 +553,10 @@ const TextSetting = React.memo(
               onClick={handleInputClick}
               placeholder="Enter value..."
               style={inputStyle}
+              readOnly={disabled}
             />
 
-            {isEditing && (
+            {isEditing && !disabled && (
               <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
                 <button
                   onClick={handleCancel}
@@ -542,7 +577,7 @@ const TextSetting = React.memo(
 
         {/* Virtual Keyboard Component */}
         <EVChargerKeyboard
-          isVisible={showKeyboard}
+          isVisible={showKeyboard && !disabled}
           onClose={handleCloseKeyboard}
           targetRef={inputRef}
           onInput={handleKeyboardInput}
@@ -562,6 +597,7 @@ const TextSetting = React.memo(
       prevProps.color === nextProps.color &&
       prevProps.description === nextProps.description &&
       prevProps.onValueChange === nextProps.onValueChange &&
+      prevProps.disabled === nextProps.disabled &&
       (prevProps.icon && prevProps.icon.type) === (nextProps.icon && nextProps.icon.type)
     );
   }
@@ -2579,6 +2615,7 @@ const Setting = React.memo(() => {
             color={color}
             value={value}
             onValueChange={handleValueChange}
+            disabled={configKey === 'OCPPEndpointToBackend'}
           />
           <ValidationError error={validationError} isDark={isDark} />
         </div>
@@ -2680,7 +2717,7 @@ const Setting = React.memo(() => {
   )), []);
 
   if (!isAuthenticated) {
-    return <PasswordProtection onAuthenticated={() => setIsAuthenticated(true)} theme={theme} />;
+    return <PasswordProtection onAuthenticated={() => setIsAuthenticated(true)} theme={theme} onRestartCharger={handleRestartCharger} isRestarting={isRestarting} />;
   }
 
   return (

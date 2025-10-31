@@ -882,8 +882,13 @@ const SettingHeader = React.memo(({
 });
 
 // Isolated Tab Navigation Component to prevent re-renders
-const ValidationError = React.memo(({ error, isDark }) => {
-  if (!error) return null;
+const ValidationError = ({ error, isDark }) => {
+  // Support passing a function that returns the error object
+  const resolvedError = (typeof error === 'function') ? error() : error;
+  if (!resolvedError) return null;
+
+  const message = resolvedError && resolvedError.message ? resolvedError.message : '';
+  const details = resolvedError && resolvedError.details ? resolvedError.details : '';
   
   return (
     <div style={{
@@ -896,15 +901,19 @@ const ValidationError = React.memo(({ error, isDark }) => {
       color: '#dc2626',
       lineHeight: '1.4'
     }}>
-      <div style={{ fontWeight: '600', marginBottom: '4px' }}>
-        {error.message}
-      </div>
-      <div style={{ fontSize: '11px', opacity: 0.9 }}>
-        {error.details}
-      </div>
+      {message ? (
+        <div style={{ fontWeight: '600', marginBottom: '4px' }}>
+          {message}
+        </div>
+      ) : null}
+      {details ? (
+        <div style={{ fontSize: '11px', opacity: 0.9 }}>
+          {details}
+        </div>
+      ) : null}
     </div>
   );
-});
+}
 
 // Full-screen restarting overlay - memoized to only re-render on state/theme changes
 const RestartingScreen = React.memo(({ isRestarting, isDark }) => {
@@ -1603,62 +1612,65 @@ const Setting = React.memo(() => {
 
       // Prefetch latest userconfig from both endpoints
       const getResponses = await Promise.all(endpoints.map(endpoint => fetch(endpoint)));
-      const latest100 = getResponses[0] && getResponses[0].ok ? await getResponses[0].json() : null;
-      const latest101 = getResponses[1] && getResponses[1].ok ? await getResponses[1].json() : null;
+      const latest100 = getResponses[0]?.ok ? await getResponses[0].json() : null;
+      const latest101 = getResponses[1]?.ok ? await getResponses[1].json() : null;
 
-      // Choose a base: prefer SECC (100), then LE (101), then local rawConfig fallback
-      const baseUserConfig = latest100 || latest101 || (rawConfig.userconfig || {});
-      const updatedUserConfig = JSON.parse(JSON.stringify(baseUserConfig));
-      
-      // Set the nested value
-      setNestedValue(updatedUserConfig, mapping.path, value);
+      // Use fallback if either is null
+      const base100 = latest100 || rawConfig;
+      const base101 = latest101 || rawConfig;
 
-      // Create POST promises for both endpoints with the merged latest config
-      const postPromises = endpoints.map(endpoint => 
-        fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(updatedUserConfig),
-        })
+      // Clone and update each independently
+      const updated100 = JSON.parse(JSON.stringify(base100));
+      const updated101 = JSON.parse(JSON.stringify(base101));
+
+      // Apply the same key/value change to both configs
+      setNestedValue(updated100, mapping.path, value);
+      setNestedValue(updated101, mapping.path, value);
+
+    // Create POST payloads for each endpoint individually
+    const postPromises = [
+      fetch(endpoints[0], {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated100)
+      }),
+      fetch(endpoints[1], {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated101)
+      })
+    ];
+
+    // Execute both requests in parallel
+    const responses = await Promise.all(postPromises);
+
+    // Collect failed endpoints
+    const failedEndpoints = responses
+      .map((response, index) => !response.ok ? ({
+        endpoint: endpoints[index],
+        status: response.status,
+        statusText: response.statusText
+      }) : null)
+      .filter(Boolean);
+
+    if (failedEndpoints.length > 0) {
+      const errorMessages = failedEndpoints.map(
+        f => `${f.endpoint}: ${f.status} ${f.statusText}`
       );
-
-      // Execute both requests in parallel
-      const responses = await Promise.all(postPromises);
-
-      // Check if all responses are successful
-      const failedEndpoints = [];
-      responses.forEach((response, index) => {
-        if (!response.ok) {
-          failedEndpoints.push({
-            endpoint: endpoints[index],
-            status: response.status,
-            statusText: response.statusText
-          });
-        }
-      });
-
-      if (failedEndpoints.length > 0) {
-        const errorMessages = failedEndpoints.map(
-          failed => `${failed.endpoint}: ${failed.status} ${failed.statusText}`
-        );
-        throw new Error(`Failed to update endpoints: ${errorMessages.join(', ')}`);
-      }
-
-      setLastUpdateSuccess(true);
-      console.log('Successfully updated UserConfig on both endpoints:', endpoints);
-      
-      // Refresh configuration after successful update to both endpoints
-      await fetchAllConfigurations();
-    } catch (err) {
-      console.error('Error updating UserConfig configuration:', err);
-      setError(err.message);
-      setLastUpdateSuccess(false);
-    } finally {
-      setLoading(false);
+      throw new Error(`Failed to update endpoints: ${errorMessages.join(', ')}`);
     }
-  }, [rawConfig, fetchAllConfigurations]);
+
+    setLastUpdateSuccess(true);
+    // Refresh configuration after successful updates
+    await fetchAllConfigurations();
+  } catch (err) {
+    setError(err.message);
+    setLastUpdateSuccess(false);
+  } finally {
+    setLoading(false);
+  }
+}, [rawConfig, fetchAllConfigurations]);
+
 
   // Synchronized update function for keys that need to be kept in sync
   const updateSynchronizedConfig = useCallback(async (key, value) => {
@@ -1817,6 +1829,16 @@ const Setting = React.memo(() => {
     
     // Define userconfig-only keys to validate between endpoints 100 and 101
     const userconfigOnlyKeys = [
+      {
+        key: 'imd',
+        path: 'ccs.stack.imd',
+        displayName: 'IMD'
+      },
+      {
+        key: 'Convertor Type',
+        path: 'ccs.intcc.conv', 
+        displayName: 'Convertor Type'
+      },
       {
         key: 'dlbMode',
         path: 'ccs.dlbMode',
@@ -2059,7 +2081,7 @@ const Setting = React.memo(() => {
 
 
   // Dynamic Setting Component - Heavily optimized to prevent unnecessary re-renders
-  const DynamicSetting = React.memo(({ configKey, settingData, onValueChange, category, isDark }) => {
+  const DynamicSetting = React.memo(({ configKey, settingData, onValueChange, category, isDark, validationErrors }) => {
     // Extract the actual value from the setting data structure
     const value = settingData.value;
     const inputType = getInputType(value);
@@ -2076,7 +2098,7 @@ const Setting = React.memo(() => {
 
 
     // Check for validation errors for this specific config key
-    const validationError = React.useMemo(() => {
+    const validationError = () => {
       // Map display keys to validation keys
       const keyMappings = {
         'maxPowerLimitInkW': 'maxPowerLimitInkW',
@@ -2085,12 +2107,14 @@ const Setting = React.memo(() => {
         'maxA': 'maxCurrentLimitInAmps',
         'powerSaveInIdleMode': 'powerSaveInIdleMode',
         "dlbMode":"dlbMode",
-        "num_of_modules":"num_of_modules"
+        "num_of_modules":"num_of_modules",
+        "Convertor Type":"Convertor Type",
+        "imd":"imd"
       };
       
       const validationKey = keyMappings[configKey];
-      return validationKey ? validationErrors[validationKey] : null;
-    }, [configKey, validationErrors]);
+      return (validationKey && validationErrors) ? validationErrors[validationKey] : null;
+    }
 
     // Memoized callback to prevent re-renders - using stable callback hook
     const handleValueChange = useStableCallback((newValue) => {
@@ -2349,6 +2373,7 @@ const Setting = React.memo(() => {
 
   const [dlbModeFromApi, setDlbModeFromApi] = React.useState(null);
   React.useEffect(() => {
+    // validateConfigurationsAcrossEndpoints()
     if (configKey !== 'num_of_modules') return;
     let cancelled = false;
     (async () => {
@@ -2594,6 +2619,8 @@ const Setting = React.memo(() => {
     if (prevProps.configKey !== nextProps.configKey) return false;
     if (prevProps.category !== nextProps.category) return false;
     if (prevProps.onValueChange !== nextProps.onValueChange) return false;
+    // Ensure validationErrors changes trigger re-render
+    if (prevProps.validationErrors !== nextProps.validationErrors) return false;
     
     // Deep comparison only for the value that matters
     const prevValue = (prevProps.settingData ? prevProps.settingData.value : undefined);
@@ -2655,7 +2682,7 @@ const Setting = React.memo(() => {
   // RestartingScreen moved out and memoized above
 
   // Memoized settings list to minimize re-renders of scrollable container
-  const SettingsList = React.useMemo(() => React.memo(({ data, category, isDark, listStyle, callbacks }) => {
+  const SettingsList = React.useMemo(() => React.memo(({ data, category, isDark, listStyle, callbacks, validationErrors }) => {
     const entries = React.useMemo(() => Object.entries(data), [data]);
     return (
       <div style={listStyle}>
@@ -2667,6 +2694,7 @@ const Setting = React.memo(() => {
             onValueChange={(callbacks && callbacks[key])}
             category={category}
             isDark={isDark}
+            validationErrors={validationErrors}
           />
         ))}
       </div>
@@ -2676,7 +2704,8 @@ const Setting = React.memo(() => {
     prevProps.category === nextProps.category &&
     prevProps.isDark === nextProps.isDark &&
     prevProps.listStyle === nextProps.listStyle &&
-    prevProps.callbacks === nextProps.callbacks
+    prevProps.callbacks === nextProps.callbacks &&
+    prevProps.validationErrors === nextProps.validationErrors
   )), []);
 
   if (!isAuthenticated) {
@@ -2756,6 +2785,7 @@ const Setting = React.memo(() => {
                   isDark={isDark}
                   callbacks={hardwareCallbacks}
                   listStyle={styles.scrollableContent}
+                  validationErrors={validationErrors}
                 />
               </div>
             )}
@@ -2768,6 +2798,7 @@ const Setting = React.memo(() => {
                   isDark={isDark}
                   callbacks={ocppCallbacks}
                   listStyle={styles.scrollableContent}
+                  validationErrors={validationErrors}
                 />
               </div>
             )}
@@ -2780,6 +2811,7 @@ const Setting = React.memo(() => {
                   isDark={isDark}
                   callbacks={outletCallbacks}
                   listStyle={styles.scrollableContent}
+                  validationErrors={validationErrors}
                 />
               </div>
             )}

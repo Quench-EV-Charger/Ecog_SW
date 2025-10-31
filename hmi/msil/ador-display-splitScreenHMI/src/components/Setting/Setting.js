@@ -1478,65 +1478,72 @@ const Setting = React.memo(() => {
     setLastUpdateSuccess(false);
 
     try {
-      // Get current userconfig to maintain structure
-      const currentUserConfig = rawConfig.userconfig || {};
-      const updatedUserConfig = { ...currentUserConfig };
-      
-      // Set the nested value
-      setNestedValue(updatedUserConfig, mapping.path, value);
-
       // Define both API endpoints
       const endpoints = [
         'http://10.20.27.100/api/system/userconfig',
         'http://10.20.27.101/api/system/userconfig'
       ];
 
-      // Create fetch promises for both endpoints
-      const fetchPromises = endpoints.map(endpoint => 
-        fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(updatedUserConfig),
-        })
+      // Prefetch latest userconfig from both endpoints
+      const getResponses = await Promise.all(endpoints.map(endpoint => fetch(endpoint)));
+      const latest100 = getResponses[0] && getResponses[0].ok ? await getResponses[0].json() : null;
+      const latest101 = getResponses[1] && getResponses[1].ok ? await getResponses[1].json() : null;
+
+      // Use fallback if either is null
+      const base100 = latest100 || rawConfig;
+      const base101 = latest101 || rawConfig;
+
+      // Clone and update each independently
+      const updated100 = JSON.parse(JSON.stringify(base100));
+      const updated101 = JSON.parse(JSON.stringify(base101));
+
+      // Apply the same key/value change to both configs
+      setNestedValue(updated100, mapping.path, value);
+      setNestedValue(updated101, mapping.path, value);
+
+    // Create POST payloads for each endpoint individually
+    const postPromises = [
+      fetch(endpoints[0], {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated100)
+      }),
+      fetch(endpoints[1], {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated101)
+      })
+    ];
+
+    // Execute both requests in parallel
+    const responses = await Promise.all(postPromises);
+
+    // Collect failed endpoints
+    const failedEndpoints = responses
+      .map((response, index) => !response.ok ? ({
+        endpoint: endpoints[index],
+        status: response.status,
+        statusText: response.statusText
+      }) : null)
+      .filter(Boolean);
+
+    if (failedEndpoints.length > 0) {
+      const errorMessages = failedEndpoints.map(
+        f => `${f.endpoint}: ${f.status} ${f.statusText}`
       );
-
-      // Execute both requests in parallel
-      const responses = await Promise.all(fetchPromises);
-
-      // Check if all responses are successful
-      const failedEndpoints = [];
-      responses.forEach((response, index) => {
-        if (!response.ok) {
-          failedEndpoints.push({
-            endpoint: endpoints[index],
-            status: response.status,
-            statusText: response.statusText
-          });
-        }
-      });
-
-      if (failedEndpoints.length > 0) {
-        const errorMessages = failedEndpoints.map(
-          failed => `${failed.endpoint}: ${failed.status} ${failed.statusText}`
-        );
-        throw new Error(`Failed to update endpoints: ${errorMessages.join(', ')}`);
-      }
-
-      setLastUpdateSuccess(true);
-      console.log('Successfully updated UserConfig on both endpoints:', endpoints);
-      
-      // Refresh configuration after successful update to both endpoints
-      await fetchAllConfigurations();
-    } catch (err) {
-      console.error('Error updating UserConfig configuration:', err);
-      setError(err.message);
-      setLastUpdateSuccess(false);
-    } finally {
-      setLoading(false);
+      throw new Error(`Failed to update endpoints: ${errorMessages.join(', ')}`);
     }
-  }, [rawConfig, fetchAllConfigurations]);
+
+    setLastUpdateSuccess(true);
+    // Refresh configuration after successful updates
+    await fetchAllConfigurations();
+  } catch (err) {
+    setError(err.message);
+    setLastUpdateSuccess(false);
+  } finally {
+    setLoading(false);
+  }
+}, [rawConfig, fetchAllConfigurations]);
 
   // Synchronized update function for keys that need to be kept in sync
   const updateSynchronizedConfig = useCallback(async (key, value) => {
@@ -1704,6 +1711,15 @@ const Setting = React.memo(() => {
         key: 'num_of_modules',
         path: 'ccs.num_of_modules', 
         displayName: 'Number of Modules'
+      },{
+        key: 'imd',
+        path: 'ccs.stack.imd',
+        displayName: 'IMD'
+      },
+      {
+        key: 'Convertor Type',
+        path: 'ccs.intcc.conv', 
+        displayName: 'Convertor Type'
       }
     ];
     
@@ -1950,7 +1966,9 @@ const Setting = React.memo(() => {
         'maxA': 'maxCurrentLimitInAmps',
         'powerSaveInIdleMode': 'powerSaveInIdleMode',
         "dlbMode":"dlbMode",
-        "num_of_modules":"num_of_modules"
+        "num_of_modules":"num_of_modules",
+        "Convertor Type":"Convertor Type",
+        "imd":"imd"
       };
       
       const validationKey = keyMappings[configKey];

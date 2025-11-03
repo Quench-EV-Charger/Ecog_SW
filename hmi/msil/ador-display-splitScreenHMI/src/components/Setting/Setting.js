@@ -1777,6 +1777,58 @@ const Setting = React.memo(() => {
         }
       }
     });
+
+    // Additional validation: Compare num_of_modules "available options" between endpoints 100 and 101
+    // Options on the UI depend on dlbMode. Compute options for each endpoint and compare.
+    try {
+      const dlbMode100 = getNestedValue(userconfig100, 'ccs.dlbMode');
+      const dlbMode101 = getNestedValue(userconfig101, 'ccs.dlbMode');
+      const numOfModules100 = getNestedValue(userconfig100, 'ccs.num_of_modules');
+      const numOfModules101 = getNestedValue(userconfig101, 'ccs.num_of_modules');
+
+      const computeNumModulesOptions = (dlbMode) => {
+        if (dlbMode === 'singleCombo') {
+          return { options: [2, 4, 6, 8], disabled: false, defaultValue: 2 };
+        } else if (dlbMode === 'dualCombo') {
+          return { options: [3], disabled: true, defaultValue: 3 };
+        } else if (dlbMode === 'tripleCombo') {
+          return { options: [4], disabled: true, defaultValue: 4 };
+        }
+        return { options: [], disabled: false, defaultValue: null };
+      };
+
+      const options100 = computeNumModulesOptions(dlbMode100);
+      const options101 = computeNumModulesOptions(dlbMode101);
+
+      const arraysEqual = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => v === b[i]);
+      const hasOptionsDiscrepancy = !arraysEqual(options100.options, options101.options) || options100.disabled !== options101.disabled || !options100.options.includes(numOfModules100) || !options101.options.includes(numOfModules101)
+
+      if (hasOptionsDiscrepancy) {
+        const existingError = errors['num_of_modules'];
+        const optionsDetails = `SECC (dlbMode: ${dlbMode100 ?? 'N/A'}) num_of_modules: ${numOfModules100} ; LE (dlbMode: ${dlbMode101 ?? 'N/A'}) num_of_modules: ${numOfModules101}`;
+        const values = [
+          { source: 'SECC User Config', value: getNestedValue(userconfig100, 'ccs.num_of_modules') },
+          { source: 'LE User Config', value: getNestedValue(userconfig101, 'ccs.num_of_modules') }
+        ];
+
+        if (existingError) {
+          errors['num_of_modules'] = {
+            ...existingError,
+            // Append options mismatch details to existing discrepancy details
+            details: `${existingError.details}; ${optionsDetails}`,
+            values
+          };
+        } else {
+          errors['num_of_modules'] = {
+            message: 'Number of Modules options mismatch',
+            details: optionsDetails,
+            values
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to validate num_of_modules options across endpoints:', e);
+    }
     
     // Update validation state
     setValidationErrors(errors);

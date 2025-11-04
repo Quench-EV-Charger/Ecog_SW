@@ -80,7 +80,7 @@ class ContextProvider extends Component {
         this.props.history.push(path);
       }
     },
-    ipcClient: mqtt.connect("ws://10.20.27.50:2000"),
+    ipcClient: mqtt.connect("ws://127.0.0.1:2000"),
     showEStop: false,
     eStopRoutingHandled: false,
     powerFailureRoutingHandled: false,

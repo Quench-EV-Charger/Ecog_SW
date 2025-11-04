@@ -32,8 +32,8 @@
   "rebootTimeSec": 300,
   "timeToGoHomeSec": 60,
   "timeToGoScreensaverSec": 120,
-  "API": "http://localhost:3001",
-  "socketUrl": "ws://localhost:3001",
+  "API": "http://10.20.27.50:3001",
+  "socketUrl": "ws://10.20.27.50:3001",
   "useAnimation": {
     "enableOnBoot": false,
     "onBootTimeSec": 60,

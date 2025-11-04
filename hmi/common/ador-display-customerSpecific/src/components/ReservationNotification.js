@@ -4,6 +4,7 @@ import MainContext from "../providers/MainContext";
 import { reservationHour, reservedDetails } from "../utils";
 
 class ReservationNotification extends React.Component {
+    
     static contextType = MainContext;
 
     state = {
@@ -41,10 +42,17 @@ class ReservationNotification extends React.Component {
     };
 
     checkReservationDetails = async () => {
+
         try {
             const { chargerState } = this.context;
             const { outletId } = this.props;
+            const resp = await fetch(`${this.context.config?.API}/services/ocpp/reservations`);
+            const json = await resp.json();
+            console.log("Raw Reservation API:", json);
+
             const details = await reservedDetails(this.context.config?.API, outletId);
+            console.log("Reservation API Response:", details);
+         
             if (details && (chargerState[outletId - 1].phs === 1 || chargerState[outletId - 1].phs === 2)) {
                 this.setState({
                     reservationDetailsHome: details,

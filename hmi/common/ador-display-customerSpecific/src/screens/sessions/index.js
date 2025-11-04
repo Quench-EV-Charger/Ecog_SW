@@ -94,8 +94,8 @@ class Sessions extends Component {
   checkReservation = async () => {
       try {
         const {selectedState} = this.context;// prettier-ignore
-        const details = await reservationHour(this.context.config?.API,selectedState.outlet);
-        if (details && selectedState.phs >= 2) {
+        const details = await reservationHour(this.context.config?.API,selectedState?.outlet);
+        if (details && selectedState.phs >= 0) {
           this.setState({
             showReservationPrompt: true,
             reservationDetails: details.message

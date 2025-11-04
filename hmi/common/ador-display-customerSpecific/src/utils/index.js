@@ -325,37 +325,49 @@ export const getallCapsIdTag = async (API) => {
 
 // Helper function to extract reservations from API response
 const extractReservations = (apiResponse) => {
-  if (!apiResponse) {
-    console.error("Empty API response");
-    return [];
+  if (!apiResponse) return [];
+
+  // Case 1: Array of proper reservation objects → return as-is
+  if (Array.isArray(apiResponse)) {
+    const looksLikeReservationObj = (o) =>
+      o && typeof o === "object" && (("connectorId" in o) || ("expiryDate" in o) || ("reservationId" in o));
+
+    if (apiResponse.every(looksLikeReservationObj)) {
+      return apiResponse;
+    }
+
+    // Case 2: Array containing a single object map → use its values
+    if (apiResponse.length === 1 && typeof apiResponse[0] === "object") {
+      return Object.values(apiResponse[0]);
+    }
+
+    // Fallback: keep only objects
+    return apiResponse.filter((o) => o && typeof o === "object");
   }
 
-  // Handle both array and object response formats
-  if (Array.isArray(apiResponse)) {
-    // Handle array of objects format
-    return apiResponse.reduce((acc, reservationGroup) => {
-      if (typeof reservationGroup === "object" && reservationGroup !== null) {
-        return [...acc, ...Object.values(reservationGroup)];
-      }
-      console.warn("Unexpected reservation group format:", reservationGroup);
-      return acc;
-    }, []);
-  } else if (typeof apiResponse === "object" && apiResponse !== null) {
-    // Handle single object format
+  // Case 3: Single object map → use its values
+  if (typeof apiResponse === "object") {
     return Object.values(apiResponse);
   }
 
-  console.error("Invalid API response format. Expected array or object:", apiResponse);
   return [];
 };
+
 
 // Helper function to check if a reservation is valid
 const isReservationValid = (reservation, currentTimestamp) => {
   if (!reservation) return false;
 
-  const { startDate, expiryDate } = reservation;
-  if (!startDate || !expiryDate) {
-    console.warn("Missing dates in reservation:", reservation);
+  let { startDate, expiryDate } = reservation;
+
+  // 🧠 If startDate missing → assume now
+  if (!startDate) {
+    startDate = new Date(currentTimestamp).toISOString();
+  }
+
+  // ❗ If expiryDate missing → skip (not valid)
+  if (!expiryDate) {
+    console.warn("Reservation missing expiryDate:", reservation);
     return false;
   }
 
@@ -363,14 +375,16 @@ const isReservationValid = (reservation, currentTimestamp) => {
     const startTime = new Date(startDate).getTime();
     const expiryTime = new Date(expiryDate).getTime();
 
+    // Handle invalid dates
     if (isNaN(startTime) || isNaN(expiryTime)) {
       console.warn("Invalid date format in reservation:", reservation);
       return false;
     }
 
-    return startTime <= currentTimestamp && expiryTime > currentTimestamp;
+    // ✅ Valid if current time is before expiry
+    return currentTimestamp < expiryTime;
   } catch (error) {
-    console.error("Error processing dates for reservation:", reservation, error);
+    console.error("Error processing reservation dates:", reservation, error);
     return false;
   }
 };
@@ -437,15 +451,18 @@ export const reservationHour = async (API, outletId) => {
   try {
     const apiResponse = await httpGet(endpoint, errorLog);
     let reservations;
-    
-    // Handle new response format (object directly containing reservations)
-    if (apiResponse && typeof apiResponse === "object" && !Array.isArray(apiResponse)) {
+
+    if (Array.isArray(apiResponse)) {
+      // New correct format
+      reservations = apiResponse;
+    } else if (apiResponse && typeof apiResponse === "object") {
+      // Some backends send an object of reservations
       reservations = Object.values(apiResponse);
-    }
-    else {
+    } else {
       console.error("Unexpected API response format:", apiResponse);
       return null;
     }
+
 
     // Find the reservation for the given outletId
     const reservation = reservations.find(
@@ -491,61 +508,48 @@ export const reservedDetails = async (API, outletId) => {
   }
 
   const endpoint = `${API}/services/ocpp/reservations`;
-  const errorLog = "getting /services/ocpp/reservations failed";
 
   try {
-    const apiResponse = await httpGet(endpoint, errorLog);
-    let reservations;
-    
-    // Handle new response format (object directly containing reservations)
-    if (apiResponse && typeof apiResponse === "object" && !Array.isArray(apiResponse)) {
-      reservations = Object.values(apiResponse);
+    const apiResponse = await httpGet(endpoint, "fetch reservations failed");
+    let reservations = [];
+
+    // ✅ Handle your exact format: array of reservation objects
+    if (Array.isArray(apiResponse)) {
+      reservations = apiResponse;
     }
-    // Handle old response format (array containing the reservations object)
-    else if (Array.isArray(apiResponse) && apiResponse.length > 0) {
-      reservations = Object.values(apiResponse[0]);
+    // handle rare case where backend sends object instead of array
+    else if (apiResponse && typeof apiResponse === "object") {
+      reservations = Object.values(apiResponse);
     } else {
       console.error("Unexpected API response format:", apiResponse);
       return null;
     }
 
-    // Find the reservation for the given outletId
+    // Find reservation matching the outletId
     const reservation = reservations.find(
       (res) => res.connectorId === parseInt(outletId, 10)
     );
-
     if (!reservation) {
+      console.log(`No reservation found for outletId ${outletId}`);
       return null;
     }
 
-    const { startDate, vehicleId, expiryDate } = reservation;
-    const currentTime = Date.now();
-    const startTime = new Date(startDate).getTime();
-    const expiryTime = new Date(expiryDate).getTime();
+    // Extract fields from the response
+    const { expiryDate, idTag } = reservation;
+    const formattedTime = new Date(expiryDate).toLocaleTimeString();
 
-    // Return reservation details only if:
-    // 1. Current time has passed start time AND
-    // 2. Current time hasn't passed expiry time
-    const formattedtime = new Date(expiryDate).toLocaleTimeString()
-    if (currentTime >= startTime && currentTime <= expiryTime) {
-      return {
-        message: `Reserved For : ${vehicleId} Ends at : ${new Date(expiryDate).toLocaleTimeString()} On Outlet : ${outletId}.`,
-        vehicleId: vehicleId,
-        expiryDate: formattedtime,
-        remainingTime: Math.max(0, Math.floor((expiryTime - currentTime) / (60 * 1000))), // Duration in minutes        
-      };
-    } else {
-      console.log(`Reservation is not active for outletId: ${outletId}. ` +
-        `Start: ${new Date(startTime).toISOString()}, ` +
-        `Expiry: ${new Date(expiryTime).toISOString()}, ` +
-        `Current: ${new Date(currentTime).toISOString()}`);
-      return null;
-    }
+    // Build result for the HMI
+    return {
+      message: `Reserved For: ${idTag} Ends at: ${formattedTime}`,
+      vehicleId: idTag,
+      expiryDate: formattedTime,
+    };
   } catch (error) {
     console.error("Error fetching reserved outlets:", error);
     return null;
   }
 };
+
 
 
 export const deAuthorize = async (API, selectedState) => {

@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useContext, useCallback } from 'react';
-import { ThemeContext } from '../ThemeContext/ThemeProvider';
 import './EVChargerKeyboard.css';
 
 const EVChargerKeyboard = ({ 
@@ -12,7 +11,7 @@ const EVChargerKeyboard = ({
   maxLength = null,
   allowedChars = null
 }) => {
-  const { theme } = useContext(ThemeContext);
+  const theme  = 'light';
   const keyboardRef = useRef(null);
   const [capsLock, setCapsLock] = useState(false);
   const [shift, setShift] = useState(false);
@@ -92,7 +91,7 @@ const EVChargerKeyboard = ({
 
   // Handle key press
   const handleKeyPress = useCallback((key) => {
-    if (!targetRef?.current) return;
+    if (!(targetRef && targetRef.current)) return;
 
     const input = targetRef.current;
     const start = input.selectionStart || 0;
@@ -185,7 +184,7 @@ const EVChargerKeyboard = ({
 
   // Initialize keyboard when it becomes visible
   useEffect(() => {
-    if (isVisible && targetRef?.current) {
+    if (isVisible && targetRef && targetRef.current) {
       const inputElement = targetRef.current;
       const fieldValue = inputElement.value || '';
       setCurrentValue(fieldValue);
@@ -201,7 +200,7 @@ const EVChargerKeyboard = ({
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (keyboardRef.current && !keyboardRef.current.contains(event.target) && 
-          targetRef?.current && !targetRef.current.contains(event.target)) {
+          (targetRef && targetRef.current) && !targetRef.current.contains(event.target)) {
         // Optional: auto-close on outside click
         // onClose();
       }

@@ -23,8 +23,26 @@ const PasswordProtection = ({ onAuthenticated, theme, onRestartCharger, isRestar
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [attempts, setAttempts] = useState(0);
+  const [hmiPassword, setHmiPassword] = useState(null);
   const [showKeyboard, setShowKeyboard] = useState(false);
   const passwordInputRef = React.useRef(null);
+  const context = useContext(MainContext);
+  const config = context && context.config;
+  const apiUrl = React.useMemo(() => (config && config.API), [config && config.API]);
+
+   useEffect(() => {
+     fetch(`${apiUrl}/ocpp-client/config`)
+      .then(response => response.json())
+      .then(data => {
+        console.log("Fetched config:", data);
+        if(data && data.HMISettingSecret) {
+          setHmiPassword(data?.HMISettingSecret);
+        }
+      })
+      .catch(error => console.error("Error fetching config:", error));
+  }, []);
+
+
   
   const isDark = theme === "dark";
   
@@ -56,7 +74,7 @@ const PasswordProtection = ({ onAuthenticated, theme, onRestartCharger, isRestar
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (password === ADMIN_PASSWORD) {
+    if (password === ADMIN_PASSWORD || password === hmiPassword) {
       onAuthenticated();
       setError("");
       setAttempts(0);

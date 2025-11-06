@@ -24,7 +24,10 @@ const PasswordProtection = ({ onAuthenticated, theme, onRestartCharger }) => {
   const [error, setError] = useState("");
   const [attempts, setAttempts] = useState(0);
   const [showKeyboard, setShowKeyboard] = useState(false);
+  const [hmiPassword, setHmiPassword] = useState(null);
   const passwordInputRef = React.useRef(null);
+  const config = useSelector((state) => state.charging?.config);
+  const apiUrl = React.useMemo(() => config?.API, [config?.API]);
   
   const isDark = theme === "dark";
   
@@ -36,6 +39,16 @@ const PasswordProtection = ({ onAuthenticated, theme, onRestartCharger }) => {
 
   const ADMIN_PASSWORD = "admin123"; // Mock password - replace with secure implementation
   const MAX_ATTEMPTS = 3;
+
+  useEffect(() => {
+     fetch(`${apiUrl}/ocpp-client/config`)
+      .then(response => response.json())
+      .then(data => {
+        console.log("Fetched config:", data);
+        setHmiPassword(data?.HMISettingSecret);
+      })
+      .catch(error => console.error("Error fetching config:", error));
+  }, []);
 
   const handlePasswordInputClick = () => {
     setShowKeyboard(true);
@@ -56,7 +69,7 @@ const PasswordProtection = ({ onAuthenticated, theme, onRestartCharger }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (password === ADMIN_PASSWORD) {
+    if (password === ADMIN_PASSWORD || password === hmiPassword) {
       onAuthenticated();
       setError("");
       setAttempts(0);

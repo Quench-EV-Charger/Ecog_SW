@@ -35,8 +35,8 @@ const PasswordProtection = ({ onAuthenticated, theme, onRestartCharger, isRestar
       .then(response => response.json())
       .then(data => {
         console.log("Fetched config:", data);
-        if(data && data.HMISettingSecret) {
-          setHmiPassword(data?.HMISettingSecret);
+        if(data && data.HMISettingsSecret) {
+          setHmiPassword(data?.HMISettingsSecret);
         }
       })
       .catch(error => console.error("Error fetching config:", error));

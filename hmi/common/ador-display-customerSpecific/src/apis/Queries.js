@@ -46,7 +46,7 @@ export const startupApiCall = async (config) => {
     };
 
     // API endpoint
-    const apiEndpoint = config.API + "/store/charger-config";
+    const apiEndpoint = config.API + "/store/application-config";
 
     // First, check current configuration with GET request
     try {

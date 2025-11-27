@@ -1443,7 +1443,7 @@ const handleAssignments = async () => {
         // STEP 2: Dynamic module count from DLB and determine target state
         const moduleCount = totalModules
         const powerPerModule = config.MAX_POWER_PER_MODULE
-        const effectivePowerPerModule = effectiveMaxTotalPower / moduleCount
+        const effectivePowerPerModule = Math.floor(effectiveMaxTotalPower / moduleCount)
         
         // Get target state to determine actual module allocation
         let targetState = selectOptimalState(isOutlet1Connected, isOutlet2Connected, outlet1Demand, outlet2Demand, effectivePowerPerModule);

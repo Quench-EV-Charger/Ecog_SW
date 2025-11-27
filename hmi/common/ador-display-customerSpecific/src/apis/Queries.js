@@ -80,7 +80,7 @@ const postConfig = async (apiEndpoint, expectedData) => {
   if (!response.ok) throw new Error(`POST failed: ${response.status} ${response.statusText}`);
 
   const result = await response.json();
-  console.log("✅ POST Response:", result);
+  console.log("POST Response:", result);
   return result;
 };
 
@@ -94,7 +94,7 @@ export const startupApiCall = async (config) => {
     const expectedData = getExpectedData(config);
     return await postConfig(apiEndpoint, expectedData);
   } catch (error) {
-    console.error("❌ Error in startupApiCall:", error);
+    console.error("Error in startupApiCall:", error);
     throw error;
   }
 };

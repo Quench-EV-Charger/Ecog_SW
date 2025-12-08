@@ -233,28 +233,26 @@ async function handleIdleState() {
 // Helper for setting power cap with 500W safety deduction
 async function setPowerCap(outletNum, power, reason = "Power Cap Applied") {
     try {
-        let safePower;
+        // Convert kW → W if value seems too small
+        if (power < 1000) power *= 1000;
 
+        let safePower;
         if (power < 0) {
-            // Invalid request → fall back to at least the low-demand value
             safePower = Math.max(power, powerLowDemandValue);
         } else {
-            // Normal case → cap at system maximum
             safePower = Math.min(power, powercapValue);
         }
 
-        const response = await fetch(baseUrl + "/outlets/" + outletNum + "/powercap", {
+        const response = await fetch(`${baseUrl}/outlets/${outletNum}/powercap`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ PowerCapW: safePower }),
         });
 
-        if (!response.ok) {
-            return [];
-        }
+        if (!response.ok) return [];
 
         const result = await response.text();
-        logPowerTransition(outletNum, "?", safePower, `${reason} (Original: ${power}W, Applied: ${safePower}W)`);
+        logPowerTransition(outletNum, "?", safePower, `${reason} (Applied: ${safePower}W)`);
         return result;
     } catch (error) {
         console.error("PowerCap Error:", error);

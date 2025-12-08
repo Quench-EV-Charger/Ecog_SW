@@ -22,8 +22,8 @@ const outletImages = {
   CHADEMOPlugWhite,
 };
 
-// Static QR cache shared across all instances
-let sharedQrUrl = null;
+// Cache for QR codes
+const qrCache = {};
 
 class OutletImage extends Component {
   state = {
@@ -31,25 +31,38 @@ class OutletImage extends Component {
   };
 
   async componentDidMount() {
-    const { config } = this.props;
+    const { config, eachItem } = this.props;
   
-    // Only generate QR once globally
-    if (!sharedQrUrl && config?.API) {
-      try {
-        const response = await fetch(`${config.API}/ocpp-client/config`);
-        const data = await response.json();
+    if (!config?.API) return;
+
+    try {
+      const response = await fetch(`${config.API}/ocpp-client/config`);
+      const data = await response.json();
   
-        if (data.QRHashStr) {
-          const url = await QRCode.toDataURL(data.QRHashStr, { width: 300 });
-          sharedQrUrl = url;
-          this.setState({ qrUrl: url });
+      if (data.QRHashStr) {
+        let qrStringToUse = data.QRHashStr;
+        
+        // Check if multiple QR strings are provided (comma-separated)
+        if (data.QRHashStr.includes(",")) {
+          // Multiple QR strings - use outlet-specific one
+          const qrStrings = data.QRHashStr.split(",").map(str => str.trim());
+          const outletIndex = parseInt(eachItem?.outlet) - 1; // Convert outlet number to index
+          
+          // Use corresponding QR string, or fallback to first one
+          qrStringToUse = qrStrings[outletIndex] || qrStrings[0];
         }
-      } catch (err) {
-        console.warn("QR generation failed:", err);
+        
+        // Generate and cache QR for this outlet
+        const cacheKey = `outlet_${eachItem?.outlet}`;
+        if (!qrCache[cacheKey]) {
+          const url = await QRCode.toDataURL(qrStringToUse, { width: 300 });
+          qrCache[cacheKey] = url;
+        }
+        
+        this.setState({ qrUrl: qrCache[cacheKey] });
       }
-    } else {
-      // Already generated, use from cache
-      this.setState({ qrUrl: sharedQrUrl });
+    } catch (err) {
+      console.warn("QR generation failed:", err);
     }
   }
   

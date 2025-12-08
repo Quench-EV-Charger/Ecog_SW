@@ -399,7 +399,7 @@ class ContextProvider extends Component {
       console.error("Error on getting connector state:", err);
       this.setState({
         activeConnector: 0,
-        SECCreachable: false,
+        SECCreachable: true,
       });
     }
   };

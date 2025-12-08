@@ -30,9 +30,20 @@ export default class SessionsFooter extends Component {
         const data = await response.json();
 
         if (data.QRHashStr) {
-          const parts = data.QRHashStr.split("_");
-          const extractedString = parts[parts.length - 1];
-          this.setState({ qrString: extractedString });
+          // Always get first QR string (in case of comma-separated)
+          const firstQrString = data.QRHashStr.includes(",") 
+            ? data.QRHashStr.split(",")[0].trim() 
+            : data.QRHashStr;
+          
+          // Check if FIRST string has underscore
+          if (firstQrString.includes("_")) {
+            const parts = firstQrString.split("_");
+            const extractedString = parts[parts.length - 1];
+            this.setState({ qrString: extractedString });
+          } else {
+            // First string has no underscore, don't show anything
+            this.setState({ qrString: "" });
+          }
         }
       } catch (err) {
         console.warn("Failed to fetch QR string:", err);

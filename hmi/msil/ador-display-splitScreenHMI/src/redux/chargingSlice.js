@@ -9,7 +9,7 @@ const initialState = {
   config: {},
   isChargeCableConnected: false,
   activeConnector: 0,
-  SECCreachable: false,
+  SECCreachable: true,
   showAlert: false,
   errorCode: null,
   selectedState: {},

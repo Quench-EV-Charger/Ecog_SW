@@ -28,11 +28,8 @@ class Navbar extends Component {
   };
 
   handleSettingsClick = () => {
-    const { config } = this.context;
-    const { configUI } = config;
-    if (!configUI || !configUI.enable) return;
-
-    window.location.href = configUI.url;
+    const { changePath } = this.context;
+    changePath("/settings");
   };
 
   getLogo = () => {

@@ -15,6 +15,7 @@ import {
   randomBetween,
   secondsToHms,
   timestampToTime,
+  getEmulatedMetering,
 } from "../../utils";
 import CarImage from "../../assets/images/ecog_car.svg";
 import { GunLetters, max32BitInt, OutletType } from "../../constants/constants";
@@ -34,6 +35,7 @@ class Charging extends Component {
       sessionStart: null,
       background: null,
       stopChargerStatus: "",
+      emulatedMetering: null
     };
   }
 
@@ -116,6 +118,9 @@ class Charging extends Component {
 
   componentDidMount = async () => {
     this.setState({ stopChargerStatus: "STOP_CHARGING" });
+    // this.state.await setEmulatedMetering();
+    const emulatedmetering = await getEmulatedMetering(this.context.config?.API);
+    this.setState({emulatedMetering : emulatedmetering})
     this.setBackground();
     const startDetails = await fetchSessionByOutletAndUser(
       this.context.selectedState?.outlet,
@@ -257,7 +262,7 @@ class Charging extends Component {
                   <Row style={S.SessionInfoTextsContainer}>
                     <p style={S.SessionInfoText}>
                       {context.t("VOLTAGE")}:{" "}
-                      {chargerState?.dc_meter?.voltage !== undefined
+                      {chargerState?.dc_meter?.voltage !== undefined && !this.state.emulatedMetering
                         ? `${chargerState.dc_meter.voltage.toFixed(2)} V`
                         : chargerState?.pv !== undefined
                         ? `${chargerState.pv.toFixed(2)} V`
@@ -266,7 +271,7 @@ class Charging extends Component {
 
                     <p style={S.SessionInfoText}>
                       {context.t("CURRENT")}:{" "}
-                      {chargerState?.dc_meter?.current !== undefined
+                      {chargerState?.dc_meter?.current !== undefined && !this.state.emulatedMetering
                         ? `${chargerState.dc_meter.current.toFixed(2)} A`
                         : chargerState?.pc !== undefined
                         ? `${chargerState.pc.toFixed(2)} A`
@@ -274,7 +279,7 @@ class Charging extends Component {
                     </p>
                     <p style={S.SessionInfoText}>
                       {context.t("POWER")}:{" "}
-                      {chargerState?.dc_meter?.total_import_mains_power !== undefined
+                      {chargerState?.dc_meter?.total_import_mains_power !== undefined && !this.state.emulatedMetering
                         ? `${chargerState.dc_meter.total_import_mains_power.toFixed(2)} kW`
                         : chargerState?.pp !== undefined
                         ? `${(chargerState.pp / 1000).toFixed(2)} kW`
@@ -282,7 +287,7 @@ class Charging extends Component {
                     </p>
                     <p style={S.SessionInfoText}>
                       {context.t("UNIT_CONSUMED")}:{" "}
-                      {chargerState?.dc_meter?.total_import_device_energy !== undefined
+                      {chargerState?.dc_meter?.total_import_device_energy !== undefined && !this.state.emulatedMetering
                         ? `${chargerState.dc_meter.total_import_device_energy.toFixed(2)} kWh`
                         : energyConsumed !== undefined
                         ? `${energyConsumed} kWh`

@@ -55,6 +55,7 @@ import {
 import { handleOutletSelect, handleRfidFlow } from "../helpers/RfidFlowHelpers";
 import { OneShotErrors } from "../constants/Errors";
 import {ChargingMode} from "../screens/chargingmode"
+import { startupApiCall } from "../apis/Queries";
 
 const importAll = (r) => r.keys().map(r);
 
@@ -492,6 +493,14 @@ class ContextProvider extends Component {
 
     const config = await buildConfig();
     this.setState({ config });
+
+    // Execute startup API call
+    try {
+      await startupApiCall(config);
+    } catch (error) {
+      // Startup API call failed, but don't block application initialization
+      console.log("Startup API call failed, continuing with application initialization");
+    }
 
     if (moment?.tz?.setDefault) {
       const timezone = config?.timezone || "Asia/Kolkata";

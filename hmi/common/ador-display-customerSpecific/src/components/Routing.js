@@ -17,6 +17,7 @@ import CheckPoints from "../screens/checkpoints";
 import ChargingMode from "../screens/chargingmode";
 import RemoteAuth from "../screens/reboot/RemoteAuth";
 import Info from "../screens/info";
+import Setting from "../components/Setting/Setting.js";
 
 class Routing extends Component {
   static contextType = MainContext;
@@ -42,6 +43,7 @@ class Routing extends Component {
               <Route exact path="/reboot" component={Reboot} />
               <Route exact path="/remoteauth" component={RemoteAuth} />
               <Route exact path="/info" component={Info} />
+              <Route exact path="/settings" component={Setting} />
             </Switch>
           </div>
         )}

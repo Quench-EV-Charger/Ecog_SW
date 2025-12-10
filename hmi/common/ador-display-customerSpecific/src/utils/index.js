@@ -322,6 +322,24 @@ export const getallCapsIdTag = async (API) => {
   }
 }
 
+export const getEmulatedMetering = async (API) => {
+  if (!API) return false; 
+  
+  const endpoint = `${API}/ocpp-client/config`;
+  const errorLog = "getting /ocpp-client/config failed";
+
+  try {
+    let config = await httpGet(endpoint, errorLog);
+    if (config?.emulatedMetering)
+      return true
+    else
+      return false;
+  }catch (error) {
+    console.error("Error fetching emulatedMetering from OCPP config:", error);
+    return false;
+  }
+}
+
 
 // Helper function to extract reservations from API response
 const extractReservations = (apiResponse) => {

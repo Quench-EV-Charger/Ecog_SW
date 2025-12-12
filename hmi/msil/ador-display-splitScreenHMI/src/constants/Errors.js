@@ -6,6 +6,9 @@ export const Errors = {
   outlet_temp: "OUTLET_TEMP", // from safety_tripped_io_src // TODO: Do we still need this?
   cab_temp: "CAB_TEMP", // from safety_tripped_io_src
   communication_error: "COMMUNICATION_ERROR", // handled internally
+  imdFaultyErr_controller1: "IMD_FAULTY_ERR_CONTROLLER1", // from safety_tripped_io_src
+  imdFaultyErr_controller2: "IMD_FAULTY_ERR_CONTROLLER2", // from safety_tripped_io_src
+  ac_em_fail: "AC_EM_FAIL", // from safety_tripped_io_src
 };
 
 export const OneShotErrors = {

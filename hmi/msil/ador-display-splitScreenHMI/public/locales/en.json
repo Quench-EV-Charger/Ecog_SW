@@ -139,5 +139,8 @@
   "MANUFACTURER":"Ador Digatron Pvt Ltd, Pune India",
   "AUTOCHARGE_IN_PROGRESS": "<bold>Autocharge in progress ...</bold>",
   "RESERVATION_DETAILS": "RESERVATION ALERT",
-  "RESERVATION_MESSAGE": ""
+  "RESERVATION_MESSAGE": "",
+  "IMD_FAULTY_ERR_CONTROLLER1": "IMD Faulty Error - Controller 1",
+  "IMD_FAULTY_ERR_CONTROLLER2": "IMD Faulty Error - Controller 2",
+  "AC_EM_FAIL": "AC Energy Meter Failure"
 }

@@ -12,7 +12,7 @@ import Spinner from "../components/Spinner";
 import MainContext from "./MainContext";
 import { RfidSuffix, ChargingModes } from "../constants/constants";
 import AlertBox from "../components/AlertBox";
-
+import RemoteStartPopup from "../components/RemoteStartPopup";
 
 import {
   buildConfig,
@@ -125,7 +125,13 @@ class ContextProvider extends Component {
     isGunOneSpinner: true,
     isGunTwoSpinner: true,
     setIsGunSpinnerTwo: (isGunTwoSpinner) => this.setState({isGunTwoSpinner}),
-    setIsGunSpinnerOne: (isGunOneSpinner) => this.setState({isGunOneSpinner})
+    setIsGunSpinnerOne: (isGunOneSpinner) => this.setState({isGunOneSpinner}),
+    // Remote Start Popup state
+    remoteStartPopupGun1: false,
+    remoteStartPopupGun2: false,
+    connectionTimeOut: 60,
+    showRemoteStartPopup: (gunNumber) => this.showRemoteStartPopup(gunNumber),
+    hideRemoteStartPopup: (gunNumber) => this.hideRemoteStartPopup(gunNumber)
   };
 
   setupCache = async () => {
@@ -370,6 +376,9 @@ class ContextProvider extends Component {
         });
       }
       this.syncSessionToLocalDb(chargerState);
+
+      // Check if remote start popup gun is now plugged
+      this.checkRemoteStartGunPlugged();
     } catch (err) {
       console.error("Error on state polling:", err);
     }
@@ -558,6 +567,21 @@ class ContextProvider extends Component {
     // check if there is an outlet just authenticated now and if so clear the previous session for that user
     const nowAuthenticatedOne = getTheOneAuthenticated(prevState.chargerState, chargerState); // prettier-ignore
     if (nowAuthenticatedOne) deleteSession(String(nowAuthenticatedOne?.outlet),String(nowAuthenticatedOne?.user));
+
+    // Remote Start Popup: Detect when outlet becomes authorized but gun is not plugged
+    // This handles RemoteStartTransaction from OCPP
+    if (nowAuthenticatedOne) {
+      const isGunPlugged = nowAuthenticatedOne.pilot > 0 && nowAuthenticatedOne.pilot !== 7;
+      if (!isGunPlugged) {
+        // Gun not plugged, show remote start popup
+        console.log("Remote start detected - showing popup for outlet:", nowAuthenticatedOne.outlet);
+        this.showRemoteStartPopup(nowAuthenticatedOne.outlet);
+        // Navigate to home screen to see the popup
+        if (path !== "/") {
+          this.state.changePath("/");
+        }
+      }
+    }
 
     if (this.state.config?.isRfidFlow) {
       const prevPreparingOutletsIds = prevState.preparingOutletsIds;
@@ -871,6 +895,47 @@ class ContextProvider extends Component {
       isComboMode && chargingMode > 0 && resetCombo(API);
       return errorObjReturn;
     }
+
+    // ErrorObj: added IMD Faulty Error Controller 1 check
+    const isImdFaultyErr_1 =
+      chargerState &&
+      Array.isArray(chargerState) &&
+      chargerState[0] &&
+      chargerState[0].errorObj?.imdFaultyErr_controller1;
+
+    if (isImdFaultyErr_1) {
+      this.setState({ imdFaultyErr_controller1: true });
+    } else {
+      this.setState({ imdFaultyErr_controller1: false });
+    }
+
+    // ErrorObj: added IMD Faulty Error Controller 2 check
+    const isImdFaultyErr_2 =
+      chargerState &&
+      Array.isArray(chargerState) &&
+      chargerState[1] &&
+      chargerState[1].errorObj?.imdFaultyErr_controller2;
+
+    if (isImdFaultyErr_2) {
+      this.setState({ imdFaultyErr_controller2: true });
+    } else {
+      this.setState({ imdFaultyErr_controller2: false });
+    }
+
+    // ErrorObj: added AC Energy Meter Failure check for both outlets
+    const isAcEnergyMeterFailure =
+      chargerState &&
+      Array.isArray(chargerState) &&
+      (
+        (chargerState[0] && chargerState[0].errorObj?.ac_em_fail) ||
+        (chargerState[1] && chargerState[1].errorObj?.ac_em_fail)
+      );
+
+    if (isAcEnergyMeterFailure) {
+      this.setState({ acEnergyMeterFailure: true });
+    } else {
+      this.setState({ acEnergyMeterFailure: false });
+    }
     return errorObjReturn;
   };    
 
@@ -1023,7 +1088,65 @@ class ContextProvider extends Component {
     setTimeout(() => this.setState({ oneShotError: {} }), 5000);
     return;
   };
-  
+
+  // Remote Start Popup methods
+  showRemoteStartPopup = (gunNumber) => {
+    console.log(`Showing remote start popup for gun ${gunNumber}`);
+    if (gunNumber === 1 || gunNumber === "1") {
+      this.setState({ remoteStartPopupGun1: true });
+    } else if (gunNumber === 2 || gunNumber === "2") {
+      this.setState({ remoteStartPopupGun2: true });
+    }
+  };
+
+  hideRemoteStartPopup = (gunNumber) => {
+    console.log(`Hiding remote start popup for gun ${gunNumber}`);
+    if (gunNumber === 1 || gunNumber === "1") {
+      this.setState({ remoteStartPopupGun1: false });
+    } else if (gunNumber === 2 || gunNumber === "2") {
+      this.setState({ remoteStartPopupGun2: false });
+    }
+  };
+
+  // Check if gun is plugged and handle routing for remote start
+  checkRemoteStartGunPlugged = () => {
+    const { chargerState, remoteStartPopupGun1, remoteStartPopupGun2, changePath } = this.state;
+
+    // Check Gun 1
+    if (remoteStartPopupGun1) {
+      const gun1State = chargerState.find((o) => o.outlet == "1" || o.outlet == 1);
+      if (gun1State && gun1State.pilot > 0 && gun1State.pilot !== 7) {
+        // Gun is plugged, hide popup and route to authorize/checkpoints
+        this.hideRemoteStartPopup(1);
+        localStorage.setItem("selectedOutlet", gun1State.outlet);
+        localStorage.setItem("user", gun1State.user);
+        this.setState({ selectedState: gun1State });
+        if (isHandshaking(gun1State)) {
+          changePath("/checkpoints");
+        } else if (gun1State.auth) {
+          changePath("/authorize");
+        }
+      }
+    }
+
+    // Check Gun 2
+    if (remoteStartPopupGun2) {
+      const gun2State = chargerState.find((o) => o.outlet == "2" || o.outlet == 2);
+      if (gun2State && gun2State.pilot > 0 && gun2State.pilot !== 7) {
+        // Gun is plugged, hide popup and route to authorize/checkpoints
+        this.hideRemoteStartPopup(2);
+        localStorage.setItem("selectedOutlet", gun2State.outlet);
+        localStorage.setItem("user", gun2State.user);
+        this.setState({ selectedState: gun2State });
+        if (isHandshaking(gun2State)) {
+          changePath("/checkpoints");
+        } else if (gun2State.auth) {
+          changePath("/authorize");
+        }
+      }
+    }
+  };
+
   displayVCCUPopup = () => {
     if (this.state.chargerState.length !== 0 && Array.isArray(this.state.chargerState)) {
       if (this.state?.chargerState[1]) {
@@ -1157,6 +1280,10 @@ class ContextProvider extends Component {
             !this.state.errTogglingTimeout
           }
           onClose={() => this.setState({ oneShotError: {} })}
+        />
+        <RemoteStartPopup
+          gun1Shown={this.state.remoteStartPopupGun1}
+          gun2Shown={this.state.remoteStartPopupGun2}
         />
         <InterruptBoundary {...interruptProps}>
           {this.props.children}

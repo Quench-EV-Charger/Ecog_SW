@@ -8,6 +8,8 @@ import SessionsFooter from "../../components/Sessions/SessionsFooter";
 import EmergencyStop from "../../components/EmergencyStop";
 import PowerFailure from "../../components/PowerFailure";
 import IMDFault from "../../components/IMDFault";
+import IMDFaultyErr from "../../components/IMDFaultyErr";
+import ACEnergyMeterFailure from "../../components/ACEnergyMeterFailure";
 import Session from "../../components/Sessions/Session";
 import AlertBox from "../../components/AlertBox"
 import { Button } from "antd";
@@ -369,7 +371,19 @@ class Sessions extends Component {
                 }
                 gun1HasIMD={Boolean(context?.chargerState?.[0]?.errorObj?.imdResistanceErr_1)}
                 gun2HasIMD={Boolean(context?.chargerState?.[1]?.errorObj?.imdResistanceErr_2)}
-              />            <AlertBox
+              />
+            <IMDFaultyErr
+              shown={Boolean(
+                context?.imdFaultyErr_controller1 ||
+                context?.imdFaultyErr_controller2
+              )}
+              controller1HasIMD={Boolean(context?.imdFaultyErr_controller1)}
+              controller2HasIMD={Boolean(context?.imdFaultyErr_controller2)}
+            />
+            <ACEnergyMeterFailure
+              shown={Boolean(context?.acEnergyMeterFailure)}
+            />
+            <AlertBox
               iconType="warning"
               display={context.showHandshakeErrorModal && context.selectedState?.pilot > 0}
               onClose={() => context.setShowHandshakeErrorModal(false)}

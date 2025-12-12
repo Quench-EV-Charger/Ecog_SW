@@ -823,7 +823,10 @@ export const isErrorStillValid = (
         outletState?.errorObj?.outletTemperatureErr ||
         outletState?.errorObj?.cabinetTemperatureErr ||
         outletState?.errorObj?.powerModuleCommErr_1 ||
-        outletState?.errorObj?.powerModuleCommErr_2)
+        outletState?.errorObj?.powerModuleCommErr_2 ||
+        outletState?.errorObj?.imdFaultyErr_controller1 ||
+        outletState?.errorObj?.imdFaultyErr_controller2 ||
+        outletState?.errorObj?.ac_em_fail)
     );
   } else {
     // error is from the events
@@ -1083,6 +1086,43 @@ export const checkErrors = (chargerState, chargingMode, isComboMode) => {
     isComboMode && chargingMode > 0 && resetCombo(API);
     return errorObjReturn;
   }
+
+  // ErrorObj: added imdFaultyErr_controller1 check
+  const isImdFaultyErr_controller1 =
+    chargerState &&
+    Array.isArray(chargerState) &&
+    chargerState.some(state => state?.errorObj?.imdFaultyErr_controller1);
+
+  if (isImdFaultyErr_controller1) {
+    errorObjReturn = { showAlert: true, showEStop: false, errorCode: "IMD_FAULTY_ERR_CONTROLLER1" }; // prettier-ignore
+    isComboMode && chargingMode > 0 && resetCombo(API);
+    return errorObjReturn;
+  }
+
+  // ErrorObj: added imdFaultyErr_controller2 check
+  const isImdFaultyErr_controller2 =
+    chargerState &&
+    Array.isArray(chargerState) &&
+    chargerState.some(state => state?.errorObj?.imdFaultyErr_controller2);
+
+  if (isImdFaultyErr_controller2) {
+    errorObjReturn = { showAlert: true, showEStop: false, errorCode: "IMD_FAULTY_ERR_CONTROLLER2" }; // prettier-ignore
+    isComboMode && chargingMode > 0 && resetCombo(API);
+    return errorObjReturn;
+  }
+
+  // ErrorObj: added ac_em_fail check
+  const isAcEmFail =
+    chargerState &&
+    Array.isArray(chargerState) &&
+    chargerState.some(state => state?.errorObj?.ac_em_fail);
+
+  if (isAcEmFail) {
+    errorObjReturn = { showAlert: true, showEStop: false, errorCode: "AC_EM_FAIL" }; // prettier-ignore
+    isComboMode && chargingMode > 0 && resetCombo(API);
+    return errorObjReturn;
+  }
+
   return errorObjReturn;
 };
 

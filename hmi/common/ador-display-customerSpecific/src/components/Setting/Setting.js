@@ -1,4 +1,5 @@
 import React, { useContext, useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import MainContext from "../../providers/MainContext";
 import { 
   FaCog, 
@@ -627,21 +628,38 @@ const DropdownSetting = React.memo(
     const theme = "light"
     const isDark = theme === "dark";
     const [isOpen, setIsOpen] = useState(false);
+    const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
     const dropdownRef = React.useRef(null);
+    const inputRef = React.useRef(null);
 
     // Close dropdown when clicking outside
     React.useEffect(() => {
       const handleClickOutside = (event) => {
-        if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        if (dropdownRef.current && !dropdownRef.current.contains(event.target) && 
+            inputRef.current && !inputRef.current.contains(event.target)) {
           setIsOpen(false);
         }
       };
 
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
-      };
-    }, []);
+      if (isOpen) {
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+          document.removeEventListener('mousedown', handleClickOutside);
+        };
+      }
+    }, [isOpen]);
+
+    // Update dropdown position when opening
+    React.useEffect(() => {
+      if (isOpen && inputRef.current) {
+        const rect = inputRef.current.getBoundingClientRect();
+        setDropdownPosition({
+          top: rect.bottom + window.scrollY + 4,
+          left: rect.left + window.scrollX,
+          width: rect.width
+        });
+      }
+    }, [isOpen]);
 
     const dropdownStyles = React.useMemo(() => ({
       settingRow: {
@@ -706,15 +724,15 @@ const DropdownSetting = React.memo(
         transform: "translateY(-1px)"
       },
       dropdown: {
-        position: 'absolute',
-        top: 'calc(100% + 4px)',
-        left: 0,
-        right: 0,
+        position: 'fixed',
+        top: `${dropdownPosition.top}px`,
+        left: `${dropdownPosition.left}px`,
+        width: `${dropdownPosition.width}px`,
         backgroundColor: isDark ? '#2a2a2a' : '#ffffff',
         border: isDark ? '2px solid rgba(136, 171, 226, 0.4)' : '2px solid rgba(255, 0, 0, 0.4)',
         borderRadius: '8px',
-        boxShadow: isDark ? '0 8px 24px rgba(0, 0, 0, 0.3)' : '0 8px 24px rgba(0, 0, 0, 0.15)',
-        zIndex: 1000,
+        boxShadow: isDark ? '0 8px 24px rgba(0, 0, 0, 0.5)' : '0 8px 24px rgba(0, 0, 0, 0.3)',
+        zIndex: 10000,
         maxHeight: '200px',
         overflowY: 'auto',
         animation: 'dropdownSlide 0.2s ease-out'
@@ -738,7 +756,7 @@ const DropdownSetting = React.memo(
         fontSize: '14px',
         fontWeight: 'bold'
       }
-    }), [isDark, color, disabled, isOpen]);
+    }), [isDark, color, disabled, isOpen, dropdownPosition]);
 
     const handleSelect = (option) => {
       onValueChange(option);
@@ -746,90 +764,95 @@ const DropdownSetting = React.memo(
     };
 
     return (
-      <div style={dropdownStyles.settingRow}>
-        <div style={dropdownStyles.labelContainer}>
-          <span style={dropdownStyles.label}>
-            {icon && React.createElement(icon, { style: { marginRight: "8px", color: color || (isDark ? "rgb(136 171 226)" : "#ff0000") } })}
-            {label}
-          </span>
-          {description && (
-            <span style={dropdownStyles.description}>{description}</span>
-          )}
-        </div>
-
-        <div style={dropdownStyles.dropdownContainer} ref={dropdownRef}>
-          <div
-            style={{
-              ...dropdownStyles.inputField,
-              backgroundColor: disabled ? (isDark ? '#2a2a2a' : '#f0f0f0') : dropdownStyles.inputField.backgroundColor,
-              cursor: disabled ? 'not-allowed' : 'pointer',
-              opacity: disabled ? 0.6 : 1
-            }}
-            onClick={() => !disabled && setIsOpen(!isOpen)}
-            onMouseEnter={(e) => {
-              if (!disabled) {
-                Object.assign(e.target.style, dropdownStyles.inputFieldHover);
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!disabled) {
-                Object.assign(e.target.style, dropdownStyles.inputField);
-              }
-            }}
-          >
-            <span className="setting-value-transition" style={{ color: value ? (isDark ? '#f5f5f5' : '#000000') : '#888' }}>
-              {(() => {
-                if (!value) return 'Select an option...';
-                // Handle both string values and object options with value/label
-                const selectedOption = options.find(opt => 
-                  typeof opt === 'string' ? opt === value : opt.value === value
-                );
-                return selectedOption 
-                  ? (typeof selectedOption === 'string' ? selectedOption : selectedOption.label)
-                  : value;
-              })()}
+      <>
+        <div style={dropdownStyles.settingRow}>
+          <div style={dropdownStyles.labelContainer}>
+            <span style={dropdownStyles.label}>
+              {icon && React.createElement(icon, { style: { marginRight: "8px", color: color || (isDark ? "rgb(136 171 226)" : "#ff0000") } })}
+              {label}
             </span>
-            <span style={dropdownStyles.arrow}>
-              ▼
-            </span>
+            {description && (
+              <span style={dropdownStyles.description}>{description}</span>
+            )}
           </div>
 
-          {isOpen && !disabled && (
-            <div className="dropdown-transition" style={dropdownStyles.dropdown}>
-              {options.map((option, index) => {
-                // Handle both string options and object options with value/label
-                const optionValue = typeof option === 'string' ? option : option.value;
-                const optionLabel = typeof option === 'string' ? option : option.label;
-                const isLast = index === options.length - 1;
-                
-                return (
-                  <div
-                    key={index}
-                    style={{
-                      ...dropdownStyles.dropdownItem,
-                      ...(isLast ? dropdownStyles.dropdownItemLast : {}),
-                      backgroundColor: value === optionValue ? (isDark ? 'rgba(136, 171, 226, 0.2)' : 'rgba(255, 0, 0, 0.1)') : 'transparent'
-                    }}
-                    onClick={() => handleSelect(optionValue)}
-                    onMouseEnter={(e) => {
-                      if (value !== optionValue) {
-                        e.target.style.backgroundColor = isDark ? 'rgba(136, 171, 226, 0.1)' : 'rgba(255, 0, 0, 0.05)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (value !== optionValue) {
-                        e.target.style.backgroundColor = 'transparent';
-                      }
-                    }}
-                  >
-                    {optionLabel}
-                  </div>
-                );
-              })}
+          <div style={dropdownStyles.dropdownContainer}>
+            <div
+              ref={inputRef}
+              style={{
+                ...dropdownStyles.inputField,
+                backgroundColor: disabled ? (isDark ? '#2a2a2a' : '#f0f0f0') : dropdownStyles.inputField.backgroundColor,
+                cursor: disabled ? 'not-allowed' : 'pointer',
+                opacity: disabled ? 0.6 : 1,
+                width: '100%'
+              }}
+              onClick={() => !disabled && setIsOpen(!isOpen)}
+              onMouseEnter={(e) => {
+                if (!disabled) {
+                  Object.assign(e.target.style, dropdownStyles.inputFieldHover);
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!disabled) {
+                  Object.assign(e.target.style, dropdownStyles.inputField);
+                }
+              }}
+            >
+              <span className="setting-value-transition" style={{ color: (value !== undefined && value !== null) ? (isDark ? '#f5f5f5' : '#000000') : '#888' }}>
+                {(() => {
+                  if (value === undefined || value === null) return 'Select an option...';
+                  // Handle both string values and object options with value/label
+                  const selectedOption = options.find(opt => 
+                    typeof opt === 'string' ? opt === value : opt.value === value
+                  );
+                  return selectedOption 
+                    ? (typeof selectedOption === 'string' ? selectedOption : selectedOption.label)
+                    : value;
+                })()}
+              </span>
+              <span style={dropdownStyles.arrow}>
+                ▼
+              </span>
             </div>
-          )}
+          </div>
         </div>
-      </div>
+
+        {isOpen && !disabled && createPortal(
+          <div ref={dropdownRef} className="dropdown-transition" style={dropdownStyles.dropdown}>
+            {options.map((option, index) => {
+              // Handle both string options and object options with value/label
+              const optionValue = typeof option === 'string' ? option : option.value;
+              const optionLabel = typeof option === 'string' ? option : option.label;
+              const isLast = index === options.length - 1;
+              
+              return (
+                <div
+                  key={index}
+                  style={{
+                    ...dropdownStyles.dropdownItem,
+                    ...(isLast ? dropdownStyles.dropdownItemLast : {}),
+                    backgroundColor: value === optionValue ? (isDark ? '#444444' : '#f0f0f0') : 'transparent'
+                  }}
+                  onClick={() => handleSelect(optionValue)}
+                  onMouseEnter={(e) => {
+                    if (value !== optionValue) {
+                      e.target.style.backgroundColor = isDark ? '#3a3a3a' : '#e8e8e8';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (value !== optionValue) {
+                      e.target.style.backgroundColor = 'transparent';
+                    }
+                  }}
+                >
+                  {optionLabel}
+                </div>
+              );
+            })}
+          </div>,
+          document.body
+        )}
+      </>
     );
   },
   (prevProps, nextProps) => {
@@ -1044,6 +1067,7 @@ const TabNavigation = React.memo(({
   onHardwareTabClick, 
   onOcppTabClick,
   onOutletTabClick,
+  onHmiTabClick,
   tabContainerStyle,
   tabStyle
 }) => {
@@ -1087,6 +1111,19 @@ const TabNavigation = React.memo(({
     cursor: loading ? "not-allowed" : "pointer"
   }), [activeTab, isDark, loading, tabStyle]);
 
+  const hmiTabStyle = React.useMemo(() => ({
+    ...tabStyle,
+    backgroundColor: activeTab === "hmi" 
+      ? (isDark ? "rgb(136 171 226)" : "#ff0000")
+      : "transparent",
+    color: activeTab === "hmi" 
+      ? "#ffffff" 
+      : (isDark ? "rgb(136 171 226)" : "#ff0000"),
+    borderColor: isDark ? "rgb(136 171 226)" : "#ff0000",
+    opacity: loading ? 0.5 : 1,
+    cursor: loading ? "not-allowed" : "pointer"
+  }), [activeTab, isDark, loading, tabStyle]);
+
   return (
     <div style={tabContainerStyle}>
       <button
@@ -1112,6 +1149,14 @@ const TabNavigation = React.memo(({
       >
         <FaPlug style={{ marginRight: "8px" }} />
         Outlet Config
+      </button>
+      <button
+        onClick={onHmiTabClick}
+        disabled={loading}
+        style={hmiTabStyle}
+      >
+        <FaCog style={{ marginRight: "8px" }} />
+        HMI Config
       </button>
     </div>
   );
@@ -1201,6 +1246,7 @@ const Setting = React.memo(() => {
   const [softwareConfig, setSoftwareConfig] = useState({});
   const [hardwareConfig, setHardwareConfig] = useState({});
   const [outletConfig, setOutletConfig] = useState({});
+  const [hmiConfig, setHmiConfig] = useState({});
   const [rawConfig, setRawConfig] = useState({});
   
   // Configuration validation state for cross-endpoint comparison
@@ -1230,6 +1276,7 @@ const Setting = React.memo(() => {
     'emulatedMetering': { source: 'ocpp', path: 'emulatedMetering' },
     'underVoltageThreshold': { source: 'ocpp', path: 'underVoltageThreshold' },
     'overVoltageThreshold': { source: 'ocpp', path: 'overVoltageThreshold' },
+    'QRHashStr': { source: 'ocpp', path: 'QRHashStr' },
     'acceptRemoteStartOnPreparingOnly': { source: 'ocpp', path: 'acceptRemoteStartOnPreparingOnly' },
 
     
@@ -1243,6 +1290,10 @@ const Setting = React.memo(() => {
     'Convertor Type': { source: 'userconfig', path: 'ccs.intcc.conv' },
     'imd': { source: 'userconfig', path: 'ccs.stack.imd' },
     'no of outlet': { source: 'outletConfig', path: 'ccs.no_of_outlet' },
+    
+    // HMI Config keys
+    'comboMode': { source: 'hmi', path: 'comboMode' },
+    'timezone': { source: 'hmi', path: 'timezone' },
   };
 
   // Helper function to get nested value from object using dot notation
@@ -1332,12 +1383,13 @@ const Setting = React.memo(() => {
     setError(null);
 
     try {
-      // Fetch configurations from all three endpoints in parallel
-      const [ocppResponse, userConfig100Response, userConfig101Response, outletResponse] = await Promise.all([
+      // Fetch configurations from all endpoints in parallel
+      const [ocppResponse, userConfig100Response, userConfig101Response, outletResponse, hmiResponse] = await Promise.all([
         fetch(`${apiUrl}/ocpp-client/config`),
         fetch(`http://10.20.27.100/api/system/userconfig`),
         fetch(`http://10.20.27.101/api/system/userconfig`),
-        fetch(`${apiUrl}/outlets`)
+        fetch(`${apiUrl}/outlets`),
+        fetch(`http://10.20.27.50:3001/hmi/config`)
       ]);
 
       if (!ocppResponse.ok) {
@@ -1354,10 +1406,18 @@ const Setting = React.memo(() => {
       let userConfig100Data = await userConfig100Response.json();
       let userConfig101Data = await userConfig101Response.json();
       let outletData = null;
+      let hmiData = null;
+      
       if (outletResponse && outletResponse.ok) {
         outletData = await outletResponse.json();
       } else {
         console.error('Failed to GET outlets:', (outletResponse ? outletResponse.status : undefined), (outletResponse ? outletResponse.statusText : undefined));
+      }
+
+      if (hmiResponse && hmiResponse.ok) {
+        hmiData = await hmiResponse.json();
+      } else {
+        console.warn('Failed to GET HMI config:', (hmiResponse ? hmiResponse.status : undefined), (hmiResponse ? hmiResponse.statusText : undefined));
       }
       
       // Add default dlbMode if not present in userconfig responses and update backend
@@ -1378,8 +1438,8 @@ const Setting = React.memo(() => {
       // Validate configurations across endpoints
       validateConfigurationsAcrossEndpoints(allConfigs);
       
-      // Categorize configuration from both sources (using 100 as primary)
-      categorizeConfiguration(ocppData, userConfig100Data);
+      // Categorize configuration from all sources (using 100 as primary)
+      categorizeConfiguration(ocppData, userConfig100Data, hmiData);
        // Populate outletConfig from GET /outlets
       const outletCount = Array.isArray(outletData) ? outletData.length : (((outletData && outletData.length) ? outletData.length : 0));
       const noOfOutletDisplay = outletCount <= 1 ? 1 : 2;
@@ -1391,14 +1451,15 @@ const Setting = React.memo(() => {
         }
       });
 
-      // Extend raw config with outlet data
-      setRawConfig(prev => ({ ...prev, outlet: outletData }));
+      // Extend raw config with outlet and HMI data
+      setRawConfig(prev => ({ ...prev, outlet: outletData, hmi: hmiData }));
     } catch (err) {
        console.error('Error fetching configuration:', err);
        // Clear any existing configuration on error
        setRawConfig({});
        setSoftwareConfig({});
        setHardwareConfig({});
+       setHmiConfig({});
        setConfigValidation({});
        setValidationErrors({});
     } finally {
@@ -1412,12 +1473,13 @@ const Setting = React.memo(() => {
     setError(null);
 
     try {
-      // Fetch configurations from all three endpoints in parallel
-      const [ocppResponse, userConfig100Response, userConfig101Response, outletResponse] = await Promise.all([
+      // Fetch configurations from all endpoints in parallel
+      const [ocppResponse, userConfig100Response, userConfig101Response, outletResponse, hmiResponse] = await Promise.all([
         fetch(`${apiUrl}/ocpp-client/config`),
         fetch(`http://10.20.27.100/api/system/userconfig`),
         fetch(`http://10.20.27.101/api/system/userconfig`),
-        fetch(`${apiUrl}/outlets`)
+        fetch(`${apiUrl}/outlets`),
+        fetch(`http://10.20.27.50:3001/hmi/config`)
       ]);
 
       if (!ocppResponse.ok) {
@@ -1434,10 +1496,18 @@ const Setting = React.memo(() => {
       let userConfig100Data = await userConfig100Response.json();
       let userConfig101Data = await userConfig101Response.json();
       let outletData = null;
+      let hmiData = null;
+      
       if (outletResponse && outletResponse.ok) {
         outletData = await outletResponse.json();
       } else {
         console.error('Failed to GET outlets:', (outletResponse ? outletResponse.status : undefined), (outletResponse ? outletResponse.statusText : undefined));
+      }
+
+      if (hmiResponse && hmiResponse.ok) {
+        hmiData = await hmiResponse.json();
+      } else {
+        console.warn('Failed to GET HMI config:', (hmiResponse ? hmiResponse.status : undefined), (hmiResponse ? hmiResponse.statusText : undefined));
       }
       
       // Add default dlbMode if not present in userconfig responses and update backend
@@ -1459,8 +1529,8 @@ const Setting = React.memo(() => {
       // Validate configurations across endpoints
       validateConfigurationsAcrossEndpoints(allConfigs);
       
-      // Categorize configuration from both sources (using 100 as primary)
-      categorizeConfiguration(ocppData, userConfig100Data);
+      // Categorize configuration from all sources (using 100 as primary)
+      categorizeConfiguration(ocppData, userConfig100Data, hmiData);
 
             // Populate outletConfig from GET /outlets
       const outletCount = Array.isArray(outletData) ? outletData.length : (((outletData && outletData.length) ? outletData.length : 0));
@@ -1606,6 +1676,56 @@ const Setting = React.memo(() => {
     500
   );
 
+  const { debouncedCallback: debouncedUpdateHmiConfig } = useDebounce(
+    async (key, value) => {
+      const mapping = configKeyMapping[key];
+      if (!mapping || mapping.source !== 'hmi') {
+        console.error('Invalid HMI key:', key);
+        return;
+      }
+
+      setLoading(true);
+      setHasChanges(true);
+      setLastUpdateSuccess(false);
+
+      try {
+        // Prefetch latest HMI config
+        const getResponse = await fetch(`http://10.20.27.50:3001/hmi/config`);
+        const latestHmiConfig = getResponse && getResponse.ok ? await getResponse.json() : (rawConfig.hmi || {});
+        const updatedHmiConfig = JSON.parse(JSON.stringify(latestHmiConfig));
+        
+        // Set the nested value
+        setNestedValue(updatedHmiConfig, mapping.path, value);
+
+        // Update HMI config
+        const response = await fetch(`http://10.20.27.50:3001/hmi/config`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(updatedHmiConfig),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        setLastUpdateSuccess(true);
+        console.log('Successfully updated HMI configuration');
+        
+        // Refresh configuration after successful update
+        await fetchAllConfigurations();
+      } catch (err) {
+        console.error('Error updating HMI configuration:', err);
+        setError(err.message);
+        setLastUpdateSuccess(false);
+      } finally {
+        setLoading(false);
+      }
+    },
+    500
+  );
+
 
   // Update OCPP configuration (original function for immediate calls)
   const updateOcppConfig = useCallback(async (key, value) => {
@@ -1724,6 +1844,54 @@ const Setting = React.memo(() => {
     setLoading(false);
   }
 }, [rawConfig, fetchAllConfigurations]);
+
+  // Update HMI configuration
+  const updateHmiConfig = useCallback(async (key, value) => {
+    const mapping = configKeyMapping[key];
+    if (!mapping || mapping.source !== 'hmi') {
+      console.error('Invalid HMI key:', key);
+      return;
+    }
+
+    setLoading(true);
+    setHasChanges(true);
+    setLastUpdateSuccess(false);
+
+    try {
+      // Prefetch latest HMI config
+      const getResponse = await fetch(`http://10.20.27.50:3001/hmi/config`);
+      const latestHmiConfig = getResponse && getResponse.ok ? await getResponse.json() : (rawConfig.hmi || {});
+      const updatedHmiConfig = JSON.parse(JSON.stringify(latestHmiConfig));
+      
+      // Set the nested value
+      setNestedValue(updatedHmiConfig, mapping.path, value);
+
+      // Update HMI config
+      const response = await fetch(`http://10.20.27.50:3001/hmi/config`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updatedHmiConfig),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      setLastUpdateSuccess(true);
+      console.log('Successfully updated HMI configuration');
+      
+      // Refresh configuration after successful update
+      await fetchAllConfigurations();
+    } catch (err) {
+      console.error('Error updating HMI configuration:', err);
+      setError(err.message);
+      setLastUpdateSuccess(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [rawConfig, fetchAllConfigurations]);
 
 
   // Synchronized update function for keys that need to be kept in sync
@@ -1989,8 +2157,8 @@ const Setting = React.memo(() => {
     }
   }, []);
 
-  // Categorize configuration from both API sources
-  const categorizeConfiguration = React.useCallback((ocppConfig, userConfig) => {
+  // Categorize configuration from all API sources
+  const categorizeConfiguration = React.useCallback((ocppConfig, userConfig, hmiConfigData) => {
     const displayConfig = {};
     
     // Process each configured key
@@ -2001,6 +2169,8 @@ const Setting = React.memo(() => {
         value = getNestedValue(ocppConfig, mapping.path);
       } else if (mapping.source === 'userconfig' && userConfig) {
         value = getNestedValue(userConfig, mapping.path);
+      } else if (mapping.source === 'hmi' && hmiConfigData) {
+        value = getNestedValue(hmiConfigData, mapping.path);
       }
       
       if (value !== undefined) {
@@ -2021,8 +2191,13 @@ const Setting = React.memo(() => {
       configKeyMapping[key].source === 'userconfig'
     );
 
+    const hmiKeys = Object.keys(configKeyMapping).filter(key => 
+      configKeyMapping[key].source === 'hmi'
+    );
+
     const ocppDisplay = {};
     const hardwareDisplay = {};
+    const hmiDisplay = {};
 
     ocppKeys.forEach(key => {
       if (displayConfig[key]) {
@@ -2039,11 +2214,18 @@ const Setting = React.memo(() => {
       }
     });
 
+    hmiKeys.forEach(key => {
+      if (displayConfig[key]) {
+        hmiDisplay[key] = displayConfig[key];
+      }
+    });
+
     // Batch state updates to prevent multiple re-renders
     // React.startTransition(() => {
       setSoftwareConfig(ocppDisplay);
       setHardwareConfig(hardwareDisplay);
-      setRawConfig({ ocpp: ocppConfig, userconfig: userConfig });
+      setHmiConfig(hmiDisplay);
+      setRawConfig({ ocpp: ocppConfig, userconfig: userConfig, hmi: hmiConfigData });
     // });
   }, [configKeyMapping]);
 
@@ -2151,6 +2333,50 @@ const Setting = React.memo(() => {
     }, 300); // Increased debounce time for stability
   }, [softwareConfig, debouncedUpdateOcppConfig, updateSynchronizedConfig, configKeyMapping]);
 
+  const memoizedUpdateHmiConfig = React.useCallback((key, value) => {
+    // Prevent unnecessary updates if value hasn't changed
+    const currentValue = (hmiConfig && hmiConfig[key]) ? hmiConfig[key].value : undefined;
+    if (currentValue === value) {
+      console.log(`Skipping update for ${key} - value unchanged:`, value);
+      return;
+    }
+
+    console.log(`Updating HMI config: ${key} = ${value}`);
+    
+    // Optimistically update the UI state immediately
+    // React.startTransition(() => {
+      setHmiConfig(prev => ({
+        ...prev,
+        [key]: { ...prev[key], value }
+      }));
+    // });
+
+    // Debounce the actual API call to prevent rapid successive calls
+    const updateKey = `hmi_${key}`;
+    if (updateTimeouts.current[updateKey]) {
+      clearTimeout(updateTimeouts.current[updateKey]);
+    }
+    
+    updateTimeouts.current[updateKey] = setTimeout(async () => {
+      try {
+        // Use debounced API call for better performance
+        debouncedUpdateHmiConfig(key, value);
+        console.log(`Successfully updated HMI config: ${key}`);
+      } catch (error) {
+        console.error(`Failed to update HMI config ${key}:`, error);
+        // Revert the optimistic update on error
+        // React.startTransition(() => {
+          setHmiConfig(prev => ({
+            ...prev,
+            [key]: { ...prev[key], value: currentValue }
+          }));
+        // });
+      } finally {
+        delete updateTimeouts.current[updateKey];
+      }
+    }, 300); // Increased debounce time for stability
+  }, [hmiConfig, debouncedUpdateHmiConfig]);
+
   // Memoized callback creators for each setting
   const hardwareCallbacks = React.useMemo(() => {
     const callbacks = {};
@@ -2167,6 +2393,14 @@ const Setting = React.memo(() => {
     });
     return callbacks;
   }, [softwareConfig, memoizedUpdateOcppConfig]);
+
+  const hmiCallbacks = React.useMemo(() => {
+    const callbacks = {};
+    Object.keys(hmiConfig).forEach(key => {
+      callbacks[key] = (newValue) => memoizedUpdateHmiConfig(key, newValue);
+    });
+    return callbacks;
+  }, [hmiConfig, memoizedUpdateHmiConfig]);
 
   // Outlet callbacks are intentionally minimal because 'no of outlet' uses a specialized handler inside DynamicSetting
   const outletCallbacks = React.useMemo(() => {
@@ -2195,8 +2429,10 @@ const Setting = React.memo(() => {
     const icon = React.useMemo(() => getSettingIcon(configKey), [configKey]);
     const color = React.useMemo(() => getSettingColor(configKey), [configKey]);
     const updateFunction = React.useMemo(() => 
-      category === 'ocpp' ? memoizedUpdateOcppConfig : memoizedUpdateHardwareConfig, 
-      [category, memoizedUpdateOcppConfig, memoizedUpdateHardwareConfig]
+      category === 'ocpp' ? memoizedUpdateOcppConfig : 
+      category === 'hmi' ? memoizedUpdateHmiConfig :
+      memoizedUpdateHardwareConfig, 
+      [category, memoizedUpdateOcppConfig, memoizedUpdateHardwareConfig, memoizedUpdateHmiConfig]
     );
 
     const [dlbComboValue, setDlbComboValue] = React.useState(null);
@@ -2620,6 +2856,57 @@ const Setting = React.memo(() => {
       );
     }
 
+    if (configKey === 'comboMode') {
+      const comboModeOptions = React.useMemo(() => [
+        { value: false, label: 'Normal Mode' },
+        { value: true, label: 'DUAL VCCU mode' }
+      ], []);
+
+      return (
+        <div>
+          <DropdownSetting
+            icon={icon}
+            label={label}
+            color={color}
+            value={value}
+            onValueChange={handleValueChange}
+            options={comboModeOptions}
+          />
+          <ValidationError error={validationError} isDark={isDark} />
+        </div>
+      );
+    }
+
+    if (configKey === 'timezone') {
+      const timezoneOptions = React.useMemo(() => [
+        { value: 'Asia/Kolkata', label: 'India (Asia/Kolkata)' },
+        { value: 'Asia/Dubai', label: 'Dubai (Asia/Dubai)' },
+        { value: 'Asia/Shanghai', label: 'China (Asia/Shanghai)' },
+        { value: 'Asia/Tokyo', label: 'Japan (Asia/Tokyo)' },
+        { value: 'Asia/Singapore', label: 'Singapore (Asia/Singapore)' },
+        { value: 'Europe/London', label: 'United Kingdom (Europe/London)' },
+        { value: 'Europe/Paris', label: 'France (Europe/Paris)' },
+        { value: 'Europe/Berlin', label: 'Germany (Europe/Berlin)' },
+        { value: 'America/New_York', label: 'USA - Eastern (America/New_York)' },
+        { value: 'America/Los_Angeles', label: 'USA - Pacific (America/Los_Angeles)' },
+        { value: 'Australia/Sydney', label: 'Australia (Australia/Sydney)' }
+      ], []);
+
+      return (
+        <div>
+          <DropdownSetting
+            icon={icon}
+            label={label}
+            color={color}
+            value={value}
+            onValueChange={handleValueChange}
+            options={timezoneOptions}
+          />
+          <ValidationError error={validationError} isDark={isDark} />
+        </div>
+      );
+    }
+
     if (inputType === 'toggle') {
       return (
         <div>
@@ -2757,6 +3044,10 @@ const Setting = React.memo(() => {
     setActiveTab("outlet");
   }, []);
 
+  const handleHmiTabClick = React.useCallback(() => {
+    setActiveTab("hmi");
+  }, []);
+
   // RestartingScreen moved out and memoized above
 
   // Memoized settings list to minimize re-renders of scrollable container
@@ -2829,6 +3120,7 @@ const Setting = React.memo(() => {
           onHardwareTabClick={handleHardwareTabClick}
           onOcppTabClick={handleOcppTabClick}
           onOutletTabClick={handleOutletTabClick}
+          onHmiTabClick={handleHmiTabClick}
           tabContainerStyle={styles.tabContainer}
           tabStyle={styles.tab}
         />
@@ -2888,6 +3180,19 @@ const Setting = React.memo(() => {
                   category="outlet"
                   isDark={isDark}
                   callbacks={outletCallbacks}
+                  listStyle={styles.scrollableContent}
+                  validationErrors={validationErrors}
+                />
+              </div>
+            )}
+
+            {activeTab === "hmi" && (
+              <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                <SettingsList
+                  data={hmiConfig}
+                  category="hmi"
+                  isDark={isDark}
+                  callbacks={hmiCallbacks}
                   listStyle={styles.scrollableContent}
                   validationErrors={validationErrors}
                 />
@@ -2978,8 +3283,8 @@ const getStyles = (isDark, textColor, backgroundColor) => ({
   },
   scrollableContent: {
      flex: 1,
-     overflowY: "auto",
-     overflowX: "hidden",
+     overflowY: 'auto',
+     overflowX: 'hidden',
      paddingRight: "0.5rem",
      marginRight: "-0.5rem",
      maxHeight: "calc(83vh - 250px)",
@@ -2987,6 +3292,7 @@ const getStyles = (isDark, textColor, backgroundColor) => ({
      boxSizing: "border-box",
      scrollbarWidth: "thin",
      scrollbarColor: isDark ? "rgba(136, 171, 226, 0.5) transparent" : "rgba(255, 0, 0, 0.4) transparent",
+     position: 'relative',
      '&::-webkit-scrollbar': {
        width: "8px",
      },
@@ -3028,13 +3334,15 @@ const getStyles = (isDark, textColor, backgroundColor) => ({
     border: isDark ? "1px solid rgba(136, 171, 226, 0.2)" : "1px solid rgba(255, 0, 0, 0.15)",
     transition: "all 0.3s ease",
     position: "relative",
-    overflow: "hidden",
+    overflow: "visible",
     boxSizing: "border-box",
     maxWidth: "100%",
+    zIndex: 1,
     '&:hover': {
       transform: "translateY(-1px)",
       boxShadow: isDark ? "0 4px 15px rgba(136, 171, 226, 0.4), inset 0 0 25px rgba(136, 171, 226, 0.15)" : "0 4px 15px rgba(255, 0, 0, 0.3), inset 0 0 25px rgba(255, 0, 0, 0.1)",
       background: isDark ? "rgba(136, 171, 226, 0.08)" : "rgba(255, 0, 0, 0.12)",
+      zIndex: 100,
     },
   },
   labelContainer: {

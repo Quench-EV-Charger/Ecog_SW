@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './EVChargerKeyboard.css';
 
 const EVChargerKeyboard = ({ 
@@ -225,7 +225,6 @@ const EVChargerKeyboard = ({
         {/* Header */}
         <div className="ev-keyboard-header">
           <div className="keyboard-title">
-            <span className="keyboard-icon">⌨️</span>
             <span>EV Charger Keyboard</span>
           </div>
           <button
@@ -234,7 +233,7 @@ const EVChargerKeyboard = ({
             onClick={() => handleKeyPress('Close')}
             title="Close Keyboard"
           >
-            ✕
+            CLOSE
           </button>
         </div>
         
@@ -275,7 +274,7 @@ const EVChargerKeyboard = ({
                 onClick={() => handleKeyPress('CapsLock')}
                 title="Caps Lock"
               >
-                ⇪
+                CAPS
               </button>
               <button
                 type="button"
@@ -283,7 +282,7 @@ const EVChargerKeyboard = ({
                 onClick={() => handleKeyPress('Shift')}
                 title="Shift"
               >
-                ⇧
+                SHIFT
               </button>
             </>
           )}
@@ -325,9 +324,9 @@ const EVChargerKeyboard = ({
             onClick={() => handleKeyPress('Backspace')}
             title="Backspace"
           >
-            ⌫ Backspace
+            Backspace
           </button>
-          
+
           {inputType !== 'number' && inputType !== 'email' && (
             <button
               type="button"
@@ -338,14 +337,14 @@ const EVChargerKeyboard = ({
               Space
             </button>
           )}
-          
+
           <button
             type="button"
             className="action-btn enter-btn"
             onClick={() => handleKeyPress('Enter')}
             title="Enter"
           >
-            ↵ Enter
+            Enter
           </button>
         </div>
       </div>

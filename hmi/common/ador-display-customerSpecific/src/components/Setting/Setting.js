@@ -1262,6 +1262,55 @@ const Setting = React.memo(() => {
   // Memoize API base URL to prevent unnecessary re-renders
   const apiUrl = React.useMemo(() => (config && config.API), [config && config.API]);
 
+  // Get chargerState from context to determine active outlets
+  const chargerState = context && context.chargerState;
+
+  // Extract only outlet IDs from chargerState to avoid unnecessary re-renders
+  // chargerState updates frequently with real-time data, but outlet IDs rarely change
+  const activeOutletIds = React.useMemo(() => {
+    if (!chargerState || !Array.isArray(chargerState) || chargerState.length === 0) {
+      return null; // Will default to both outlets
+    }
+    // Extract just the outlet IDs and sort them to create a stable key
+    const ids = chargerState
+      .map(outlet => String(outlet.outlet))
+      .filter(id => id === '1' || id === '2')
+      .sort()
+      .join(',');
+    return ids || null;
+  }, [chargerState]);
+
+  // Helper function to determine active outlet endpoints from chargerState
+  // Returns object with outlet IDs as keys and their base URLs as values
+  const getActiveOutletEndpoints = useCallback(() => {
+    const endpoints = {};
+
+    if (!activeOutletIds) {
+      // Default to both outlets if chargerState is not available
+      endpoints['1'] = 'http://10.20.27.100';
+      endpoints['2'] = 'http://10.20.27.101';
+      return endpoints;
+    }
+
+    // Parse the comma-separated outlet IDs
+    const outletIds = activeOutletIds.split(',');
+    outletIds.forEach(id => {
+      if (id === '1') {
+        endpoints['1'] = 'http://10.20.27.100';
+      } else if (id === '2') {
+        endpoints['2'] = 'http://10.20.27.101';
+      }
+    });
+
+    // If no outlets found, default to both
+    if (Object.keys(endpoints).length === 0) {
+      endpoints['1'] = 'http://10.20.27.100';
+      endpoints['2'] = 'http://10.20.27.101';
+    }
+
+    return endpoints;
+  }, [activeOutletIds]);
+
   // Configuration key mapping - defines which keys to display and their API sources
   const configKeyMapping = {
     // Keys from OCPP Client API
@@ -1383,11 +1432,18 @@ const Setting = React.memo(() => {
     setError(null);
 
     try {
-      // Fetch configurations from all endpoints in parallel
+      // Determine active outlets from chargerState
+      const activeEndpoints = getActiveOutletEndpoints();
+      const hasOutlet1 = '1' in activeEndpoints;
+      const hasOutlet2 = '2' in activeEndpoints;
+
+      console.log('Active outlet endpoints:', activeEndpoints, 'hasOutlet1:', hasOutlet1, 'hasOutlet2:', hasOutlet2);
+
+      // Fetch configurations from active endpoints only
       const [ocppResponse, userConfig100Response, userConfig101Response, outletResponse, hmiResponse] = await Promise.all([
         fetch(`${apiUrl}/ocpp-client/config`),
-        fetch(`http://10.20.27.100/api/system/userconfig`),
-        fetch(`http://10.20.27.101/api/system/userconfig`),
+        hasOutlet1 ? fetch(`http://10.20.27.100/api/system/userconfig`) : Promise.resolve(null),
+        hasOutlet2 ? fetch(`http://10.20.27.101/api/system/userconfig`) : Promise.resolve(null),
         fetch(`${apiUrl}/outlets`),
         fetch(`http://10.20.27.50:3001/hmi/config`)
       ]);
@@ -1395,19 +1451,20 @@ const Setting = React.memo(() => {
       if (!ocppResponse.ok) {
         throw new Error(`OCPP Config API error! status: ${ocppResponse.status}`);
       }
-      if (!userConfig100Response.ok) {
+      // Only validate responses for active outlets
+      if (hasOutlet1 && userConfig100Response && !userConfig100Response.ok) {
         throw new Error(`SECC User Config API error! status: ${userConfig100Response.status}`);
       }
-      if (!userConfig101Response.ok) {
+      if (hasOutlet2 && userConfig101Response && !userConfig101Response.ok) {
         throw new Error(`LE User Config API error! status: ${userConfig101Response.status}`);
       }
 
       const ocppData = await ocppResponse.json();
-      let userConfig100Data = await userConfig100Response.json();
-      let userConfig101Data = await userConfig101Response.json();
+      let userConfig100Data = (hasOutlet1 && userConfig100Response) ? await userConfig100Response.json() : null;
+      let userConfig101Data = (hasOutlet2 && userConfig101Response) ? await userConfig101Response.json() : null;
       let outletData = null;
       let hmiData = null;
-      
+
       if (outletResponse && outletResponse.ok) {
         outletData = await outletResponse.json();
       } else {
@@ -1419,28 +1476,38 @@ const Setting = React.memo(() => {
       } else {
         console.warn('Failed to GET HMI config:', (hmiResponse ? hmiResponse.status : undefined), (hmiResponse ? hmiResponse.statusText : undefined));
       }
-      
-      // Add default dlbMode if not present in userconfig responses and update backend
-      userConfig100Data = await addDefaultDlbMode(userConfig100Data, 'http://10.20.27.100/api/system/userconfig');
-      userConfig101Data = await addDefaultDlbMode(userConfig101Data, 'http://10.20.27.101/api/system/userconfig');
 
-      // Add default imd if not present in userconfig responses and update backend
-      userConfig100Data = await addDefaultImd(userConfig100Data, 'http://10.20.27.100/api/system/userconfig');
-      userConfig101Data = await addDefaultImd(userConfig101Data, 'http://10.20.27.101/api/system/userconfig');
-      
-      // Store all configurations for validation
+      // Add default dlbMode if not present in userconfig responses and update backend (only for active outlets)
+      if (hasOutlet1 && userConfig100Data) {
+        userConfig100Data = await addDefaultDlbMode(userConfig100Data, 'http://10.20.27.100/api/system/userconfig');
+      }
+      if (hasOutlet2 && userConfig101Data) {
+        userConfig101Data = await addDefaultDlbMode(userConfig101Data, 'http://10.20.27.101/api/system/userconfig');
+      }
+
+      // Add default imd if not present in userconfig responses and update backend (only for active outlets)
+      if (hasOutlet1 && userConfig100Data) {
+        userConfig100Data = await addDefaultImd(userConfig100Data, 'http://10.20.27.100/api/system/userconfig');
+      }
+      if (hasOutlet2 && userConfig101Data) {
+        userConfig101Data = await addDefaultImd(userConfig101Data, 'http://10.20.27.101/api/system/userconfig');
+      }
+
+      // Store all configurations for validation (use available data)
       const allConfigs = {
         ocpp: ocppData,
         userconfig100: userConfig100Data,
         userconfig101: userConfig101Data
       };
-      
+
       // Validate configurations across endpoints
       validateConfigurationsAcrossEndpoints(allConfigs);
-      
-      // Categorize configuration from all sources (using 100 as primary)
-      categorizeConfiguration(ocppData, userConfig100Data, hmiData);
-       // Populate outletConfig from GET /outlets
+
+      // Categorize configuration from all sources (use first available userconfig as primary)
+      const primaryUserConfig = userConfig100Data || userConfig101Data;
+      categorizeConfiguration(ocppData, primaryUserConfig, hmiData);
+
+      // Populate outletConfig from GET /outlets
       const outletCount = Array.isArray(outletData) ? outletData.length : (((outletData && outletData.length) ? outletData.length : 0));
       const noOfOutletDisplay = outletCount <= 1 ? 1 : 2;
       setOutletConfig({
@@ -1465,7 +1532,7 @@ const Setting = React.memo(() => {
     } finally {
       setLoading(false);
     }
-  }, [apiUrl]);
+  }, [apiUrl, getActiveOutletEndpoints]);
 
   // Refresh configuration function - similar to fetchAllConfigurations but with different state management
   const refreshConfiguration = useCallback(async () => {
@@ -1473,11 +1540,18 @@ const Setting = React.memo(() => {
     setError(null);
 
     try {
-      // Fetch configurations from all endpoints in parallel
+      // Determine active outlets from chargerState
+      const activeEndpoints = getActiveOutletEndpoints();
+      const hasOutlet1 = '1' in activeEndpoints;
+      const hasOutlet2 = '2' in activeEndpoints;
+
+      console.log('Refresh - Active outlet endpoints:', activeEndpoints, 'hasOutlet1:', hasOutlet1, 'hasOutlet2:', hasOutlet2);
+
+      // Fetch configurations from active endpoints only
       const [ocppResponse, userConfig100Response, userConfig101Response, outletResponse, hmiResponse] = await Promise.all([
         fetch(`${apiUrl}/ocpp-client/config`),
-        fetch(`http://10.20.27.100/api/system/userconfig`),
-        fetch(`http://10.20.27.101/api/system/userconfig`),
+        hasOutlet1 ? fetch(`http://10.20.27.100/api/system/userconfig`) : Promise.resolve(null),
+        hasOutlet2 ? fetch(`http://10.20.27.101/api/system/userconfig`) : Promise.resolve(null),
         fetch(`${apiUrl}/outlets`),
         fetch(`http://10.20.27.50:3001/hmi/config`)
       ]);
@@ -1485,19 +1559,20 @@ const Setting = React.memo(() => {
       if (!ocppResponse.ok) {
         throw new Error(`OCPP Config API error! status: ${ocppResponse.status}`);
       }
-      if (!userConfig100Response.ok) {
+      // Only validate responses for active outlets
+      if (hasOutlet1 && userConfig100Response && !userConfig100Response.ok) {
         throw new Error(`SECC User Config API error! status: ${userConfig100Response.status}`);
       }
-      if (!userConfig101Response.ok) {
+      if (hasOutlet2 && userConfig101Response && !userConfig101Response.ok) {
         throw new Error(`LE User Config API error! status: ${userConfig101Response.status}`);
       }
 
       const ocppData = await ocppResponse.json();
-      let userConfig100Data = await userConfig100Response.json();
-      let userConfig101Data = await userConfig101Response.json();
+      let userConfig100Data = (hasOutlet1 && userConfig100Response) ? await userConfig100Response.json() : null;
+      let userConfig101Data = (hasOutlet2 && userConfig101Response) ? await userConfig101Response.json() : null;
       let outletData = null;
       let hmiData = null;
-      
+
       if (outletResponse && outletResponse.ok) {
         outletData = await outletResponse.json();
       } else {
@@ -1509,30 +1584,38 @@ const Setting = React.memo(() => {
       } else {
         console.warn('Failed to GET HMI config:', (hmiResponse ? hmiResponse.status : undefined), (hmiResponse ? hmiResponse.statusText : undefined));
       }
-      
-      // Add default dlbMode if not present in userconfig responses and update backend
-      userConfig100Data = await addDefaultDlbMode(userConfig100Data, 'http://10.20.27.100/api/system/userconfig');
-      userConfig101Data = await addDefaultDlbMode(userConfig101Data, 'http://10.20.27.101/api/system/userconfig');
 
-      
-       // Add default imd if not present in userconfig responses and update backend
-      userConfig100Data = await addDefaultImd(userConfig100Data, 'http://10.20.27.100/api/system/userconfig');
-      userConfig101Data = await addDefaultImd(userConfig101Data, 'http://10.20.27.101/api/system/userconfig');
-      
-      // Store all configurations for validation
+      // Add default dlbMode if not present in userconfig responses and update backend (only for active outlets)
+      if (hasOutlet1 && userConfig100Data) {
+        userConfig100Data = await addDefaultDlbMode(userConfig100Data, 'http://10.20.27.100/api/system/userconfig');
+      }
+      if (hasOutlet2 && userConfig101Data) {
+        userConfig101Data = await addDefaultDlbMode(userConfig101Data, 'http://10.20.27.101/api/system/userconfig');
+      }
+
+      // Add default imd if not present in userconfig responses and update backend (only for active outlets)
+      if (hasOutlet1 && userConfig100Data) {
+        userConfig100Data = await addDefaultImd(userConfig100Data, 'http://10.20.27.100/api/system/userconfig');
+      }
+      if (hasOutlet2 && userConfig101Data) {
+        userConfig101Data = await addDefaultImd(userConfig101Data, 'http://10.20.27.101/api/system/userconfig');
+      }
+
+      // Store all configurations for validation (use available data)
       const allConfigs = {
         ocpp: ocppData,
         userconfig100: userConfig100Data,
         userconfig101: userConfig101Data
       };
-      
+
       // Validate configurations across endpoints
       validateConfigurationsAcrossEndpoints(allConfigs);
-      
-      // Categorize configuration from all sources (using 100 as primary)
-      categorizeConfiguration(ocppData, userConfig100Data, hmiData);
 
-            // Populate outletConfig from GET /outlets
+      // Categorize configuration from all sources (use first available userconfig as primary)
+      const primaryUserConfig = userConfig100Data || userConfig101Data;
+      categorizeConfiguration(ocppData, primaryUserConfig, hmiData);
+
+      // Populate outletConfig from GET /outlets
       const outletCount = Array.isArray(outletData) ? outletData.length : (((outletData && outletData.length) ? outletData.length : 0));
       const noOfOutletDisplay = outletCount <= 1 ? 1 : 2;
       setOutletConfig({
@@ -1543,7 +1626,6 @@ const Setting = React.memo(() => {
         }
       });
 
-      
       // Reset change tracking after successful refresh
       setHasChanges(false);
       setLastUpdateSuccess(true);
@@ -1553,7 +1635,7 @@ const Setting = React.memo(() => {
     } finally {
       setIsRefreshing(false);
     }
-  }, [apiUrl]);
+  }, [apiUrl, getActiveOutletEndpoints]);
 
   // Create debounced versions of API functions to prevent excessive calls
   const { debouncedCallback: debouncedUpdateOcppConfig } = useDebounce(
@@ -1609,25 +1691,39 @@ const Setting = React.memo(() => {
       setLastUpdateSuccess(false);
 
       try {
-        // Define both API endpoints
-        const endpoints = [
-          'http://10.20.27.100/api/system/userconfig',
-          'http://10.20.27.101/api/system/userconfig'
-        ];
+        // Determine active outlets and build endpoints array
+        const activeOutletEndpoints = getActiveOutletEndpoints();
+        const hasOutlet1 = '1' in activeOutletEndpoints;
+        const hasOutlet2 = '2' in activeOutletEndpoints;
 
-        // Prefetch latest userconfig from both endpoints
+        const endpoints = [];
+        if (hasOutlet1) endpoints.push('http://10.20.27.100/api/system/userconfig');
+        if (hasOutlet2) endpoints.push('http://10.20.27.101/api/system/userconfig');
+
+        console.log('Update UserConfig - Active endpoints:', endpoints);
+
+        if (endpoints.length === 0) {
+          throw new Error('No active outlets available to update');
+        }
+
+        // Prefetch latest userconfig from active endpoints
         const getResponses = await Promise.all(endpoints.map(endpoint => fetch(endpoint)));
-        const latest100 = getResponses[0] && getResponses[0].ok ? await getResponses[0].json() : null;
-        const latest101 = getResponses[1] && getResponses[1].ok ? await getResponses[1].json() : null;
+        let latestConfig = null;
+        for (let i = 0; i < getResponses.length; i++) {
+          if (getResponses[i] && getResponses[i].ok) {
+            latestConfig = await getResponses[i].json();
+            break;
+          }
+        }
 
-        // Choose a base: prefer SECC (100), then LE (101), then local rawConfig fallback
-        const baseUserConfig = latest100 || latest101 || (rawConfig.userconfig || {});
+        // Choose a base: prefer fetched config, then local rawConfig fallback
+        const baseUserConfig = latestConfig || (rawConfig.userconfig || {});
         const updatedUserConfig = JSON.parse(JSON.stringify(baseUserConfig));
-        
+
         // Set the nested value
         setNestedValue(updatedUserConfig, mapping.path, value);
 
-        // Create POST promises for both endpoints with the merged latest config
+        // Create POST promises for active endpoints with the merged latest config
         const postPromises = endpoints.map(endpoint =>
           fetch(endpoint, {
             method: 'POST',
@@ -1638,7 +1734,7 @@ const Setting = React.memo(() => {
           })
         );
 
-        // Execute both requests in parallel
+        // Execute requests in parallel
         const responses = await Promise.all(postPromises);
 
         // Check if all responses are successful
@@ -1661,9 +1757,9 @@ const Setting = React.memo(() => {
         }
 
         setLastUpdateSuccess(true);
-        console.log('Successfully updated UserConfig on both endpoints:', endpoints);
-        
-        // Refresh configuration after successful update to both endpoints
+        console.log('Successfully updated UserConfig on active endpoints:', endpoints);
+
+        // Refresh configuration after successful update
         await fetchAllConfigurations();
       } catch (err) {
         console.error('Error updating UserConfig configuration:', err);
@@ -1778,72 +1874,71 @@ const Setting = React.memo(() => {
     setLastUpdateSuccess(false);
 
     try {
-      // Define both API endpoints
-      const endpoints = [
-        'http://10.20.27.100/api/system/userconfig',
-        'http://10.20.27.101/api/system/userconfig'
-      ];
+      // Determine active outlets and build endpoints array
+      const activeOutletEndpoints = getActiveOutletEndpoints();
+      const hasOutlet1 = '1' in activeOutletEndpoints;
+      const hasOutlet2 = '2' in activeOutletEndpoints;
 
-      // Prefetch latest userconfig from both endpoints
+      const endpoints = [];
+      if (hasOutlet1) endpoints.push('http://10.20.27.100/api/system/userconfig');
+      if (hasOutlet2) endpoints.push('http://10.20.27.101/api/system/userconfig');
+
+      console.log('updateUserConfig - Active endpoints:', endpoints);
+
+      if (endpoints.length === 0) {
+        throw new Error('No active outlets available to update');
+      }
+
+      // Prefetch latest userconfig from active endpoints
       const getResponses = await Promise.all(endpoints.map(endpoint => fetch(endpoint)));
-      const latest100 = getResponses[0] && getResponses[0].ok ? await getResponses[0].json() : null;
-      const latest101 = getResponses[1] && getResponses[1].ok ? await getResponses[1].json() : null;
-
-      // Use fallback if either is null
-      const base100 = latest100 || rawConfig;
-      const base101 = latest101 || rawConfig;
-
-      // Clone and update each independently
-      const updated100 = JSON.parse(JSON.stringify(base100));
-      const updated101 = JSON.parse(JSON.stringify(base101));
-
-      // Apply the same key/value change to both configs
-      setNestedValue(updated100, mapping.path, value);
-      setNestedValue(updated101, mapping.path, value);
-
-    // Create POST payloads for each endpoint individually
-    const postPromises = [
-      fetch(endpoints[0], {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated100)
-      }),
-      fetch(endpoints[1], {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated101)
-      })
-    ];
-
-    // Execute both requests in parallel
-    const responses = await Promise.all(postPromises);
-
-    // Collect failed endpoints
-    const failedEndpoints = responses
-      .map((response, index) => !response.ok ? ({
-        endpoint: endpoints[index],
-        status: response.status,
-        statusText: response.statusText
-      }) : null)
-      .filter(Boolean);
-
-    if (failedEndpoints.length > 0) {
-      const errorMessages = failedEndpoints.map(
-        f => `${f.endpoint}: ${f.status} ${f.statusText}`
+      const latestConfigs = await Promise.all(
+        getResponses.map(async (resp) => (resp && resp.ok) ? await resp.json() : null)
       );
-      throw new Error(`Failed to update endpoints: ${errorMessages.join(', ')}`);
-    }
 
-    setLastUpdateSuccess(true);
-    // Refresh configuration after successful updates
-    await fetchAllConfigurations();
-  } catch (err) {
-    setError(err.message);
-    setLastUpdateSuccess(false);
-  } finally {
-    setLoading(false);
-  }
-}, [rawConfig, fetchAllConfigurations]);
+      // Create POST promises for each active endpoint
+      const postPromises = endpoints.map((endpoint, index) => {
+        // Use fetched config or fallback to rawConfig
+        const baseConfig = latestConfigs[index] || rawConfig;
+        const updatedConfig = JSON.parse(JSON.stringify(baseConfig));
+        setNestedValue(updatedConfig, mapping.path, value);
+
+        return fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updatedConfig)
+        });
+      });
+
+      // Execute requests in parallel
+      const responses = await Promise.all(postPromises);
+
+      // Collect failed endpoints
+      const failedEndpoints = responses
+        .map((response, index) => !response.ok ? ({
+          endpoint: endpoints[index],
+          status: response.status,
+          statusText: response.statusText
+        }) : null)
+        .filter(Boolean);
+
+      if (failedEndpoints.length > 0) {
+        const errorMessages = failedEndpoints.map(
+          f => `${f.endpoint}: ${f.status} ${f.statusText}`
+        );
+        throw new Error(`Failed to update endpoints: ${errorMessages.join(', ')}`);
+      }
+
+      setLastUpdateSuccess(true);
+      console.log('Successfully updated UserConfig on active endpoints:', endpoints);
+      // Refresh configuration after successful updates
+      await fetchAllConfigurations();
+    } catch (err) {
+      setError(err.message);
+      setLastUpdateSuccess(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [rawConfig, fetchAllConfigurations, getActiveOutletEndpoints]);
 
   // Update HMI configuration
   const updateHmiConfig = useCallback(async (key, value) => {
@@ -1996,8 +2091,18 @@ const Setting = React.memo(() => {
   const validateConfigurationsAcrossEndpoints = useCallback((allConfigs) => {
     const { ocpp, userconfig100, userconfig101 } = allConfigs;
     const errors = {};
-    
-    // Define the keys to validate and their mappings
+
+    // Determine which outlets are active
+    const hasOutlet1 = userconfig100 !== null;
+    const hasOutlet2 = userconfig101 !== null;
+    const isSingleModuleMode = (hasOutlet1 && !hasOutlet2) || (!hasOutlet1 && hasOutlet2);
+    const activeUserConfig = hasOutlet1 ? userconfig100 : userconfig101;
+    const activeOutletName = hasOutlet1 ? 'SECC User Config' : 'LE User Config';
+
+    console.log('Validation mode:', isSingleModuleMode ? 'Single Outlet' : 'Dual Outlet',
+                '| hasOutlet1:', hasOutlet1, '| hasOutlet2:', hasOutlet2);
+
+    // Define the keys to validate between OCPP and userconfig
     const validationKeys = [
       {
         ocppKey: 'maxPowerLimitInkW',
@@ -2005,7 +2110,7 @@ const Setting = React.memo(() => {
         displayName: 'Max Power Limit (kW)'
       },
       {
-        ocppKey: 'maxCurrentLimitInAmps', 
+        ocppKey: 'maxCurrentLimitInAmps',
         userconfigKey: 'maxA',
         displayName: 'Max Current Limit (Amps)'
       },
@@ -2015,41 +2120,67 @@ const Setting = React.memo(() => {
         displayName: 'Power Save in Idle Mode'
       }
     ];
-    
+
     validationKeys.forEach(({ ocppKey, userconfigKey, displayName }) => {
-      // Get values from all three sources
+      // Get values from OCPP (10.20.27.50:3001)
       const ocppValue = ocpp[ocppKey];
-      const userconfig100Value = (userconfig100 && userconfig100.ccs && userconfig100.ccs.stack) ? userconfig100.ccs.stack[userconfigKey] : undefined;
-      const userconfig101Value = (userconfig101 && userconfig101.ccs && userconfig101.ccs.stack) ? userconfig101.ccs.stack[userconfigKey] : undefined;
-      
-      // Create array of all values for comparison
-      const values = [
-        { source: 'OCPP Client', value: ocppValue },
-        { source: 'SECC User Config', value: userconfig100Value },
-        { source: 'LE User Config', value: userconfig101Value }
-      ];
-      
-      // Filter out undefined/null values
-      const definedValues = values.filter(v => v.value !== undefined && v.value !== null);
-      
-      if (definedValues.length > 1) {
-        // Check if all defined values are the same
-        const firstValue = definedValues[0].value;
-        const hasDiscrepancy = definedValues.some(v => v.value !== firstValue);
-        
-        if (hasDiscrepancy) {
-          // Create detailed error message
-          const valueDescriptions = definedValues.map(v => `${v.source}: ${v.value}`).join(', ');
-          errors[ocppKey] = {
-            message: `Configuration mismatch detected for ${displayName}`,
-            details: valueDescriptions,
-            values: definedValues
-          };
+
+      if (isSingleModuleMode) {
+        // Single outlet mode: Compare OCPP with active outlet only
+        const activeUserconfigValue = (activeUserConfig && activeUserConfig.ccs && activeUserConfig.ccs.stack)
+          ? activeUserConfig.ccs.stack[userconfigKey] : undefined;
+
+        const values = [
+          { source: 'OCPP Client', value: ocppValue },
+          { source: activeOutletName, value: activeUserconfigValue }
+        ];
+
+        const definedValues = values.filter(v => v.value !== undefined && v.value !== null);
+
+        if (definedValues.length > 1) {
+          const firstValue = definedValues[0].value;
+          const hasDiscrepancy = definedValues.some(v => v.value !== firstValue);
+
+          if (hasDiscrepancy) {
+            const valueDescriptions = definedValues.map(v => `${v.source}: ${v.value}`).join(', ');
+            errors[ocppKey] = {
+              message: `Configuration mismatch detected for ${displayName}`,
+              details: valueDescriptions,
+              values: definedValues
+            };
+          }
+        }
+      } else {
+        // Dual outlet mode: Compare OCPP with both outlets
+        const userconfig100Value = (userconfig100 && userconfig100.ccs && userconfig100.ccs.stack) ? userconfig100.ccs.stack[userconfigKey] : undefined;
+        const userconfig101Value = (userconfig101 && userconfig101.ccs && userconfig101.ccs.stack) ? userconfig101.ccs.stack[userconfigKey] : undefined;
+
+        const values = [
+          { source: 'OCPP Client', value: ocppValue },
+          { source: 'SECC User Config', value: userconfig100Value },
+          { source: 'LE User Config', value: userconfig101Value }
+        ];
+
+        const definedValues = values.filter(v => v.value !== undefined && v.value !== null);
+
+        if (definedValues.length > 1) {
+          const firstValue = definedValues[0].value;
+          const hasDiscrepancy = definedValues.some(v => v.value !== firstValue);
+
+          if (hasDiscrepancy) {
+            const valueDescriptions = definedValues.map(v => `${v.source}: ${v.value}`).join(', ');
+            errors[ocppKey] = {
+              message: `Configuration mismatch detected for ${displayName}`,
+              details: valueDescriptions,
+              values: definedValues
+            };
+          }
         }
       }
     });
-    
+
     // Define userconfig-only keys to validate between endpoints 100 and 101
+    // These are only validated in dual outlet mode (comparing between the two outlets)
     const userconfigOnlyKeys = [
       {
         key: 'imd',
@@ -2058,7 +2189,7 @@ const Setting = React.memo(() => {
       },
       {
         key: 'Convertor Type',
-        path: 'ccs.intcc.conv', 
+        path: 'ccs.intcc.conv',
         displayName: 'Convertor Type'
       },
       {
@@ -2068,38 +2199,43 @@ const Setting = React.memo(() => {
       },
       {
         key: 'num_of_modules',
-        path: 'ccs.num_of_modules', 
+        path: 'ccs.num_of_modules',
         displayName: 'Number of Modules'
       }
     ];
-    
-    // Validate userconfig-only keys between endpoints 100 and 101
-    userconfigOnlyKeys.forEach(({ key, path, displayName }) => {
-      const userconfig100Value = getNestedValue(userconfig100, path);
-      const userconfig101Value = getNestedValue(userconfig101, path);
-      
-      // Only validate if both values exist
-      if (userconfig100Value !== undefined && userconfig101Value !== undefined) {
-        if (userconfig100Value !== userconfig101Value) {
-          errors[key] = {
-            message: `Configuration mismatch detected for ${displayName}`,
-            details: `SECC User Config: ${userconfig100Value}, LE User Config: ${userconfig101Value}`,
-            values: [
-              { source: 'SECC User Config', value: userconfig100Value },
-              { source: 'LE User Config', value: userconfig101Value }
-            ]
-          };
+
+    // Only validate userconfig-only keys in dual outlet mode
+    // In single outlet mode, there's nothing to compare against
+    if (!isSingleModuleMode) {
+      userconfigOnlyKeys.forEach(({ key, path, displayName }) => {
+        const userconfig100Value = getNestedValue(userconfig100, path);
+        const userconfig101Value = getNestedValue(userconfig101, path);
+
+        // Only validate if both values exist
+        if (userconfig100Value !== undefined && userconfig101Value !== undefined) {
+          if (userconfig100Value !== userconfig101Value) {
+            errors[key] = {
+              message: `Configuration mismatch detected for ${displayName}`,
+              details: `SECC User Config: ${userconfig100Value}, LE User Config: ${userconfig101Value}`,
+              values: [
+                { source: 'SECC User Config', value: userconfig100Value },
+                { source: 'LE User Config', value: userconfig101Value }
+              ]
+            };
+          }
         }
-      }
-    });
+      });
+    }
 
     // Additional validation: Compare num_of_modules "available options" between endpoints 100 and 101
     // Options on the UI depend on dlbMode. Compute options for each endpoint and compare.
-    try {
-      const dlbMode100 = getNestedValue(userconfig100, 'ccs.dlbMode');
-      const dlbMode101 = getNestedValue(userconfig101, 'ccs.dlbMode');
-      const numOfModules100 = getNestedValue(userconfig100, 'ccs.num_of_modules');
-      const numOfModules101 = getNestedValue(userconfig101, 'ccs.num_of_modules');
+    // Only run this validation in dual outlet mode
+    if (!isSingleModuleMode) {
+      try {
+        const dlbMode100 = getNestedValue(userconfig100, 'ccs.dlbMode');
+        const dlbMode101 = getNestedValue(userconfig101, 'ccs.dlbMode');
+        const numOfModules100 = getNestedValue(userconfig100, 'ccs.num_of_modules');
+        const numOfModules101 = getNestedValue(userconfig101, 'ccs.num_of_modules');
 
       const computeNumModulesOptions = (dlbMode) => {
         if (dlbMode === 'singleCombo') {
@@ -2140,11 +2276,12 @@ const Setting = React.memo(() => {
             values
           };
         }
+        }
+      } catch (e) {
+        console.warn('Failed to validate num_of_modules options across endpoints:', e);
       }
-    } catch (e) {
-      console.warn('Failed to validate num_of_modules options across endpoints:', e);
     }
-    
+
     // Update validation state
     setValidationErrors(errors);
     setConfigValidation(allConfigs);
@@ -2412,22 +2549,32 @@ const Setting = React.memo(() => {
   }, [outletConfig]);
 
   // Load configuration on component mount and authentication
+  // Note: We intentionally exclude fetchAllConfigurations from deps to prevent
+  // re-fetching when chargerState updates (which would cause flickering)
   useEffect(() => {
     if (isAuthenticated) {
       fetchAllConfigurations();
     }
-  }, [isAuthenticated, fetchAllConfigurations]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
 
 
   // Dynamic Setting Component - Heavily optimized to prevent unnecessary re-renders
-  const DynamicSetting = React.memo(({ configKey, settingData, onValueChange, category, isDark, validationErrors }) => {
+  const DynamicSetting = React.memo(({ configKey, settingData, onValueChange, category, isDark, validationErrors, getActiveOutletEndpoints, numOfModulesFromConfig }) => {
     // Extract the actual value from the setting data structure
     const value = settingData.value;
     const inputType = getInputType(value);
     const label = configKey
     const icon = React.useMemo(() => getSettingIcon(configKey), [configKey]);
     const color = React.useMemo(() => getSettingColor(configKey), [configKey]);
+
+    // Check if dlbMode and num_of_modules should be disabled
+    // Disabled when num_of_modules from config is 1 (single module mode)
+    const isSingleModuleMode = React.useMemo(() => {
+      // num_of_modules === 1 means single module, disable dlbMode and num_of_modules
+      return numOfModulesFromConfig === 1;
+    }, [numOfModulesFromConfig]);
     const updateFunction = React.useMemo(() => 
       category === 'ocpp' ? memoizedUpdateOcppConfig : 
       category === 'hmi' ? memoizedUpdateHmiConfig :
@@ -2465,11 +2612,17 @@ const Setting = React.memo(() => {
 
     // Move all hooks to top level to avoid conditional hook calls
     // dlbMode options - always computed but only used when needed
-    const dlbOptions = React.useMemo(() => [
-      { value: 'singleCombo', label: 'singleCombo' },
-      { value: 'dualCombo', label: 'dualCombo' },
-      { value: 'tripleCombo', label: 'tripleCombo' }
-    ], []);
+    // When in single outlet mode, only show 'nocombo' option
+    const dlbOptions = React.useMemo(() => {
+      if (isSingleModuleMode) {
+        return [{ value: 'nocombo', label: 'nocombo' }];
+      }
+      return [
+        { value: 'singleCombo', label: 'singleCombo' },
+        { value: 'dualCombo', label: 'dualCombo' },
+        { value: 'tripleCombo', label: 'tripleCombo' }
+      ];
+    }, [isSingleModuleMode]);
 
       // Converter Type options - fixed list for userconfig ccs.intcc.conv
     const converterTypeOptions = React.useMemo(() => [
@@ -2625,16 +2778,23 @@ const Setting = React.memo(() => {
         return;
       }
 
-      // 2️⃣ Otherwise, try to fetch from API
+      // 2️⃣ Otherwise, try to fetch from API (using active outlets only)
       let dlbComboFromRaw = null;
 
       try {
-        const resp = await fetch('http://10.20.27.100/api/system/userconfig');
-        if (resp.ok) {
-          const data = await resp.json();
-          dlbComboFromRaw = (data && data.ccs && data.ccs.dlbMode) ? data.ccs.dlbMode : null;
-        } else {
-          const resp2 = await fetch('http://10.20.27.101/api/system/userconfig');
+        const activeEndpoints = getActiveOutletEndpoints ? getActiveOutletEndpoints() : { '1': 'http://10.20.27.100', '2': 'http://10.20.27.101' };
+        const hasOutlet1 = '1' in activeEndpoints;
+        const hasOutlet2 = '2' in activeEndpoints;
+
+        if (hasOutlet1) {
+          const resp = await fetch(`${activeEndpoints['1']}/api/system/userconfig`);
+          if (resp.ok) {
+            const data = await resp.json();
+            dlbComboFromRaw = (data && data.ccs && data.ccs.dlbMode) ? data.ccs.dlbMode : null;
+          }
+        }
+        if (!dlbComboFromRaw && hasOutlet2) {
+          const resp2 = await fetch(`${activeEndpoints['2']}/api/system/userconfig`);
           if (resp2.ok) {
             const data2 = await resp2.json();
             dlbComboFromRaw = (data2 && data2.ccs && data2.ccs.dlbMode) ? data2.ccs.dlbMode : null;
@@ -2667,17 +2827,26 @@ const Setting = React.memo(() => {
 
   async function getDlbModeFromAPI() {
     try {
-      const resp = await fetch('http://10.20.27.100/api/system/userconfig');
-      if (resp.ok) {
-        const data = await resp.json();
-        return (data && data.ccs && data.ccs.dlbMode) ? data.ccs.dlbMode : null;
-      } else {
-        const resp2 = await fetch('http://10.20.27.101/api/system/userconfig');
+      const activeEndpoints = getActiveOutletEndpoints ? getActiveOutletEndpoints() : { '1': 'http://10.20.27.100', '2': 'http://10.20.27.101' };
+      const hasOutlet1 = '1' in activeEndpoints;
+      const hasOutlet2 = '2' in activeEndpoints;
+
+      if (hasOutlet1) {
+        const resp = await fetch(`${activeEndpoints['1']}/api/system/userconfig`);
+        if (resp.ok) {
+          const data = await resp.json();
+          const dlbMode = (data && data.ccs && data.ccs.dlbMode) ? data.ccs.dlbMode : null;
+          if (dlbMode) return dlbMode;
+        }
+      }
+      if (hasOutlet2) {
+        const resp2 = await fetch(`${activeEndpoints['2']}/api/system/userconfig`);
         if (resp2.ok) {
           const data2 = await resp2.json();
           return (data2 && data2.ccs && data2.ccs.dlbMode) ? data2.ccs.dlbMode : null;
         }
       }
+      return null;
     } catch (e) {
       console.error('Error fetching dlbMode:', e);
       return null;
@@ -2772,15 +2941,18 @@ const Setting = React.memo(() => {
 
     // Conditional rendering logic moved after all hooks
     if (configKey === 'dlbMode') {
+      // In single outlet mode: disable and force value to 'nocombo'
+      const dlbDisplayValue = isSingleModuleMode ? 'nocombo' : value;
       return (
         <div>
           <DropdownSetting
             icon={icon}
             label={label}
-            color={color}
-            value={value}
+            color={isSingleModuleMode ? '#888888' : color}
+            value={dlbDisplayValue}
             onValueChange={dlbComboHandleValueChange}
             options={dlbOptions}
+            disabled={isSingleModuleMode}
           />
           <ValidationError error={validationError} isDark={isDark} />
         </div>
@@ -2789,19 +2961,30 @@ const Setting = React.memo(() => {
 
     if (configKey === 'num_of_modules' && numModulesConfig) {
       const { isDisabled, defaultValue, options } = numModulesConfig;
-      // Use the actual current value, but fall back to defaultValue if value is invalid
-      const displayValue = (isDisabled || !options.some(opt => opt.value === value)) ? defaultValue : value;
-      
+
+      // In single module mode: hardcode display value to 1 and disable
+      let displayValue;
+      let shouldBeDisabled;
+
+      if (isSingleModuleMode) {
+        displayValue = 1; // Hardcode to 1 when num_of_modules is 1
+        shouldBeDisabled = true;
+      } else {
+        // Normal flow: use actual value or default
+        displayValue = (isDisabled || !options.some(opt => opt.value === value)) ? defaultValue : value;
+        shouldBeDisabled = isDisabled;
+      }
+
       return (
         <div>
           <DropdownSetting
             icon={icon}
             label={label}
-            color={color}
+            color={shouldBeDisabled ? '#888888' : color}
             value={displayValue}
             onValueChange={numModulesHandleValueChange}
             options={options}
-            disabled={isDisabled}
+            disabled={shouldBeDisabled}
           />
           <ValidationError error={validationError} isDark={isDark} />
         </div>
@@ -2841,15 +3024,20 @@ const Setting = React.memo(() => {
     }
 
     if (configKey === 'no of outlet') {
+      // In single module mode: hardcode to 1 and disable to prevent accidental changes
+      const outletDisplayValue = isSingleModuleMode ? 1 : ((noOfOutletDisplayValue != null) ? noOfOutletDisplayValue : value);
+      const outletShouldBeDisabled = isSingleModuleMode;
+
       return (
         <div>
           <DropdownSetting
             icon={icon}
             label={label}
-            color={color}
-            value={(noOfOutletDisplayValue != null) ? noOfOutletDisplayValue : value}
+            color={outletShouldBeDisabled ? '#888888' : color}
+            value={outletDisplayValue}
             onValueChange={noOfOutletHandleValueChange}
             options={noOfOutletOptions}
+            disabled={outletShouldBeDisabled}
           />
           <ValidationError error={validationError} isDark={isDark} />
         </div>
@@ -3051,7 +3239,7 @@ const Setting = React.memo(() => {
   // RestartingScreen moved out and memoized above
 
   // Memoized settings list to minimize re-renders of scrollable container
-  const SettingsList = React.useMemo(() => React.memo(({ data, category, isDark, listStyle, callbacks, validationErrors }) => {
+  const SettingsList = React.useMemo(() => React.memo(({ data, category, isDark, listStyle, callbacks, validationErrors, getActiveOutletEndpoints, numOfModulesFromConfig }) => {
     const entries = React.useMemo(() => Object.entries(data), [data]);
     return (
       <div style={listStyle}>
@@ -3064,6 +3252,8 @@ const Setting = React.memo(() => {
             category={category}
             isDark={isDark}
             validationErrors={validationErrors}
+            getActiveOutletEndpoints={getActiveOutletEndpoints}
+            numOfModulesFromConfig={numOfModulesFromConfig}
           />
         ))}
       </div>
@@ -3074,8 +3264,19 @@ const Setting = React.memo(() => {
     prevProps.isDark === nextProps.isDark &&
     prevProps.listStyle === nextProps.listStyle &&
     prevProps.callbacks === nextProps.callbacks &&
-    prevProps.validationErrors === nextProps.validationErrors
+    prevProps.validationErrors === nextProps.validationErrors &&
+    prevProps.getActiveOutletEndpoints === nextProps.getActiveOutletEndpoints &&
+    prevProps.numOfModulesFromConfig === nextProps.numOfModulesFromConfig
   )), []);
+
+  // Extract num_of_modules value from hardwareConfig to determine if dlbMode/num_of_modules should be disabled
+  // When num_of_modules === 1, both settings should be disabled
+  const numOfModulesFromConfig = React.useMemo(() => {
+    if (hardwareConfig && hardwareConfig['num_of_modules'] && hardwareConfig['num_of_modules'].value !== undefined) {
+      return hardwareConfig['num_of_modules'].value;
+    }
+    return null; // Unknown, don't disable
+  }, [hardwareConfig]);
 
   if (!isAuthenticated) {
     return <PasswordProtection onAuthenticated={() => setIsAuthenticated(true)} theme={theme} onRestartCharger={handleRestartCharger} isRestarting={isRestarting} />;
@@ -3156,6 +3357,8 @@ const Setting = React.memo(() => {
                   callbacks={hardwareCallbacks}
                   listStyle={styles.scrollableContent}
                   validationErrors={validationErrors}
+                  getActiveOutletEndpoints={getActiveOutletEndpoints}
+                  numOfModulesFromConfig={numOfModulesFromConfig}
                 />
               </div>
             )}
@@ -3169,6 +3372,8 @@ const Setting = React.memo(() => {
                   callbacks={ocppCallbacks}
                   listStyle={styles.scrollableContent}
                   validationErrors={validationErrors}
+                  getActiveOutletEndpoints={getActiveOutletEndpoints}
+                  numOfModulesFromConfig={numOfModulesFromConfig}
                 />
               </div>
             )}
@@ -3182,6 +3387,8 @@ const Setting = React.memo(() => {
                   callbacks={outletCallbacks}
                   listStyle={styles.scrollableContent}
                   validationErrors={validationErrors}
+                  getActiveOutletEndpoints={getActiveOutletEndpoints}
+                  numOfModulesFromConfig={numOfModulesFromConfig}
                 />
               </div>
             )}
@@ -3195,6 +3402,8 @@ const Setting = React.memo(() => {
                   callbacks={hmiCallbacks}
                   listStyle={styles.scrollableContent}
                   validationErrors={validationErrors}
+                  getActiveOutletEndpoints={getActiveOutletEndpoints}
+                  numOfModulesFromConfig={numOfModulesFromConfig}
                 />
               </div>
             )}

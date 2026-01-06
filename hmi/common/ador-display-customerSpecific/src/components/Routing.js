@@ -8,7 +8,6 @@ import PlugEV from "../screens/plugEV";
 import UnplugEV from "../screens/unplugev";
 import Charging from "../screens/charging";
 import RetrieveSession from "../components/AuthEV/RetriveFromRfid";
-import SessionResult from "../screens/sessionresult";
 import Screensaver from "../screens/screensaver";
 import Reboot from "../screens/reboot";
 import StopCharging from "../screens/stopcharging";
@@ -18,10 +17,11 @@ import ChargingMode from "../screens/chargingmode";
 import RemoteAuth from "../screens/reboot/RemoteAuth";
 import Info from "../screens/info";
 import Setting from "../components/Setting/Setting.js";
+import DLBTest from "../components/DLBTest/DLBTest.js";
 
 class Routing extends Component {
   static contextType = MainContext;
-  
+
   render() {
     return (
       <MainContext.Consumer>
@@ -38,12 +38,12 @@ class Routing extends Component {
               <Route exact path="/stopcharging" component={StopCharging} />
               <Route exact path="/stopping" component={Stopping} />
               <Route exact path="/retrieve" component={RetrieveSession} />
-              <Route exact path="/session-result" component={SessionResult} />
               <Route exact path="/screensaver" component={Screensaver} />
               <Route exact path="/reboot" component={Reboot} />
               <Route exact path="/remoteauth" component={RemoteAuth} />
               <Route exact path="/info" component={Info} />
               <Route exact path="/settings" component={Setting} />
+              <Route exact path="/dlb-test" component={DLBTest} />
             </Switch>
           </div>
         )}

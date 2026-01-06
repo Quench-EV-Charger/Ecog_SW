@@ -96,8 +96,13 @@ class RetrieveSession extends Component {
     });
     if (outlet) {
       this.setLocalStorageAndContext(outlet);
-      if (isActive(outlet)) changePath("/charging");
-      else changePath(`/session-result?user=${outlet?.user}`);
+      if (isActive(outlet)) {
+        changePath("/charging");
+      } else {
+        // Show session summary popup for completed session
+        this.context.showSessionSummaryAfterCharging(outlet, false);
+        changePath("/");
+      }
     } else {
       this.handleInvalidUser(source);
     }

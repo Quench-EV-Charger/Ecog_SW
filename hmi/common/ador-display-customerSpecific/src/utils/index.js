@@ -269,6 +269,31 @@ export const buildConfig = async () => {
   const socketUrl = `ws://${window.location.host}`;
   if (!config.API) config = { ...config, API };
   if (!config.socketUrl) config = { ...config, socketUrl };
+  
+  // Fetch HMI config from backend to get latest values like stopAuth
+  try {
+    const hmiConfigResponse = await fetch('http://10.20.27.50:3001/hmi/config');
+    if (hmiConfigResponse.ok) {
+      const hmiConfig = await hmiConfigResponse.json();
+      console.log("[buildConfig] Backend HMI config:", hmiConfig);
+      
+      // Merge backend HMI config with local config
+      // Backend values take precedence for certain keys
+      if (hmiConfig) {
+        config = {
+          ...config,
+          stopAuth: hmiConfig.stopAuth !== undefined ? hmiConfig.stopAuth : config.stopAuth,
+          comboMode: hmiConfig.comboMode !== undefined ? hmiConfig.comboMode : config.comboMode,
+          timezone: hmiConfig.timezone !== undefined ? hmiConfig.timezone : config.timezone,
+          OTPEnabled: hmiConfig.OTPEnabled !== undefined ? hmiConfig.OTPEnabled : config.OTPEnabled,
+        };
+        console.log("[buildConfig] Merged config with backend HMI values:", config);
+      }
+    }
+  } catch (error) {
+    console.warn("[buildConfig] Failed to fetch HMI config from backend, using local config:", error);
+  }
+  
   return config;
 };
 

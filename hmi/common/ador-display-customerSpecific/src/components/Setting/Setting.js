@@ -30,6 +30,7 @@ const PasswordProtection = ({ onAuthenticated, theme, onRestartCharger, isRestar
   const context = useContext(MainContext);
   const config = context && context.config;
   const apiUrl = React.useMemo(() => (config && config.API), [config && config.API]);
+  const ADMIN_PASSWORD = "admin123"; // Mock password - replace with secure implementation
 
    useEffect(() => {
      fetch(`${apiUrl}/ocpp-client/config`)
@@ -53,7 +54,6 @@ const PasswordProtection = ({ onAuthenticated, theme, onRestartCharger, isRestar
     [isDark]
   );
 
-  const ADMIN_PASSWORD = "admin123"; // Mock password - replace with secure implementation
   const MAX_ATTEMPTS = 3;
 
   const handlePasswordInputClick = () => {
@@ -75,8 +75,14 @@ const PasswordProtection = ({ onAuthenticated, theme, onRestartCharger, isRestar
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (password === ADMIN_PASSWORD || password === hmiPassword) {
-      onAuthenticated();
+    if (password === ADMIN_PASSWORD) {
+      // Password is hardcoded "admin123"
+      onAuthenticated("hardcoded");
+      setError("");
+      setAttempts(0);
+    } else if (password === hmiPassword) {
+      // Password is from OCPP config
+      onAuthenticated("ocpp");
       setError("");
       setAttempts(0);
     } else {
@@ -879,8 +885,11 @@ const SettingHeader = React.memo(({
   isRefreshing,
   onRestartCharger, 
   onRefreshConfiguration,
+  onDLBTest,
   headerStyle,
-  headingStyle
+  headingStyle,
+  passwordType
+
 }) => {
   const restartButtonStyle = React.useMemo(() => ({
     background: (!hasChanges || !lastUpdateSuccess || loading) ? "transparent" : (isDark ? "rgb(136 171 226)" : "#ff0000"),
@@ -898,6 +907,24 @@ const SettingHeader = React.memo(({
     opacity: (!hasChanges || !lastUpdateSuccess || loading) ? 0.5 : 1,
     marginLeft: "8px"
   }), [hasChanges, lastUpdateSuccess, loading, isDark]);
+
+  const dlbTestButtonStyle = React.useMemo(() => ({
+    background: loading ? "transparent" : (isDark ? "#7B9FD8" : "#6B8FC8"),
+    border: `1px solid ${isDark ? "#7B9FD8" : "#6B8FC8"}`,
+    color: loading ? 
+      (isDark ? "rgba(123, 159, 216, 0.5)" : "rgba(107, 143, 200, 0.5)") : 
+      "#ffffff",
+    padding: "8px 16px",
+    borderRadius: "6px",
+    cursor: loading ? "not-allowed" : "pointer",
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    fontSize: "0.9rem",
+    opacity: loading ? 0.5 : 1,
+    marginLeft: "8px",
+    transition: "all 0.3s ease",
+  }), [loading, isDark]);
 
   const refreshButtonStyle = React.useMemo(() => ({
     background: (loading || isRefreshing) ? "transparent" : (isDark ? "rgb(136 171 226)" : "#ff0000"),
@@ -937,6 +964,18 @@ const SettingHeader = React.memo(({
       >
         <FaRedo /> Restart Charger
       </button>
+
+      {/* DLB Test Button - Only visible when using hardcoded password */}
+      {passwordType === "hardcoded" && (
+        <button
+          onClick={onDLBTest}
+          disabled={loading}
+          style={dlbTestButtonStyle}
+          title={loading ? "Processing..." : "DLB Test"}
+        >
+          DLB Test
+        </button>
+      )}
       
       {/* Refresh Configuration Button */}
       <button
@@ -1164,6 +1203,7 @@ const TabNavigation = React.memo(({
 
 const Setting = React.memo(() => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [passwordType, setPasswordType] = useState(null); // "hardcoded" or "ocpp"
   const [activeTab, setActiveTab] = useState("hardware");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -1342,6 +1382,7 @@ const Setting = React.memo(() => {
     
     // HMI Config keys
     'comboMode': { source: 'hmi', path: 'comboMode' },
+    'stopAuth': { source: 'hmi', path: 'stopAuth' },
     'timezone': { source: 'hmi', path: 'timezone' },
   };
 
@@ -3065,6 +3106,27 @@ const Setting = React.memo(() => {
       );
     }
 
+    if (configKey === 'stopAuth') {
+      const stopAuthOptions = React.useMemo(() => [
+        { value: false, label: 'Off - Skip Auth' },
+        { value: true, label: 'On - Require Auth' }
+      ], []);
+
+      return (
+        <div>
+          <DropdownSetting
+            icon={icon}
+            label={label}
+            color={color}
+            value={value}
+            onValueChange={handleValueChange}
+            options={stopAuthOptions}
+          />
+          <ValidationError error={validationError} isDark={isDark} />
+        </div>
+      );
+    }
+
     if (configKey === 'timezone') {
       const timezoneOptions = React.useMemo(() => [
         { value: 'Asia/Kolkata', label: 'India (Asia/Kolkata)' },
@@ -3236,6 +3298,13 @@ const Setting = React.memo(() => {
     setActiveTab("hmi");
   }, []);
 
+  const handleDLBTest = React.useCallback(() => {
+    const { changePath } = context;
+    if (changePath) {
+      changePath("/dlb-test");
+    }
+  }, [context]);
+
   // RestartingScreen moved out and memoized above
 
   // Memoized settings list to minimize re-renders of scrollable container
@@ -3279,7 +3348,7 @@ const Setting = React.memo(() => {
   }, [hardwareConfig]);
 
   if (!isAuthenticated) {
-    return <PasswordProtection onAuthenticated={() => setIsAuthenticated(true)} theme={theme} onRestartCharger={handleRestartCharger} isRestarting={isRestarting} />;
+    return <PasswordProtection onAuthenticated={(type) => { setIsAuthenticated(true); setPasswordType(type); }} theme={theme} onRestartCharger={handleRestartCharger} isRestarting={isRestarting} />;
   }
 
   return (
@@ -3308,8 +3377,10 @@ const Setting = React.memo(() => {
         isRefreshing={isRefreshing}
         onRestartCharger={handleRestartCharger}
         onRefreshConfiguration={handleRefreshConfiguration}
+        onDLBTest={handleDLBTest}
         headerStyle={styles.header}
         headingStyle={styles.heading}
+        passwordType={passwordType}
       />
 
       {/* Tab Navigation */}

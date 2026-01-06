@@ -16,6 +16,7 @@ import {
   secondsToHms,
   timestampToTime,
   getEmulatedMetering,
+  stopCharging,
 } from "../../utils";
 import CarImage from "../../assets/images/ecog_car.svg";
 import { GunLetters, max32BitInt, OutletType } from "../../constants/constants";
@@ -35,7 +36,8 @@ class Charging extends Component {
       sessionStart: null,
       background: null,
       stopChargerStatus: "",
-      emulatedMetering: null
+      emulatedMetering: null,
+      initialDcEnergy: null
     };
   }
 
@@ -43,8 +45,125 @@ class Charging extends Component {
     this.context.changePath("/");
   };
 
-  handleStopButtonClick = () => {
-    this.context.changePath("/stopcharging");
+  // Implement config-driven stop authentication flow controlled by hmiConfig.stopAuth
+  handleStopButtonClick = async () => {
+    // Fetch fresh stopAuth status from backend API
+    await this.checkStopAuthAndAct();
+  };
+
+  checkStopAuthAndAct = async () => {
+    try {
+      // Fetch latest config from backend API
+      const response = await fetch('http://10.20.27.50:3001/hmi/config');
+      if (!response.ok) {
+        console.warn("[stopAuth] Failed to fetch hmi/config, status:", response.status);
+        // Fallback to cached config value
+        const stopAuthEnabled = this.context.config?.stopAuth !== false;
+        console.log("[stopAuth] Using cached config value:", stopAuthEnabled);
+        if (stopAuthEnabled) {
+          this.context.changePath("/stopcharging");
+        } else {
+          await this.stopChargingWithoutAuth();
+        }
+        return;
+      }
+
+      const backendConfig = await response.json();
+      const stopAuthEnabled = backendConfig.stopAuth !== false;
+      
+      console.log("[stopAuth] Fresh backend config - stopAuth value:", backendConfig.stopAuth);
+      console.log("[stopAuth] stopAuthEnabled (true=show auth, false=skip auth):", stopAuthEnabled);
+      
+      if (stopAuthEnabled) {
+        // Show Stop Authorization screen (existing behavior)
+        console.log("[stopAuth] Showing auth screen");
+        this.context.changePath("/stopcharging");
+      } else {
+        // Skip auth screen - stop charging
+        console.log("[stopAuth] Skipping auth, stopping directly");
+        await this.stopChargingWithoutAuth();
+      }
+    } catch (error) {
+      console.error("[stopAuth] Error fetching hmi/config:", error);
+      // Fallback to cached config value
+      const stopAuthEnabled = this.context.config?.stopAuth !== false;
+      console.log("[stopAuth] Error occurred, using cached config value:", stopAuthEnabled);
+      if (stopAuthEnabled) {
+        this.context.changePath("/stopcharging");
+      } else {
+        await this.stopChargingWithoutAuth();
+      }
+    }
+  };
+
+  stopChargingWithoutAuth = async () => {
+    const API = this.context.config?.API;
+    const { selectedState, chargingMode, ipcClient } = this.context;
+    const { user, outlet } = selectedState;
+
+    try {
+      console.log("[stopAuth] stopChargingWithoutAuth called for outlet:", outlet, "user:", user);
+      
+      // Fetch the active session to get the idTag
+      const session = await fetchSessionByOutletAndUser(outlet, user);
+      
+      console.log("[stopAuth] Session fetched:", session);
+      
+      if (!session) {
+        console.warn(
+          "[stopAuth] No session found for outlet",
+          outlet,
+          "user",
+          user
+        );
+        // For stopAuth: false mode, we proceed without idTag if it's truly needed
+        // The session might not have idTag property, but we still need to stop
+      }
+
+      const idTag = session?.idTag || user;
+      console.log(
+        "[stopAuth] Stopping charging without auth using:",
+        idTag
+      );
+
+      // Show spinner while stopping
+      this.setState({ stopChargerStatus: "STOPPING" });
+
+      // Call the stop charging API
+      await stopCharging(API, user, outlet);
+
+      // Publish stop event via IPC
+      const id = Date.now();
+      const type = "charging-operation";
+
+      if (chargingMode > 0) {
+        // Dual-gun scenario
+        console.log("[stopAuth] Dual-gun mode: stopping both outlets");
+        await stopCharging(API, user, 1);
+        await stopCharging(API, user, 2);
+        
+        let payload = { stopReason: "Local", outletId: 1 };
+        let message = JSON.stringify({ id, type, payload });
+        ipcClient.publish("hmi", message);
+        console.log("[stopAuth] HMI Stop published for outlet 1", message);
+
+        payload = { stopReason: "Local", outletId: 2 };
+        message = JSON.stringify({ id, type, payload });
+        ipcClient.publish("hmi", message);
+        console.log("[stopAuth] HMI Stop published for outlet 2", message);
+      } else {
+        // Single outlet scenario
+        console.log("[stopAuth] Single outlet mode: stopping outlet", outlet);
+        const payload = { stopReason: "Local", outletId: outlet };
+        const message = JSON.stringify({ id, type, payload });
+        ipcClient.publish("hmi", message);
+        console.log("[stopAuth] HMI Stop published for outlet", outlet, message);
+      }
+    } catch (error) {
+      console.error("[stopAuth] Error stopping charging without auth:", error);
+      // Fallback to auth screen on error
+      this.context.changePath("/stopcharging");
+    }
   };
 
   setBackground = () => {
@@ -120,7 +239,16 @@ class Charging extends Component {
     this.setState({ stopChargerStatus: "STOP_CHARGING" });
     // this.state.await setEmulatedMetering();
     const emulatedmetering = await getEmulatedMetering(this.context.config?.API);
-    this.setState({emulatedMetering : emulatedmetering})
+    this.setState({ emulatedMetering: emulatedmetering })
+    // Get initial DC energy value
+    const chargerState = this.context.selectedState;
+    if (
+      chargerState?.dc_meter?.total_import_device_energy !== undefined
+    ) {
+      this.setState({
+        initialDcEnergy: chargerState.dc_meter.total_import_device_energy
+      });
+    }
     this.setBackground();
     const startDetails = await fetchSessionByOutletAndUser(
       this.context.selectedState?.outlet,
@@ -161,6 +289,20 @@ class Charging extends Component {
       energyConsumed = energyConsumed / 1000;
     }
     energyConsumed = energyConsumed?.toFixed(3);
+    // Calculate session DC energy consumption
+
+    let sessionDcEnergy = null;
+
+    if (
+      chargerState?.dc_meter?.total_import_device_energy !== undefined &&
+      this.state.initialDcEnergy !== null
+    ) {
+      sessionDcEnergy =
+        chargerState.dc_meter.total_import_device_energy -
+        this.state.initialDcEnergy;
+
+      if (sessionDcEnergy < 0) sessionDcEnergy = 0; // safety
+    }
     const background = this.state.background;
 
     // const isSFForCurrentOutlet =
@@ -265,8 +407,8 @@ class Charging extends Component {
                       {chargerState?.dc_meter?.voltage !== undefined && !this.state.emulatedMetering
                         ? `${chargerState.dc_meter.voltage.toFixed(2)} V`
                         : chargerState?.pv !== undefined
-                        ? `${chargerState.pv.toFixed(2)} V`
-                        : "N/A"}
+                          ? `${chargerState.pv.toFixed(2)} V`
+                          : "N/A"}
                     </p>
 
                     <p style={S.SessionInfoText}>
@@ -274,24 +416,24 @@ class Charging extends Component {
                       {chargerState?.dc_meter?.current !== undefined && !this.state.emulatedMetering
                         ? `${chargerState.dc_meter.current.toFixed(2)} A`
                         : chargerState?.pc !== undefined
-                        ? `${chargerState.pc.toFixed(2)} A`
-                        : "N/A"}
+                          ? `${chargerState.pc.toFixed(2)} A`
+                          : "N/A"}
                     </p>
                     <p style={S.SessionInfoText}>
                       {context.t("POWER")}:{" "}
                       {chargerState?.dc_meter?.total_import_mains_power !== undefined && !this.state.emulatedMetering
                         ? `${chargerState.dc_meter.total_import_mains_power.toFixed(2)} kW`
                         : chargerState?.pp !== undefined
-                        ? `${(chargerState.pp / 1000).toFixed(2)} kW`
-                        : "N/A"}
+                          ? `${(chargerState.pp / 1000).toFixed(2)} kW`
+                          : "N/A"}
                     </p>
                     <p style={S.SessionInfoText}>
                       {context.t("UNIT_CONSUMED")}:{" "}
-                      {chargerState?.dc_meter?.total_import_device_energy !== undefined && !this.state.emulatedMetering
-                        ? `${chargerState.dc_meter.total_import_device_energy.toFixed(2)} kWh`
+                      {sessionDcEnergy !== null && !this.state.emulatedMetering
+                        ? `${sessionDcEnergy.toFixed(2)} kWh`
                         : energyConsumed !== undefined
-                        ? `${energyConsumed} kWh`
-                        : "N/A"}
+                          ? `${energyConsumed} kWh`
+                          : "N/A"}
                     </p>
                   </Row>
                   {context.selectedState?.outletType !== "AC" && (
@@ -312,19 +454,19 @@ class Charging extends Component {
                         )}
                       </p>
                       {!isAC && (
-                      <p style={S.SessionInfoText}>
-                        {context.t("TIME_TO_FULL_CHARGE")}:{" "}
-                        {secondsToHms(chargerState.TimeToFull)}
-                      </p>
-                    )}
-                    {isAC && (
-                      <p style={S.SessionInfoText}>
-                        {context.t("TIME_ELAPSED")}:{" "}
-                        {secondsToHms(chargerState.curr_ses_secs)}
-                      </p>
-                    )}
+                        <p style={S.SessionInfoText}>
+                          {context.t("TIME_TO_FULL_CHARGE")}:{" "}
+                          {secondsToHms(chargerState.TimeToFull)}
+                        </p>
+                      )}
+                      {isAC && (
+                        <p style={S.SessionInfoText}>
+                          {context.t("TIME_ELAPSED")}:{" "}
+                          {secondsToHms(chargerState.curr_ses_secs)}
+                        </p>
+                      )}
                     </Row>
-                  )}                  
+                  )}
                   <Row style={S.SessionInfoTextsContainer}>
                     <p style={S.SessionInfoText}>
                       <span>Gun DC+ Temp: {
@@ -337,7 +479,7 @@ class Charging extends Component {
                       <span style={S.SessionInfoText}>Inlet Temp: {chargerState.temperatures.outlet_temp?.toFixed(1)}°C</span>
                     </p>
                     <p style={S.SessionInfoText}>
-                    <span>Gun DC- Temp: {
+                      <span>Gun DC- Temp: {
                       (chargerState.outlet==1?
                         chargerState?.temperatures.hasOwnProperty('CCS_A2_temp')?
                         chargerState?.temperatures?.CCS_A2_temp.toFixed(1):"-":

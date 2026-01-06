@@ -125,7 +125,7 @@ class RemoteStartPopup extends React.Component {
             border: "4px solid #99B7E6",
             width: "480px",          // ⬅️ increased width
             maxWidth: "48vw",   
-            height: "550px",
+            height: "600px",
             marginTop: "60px",        // ⬅️ optional, larger max width
           }}
 

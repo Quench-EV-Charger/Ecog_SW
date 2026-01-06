@@ -2,6 +2,7 @@
   "checkSECC": "10.20.27.100",
   "comboMode": false,
   "OTPEnabled":true,
+  "stopAuth": false,
   "___POSSIBLE_TIMEZONES___": "https://en.wikipedia.org/wiki/List_of_tz_database_time_zones",
   "timezone": "Asia/Kolkata",
   "branding": {

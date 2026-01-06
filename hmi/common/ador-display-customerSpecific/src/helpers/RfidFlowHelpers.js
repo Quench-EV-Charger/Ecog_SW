@@ -23,7 +23,6 @@ export const handleRfidFlow = async (event, state, path) => {
     path === "/unplugev" ||
     path === "/charging" ||
     path === "/screensaver" ||
-    path === "/session-result" ||
     path === "/stopping"
   ) {
     const rfidUserStates = state.chargerState.filter(

@@ -13,6 +13,7 @@ import MainContext from "./MainContext";
 import { RfidSuffix, ChargingModes } from "../constants/constants";
 import AlertBox from "../components/AlertBox";
 import RemoteStartPopup from "../components/RemoteStartPopup";
+import SessionSummaryPopup from "../components/SessionSummaryPopup";
 
 import {
   buildConfig,
@@ -37,7 +38,7 @@ import {
   isSomeActive,
   timeout,
 } from "../utils";
-import { addOrUpdateSessionToDb, deleteSession } from "../localDb/dbActions";
+import { addOrUpdateSessionToDb, deleteSession, fetchSessionByOutletAndUser } from "../localDb/dbActions";
 import {
   fetchCombo,
   resetCombo,
@@ -54,12 +55,16 @@ import {
 } from "../helpers/ChargerStateHelpers";
 import { handleOutletSelect, handleRfidFlow } from "../helpers/RfidFlowHelpers";
 import { OneShotErrors } from "../constants/Errors";
-import {ChargingMode} from "../screens/chargingmode"
+import { ChargingMode } from "../screens/chargingmode"
 import { startupApiCall } from "../apis/Queries";
 
 const importAll = (r) => r.keys().map(r);
 
 class ContextProvider extends Component {
+  prevSelectedState = null;
+  sessionSummaryPopupProcessing = false; // ✅ Sync flag to prevent re-entry
+  displayedSessionHash = null; // ✅ Track hash of last displayed session to prevent re-rendering
+
   state = {
     t: this.props.t,
     chargerState: [],
@@ -78,6 +83,13 @@ class ContextProvider extends Component {
     availableOutlets: [],
     changePath: (path) => {
       if (this.props.history.location.pathname !== path) {
+        // Hide remote start popup when navigating away from valid screens (home, charging, stopping, unplugev)
+        const validScreens = ["/", "/charging", "/stopping", "/unplugev"];
+        const isLeavingValidScreen = validScreens.includes(this.props.history.location.pathname) && !validScreens.includes(path);
+        if (isLeavingValidScreen) {
+          this.hideRemoteStartPopup(1);
+          this.hideRemoteStartPopup(2);
+        }
         this.props.history.push(path);
       }
     },
@@ -121,17 +133,25 @@ class ContextProvider extends Component {
     errorObj: {},
     oneShotError: {},
     inoperativeOutlets: [],
-    shouldDisplay:0,
+    shouldDisplay: 0,
     isGunOneSpinner: true,
     isGunTwoSpinner: true,
-    setIsGunSpinnerTwo: (isGunTwoSpinner) => this.setState({isGunTwoSpinner}),
-    setIsGunSpinnerOne: (isGunOneSpinner) => this.setState({isGunOneSpinner}),
+    setIsGunSpinnerTwo: (isGunTwoSpinner) => this.setState({ isGunTwoSpinner }),
+    setIsGunSpinnerOne: (isGunOneSpinner) => this.setState({ isGunOneSpinner }),
     // Remote Start Popup state
     remoteStartPopupGun1: false,
     remoteStartPopupGun2: false,
     connectionTimeOut: 60,
     showRemoteStartPopup: (gunNumber) => this.showRemoteStartPopup(gunNumber),
-    hideRemoteStartPopup: (gunNumber) => this.hideRemoteStartPopup(gunNumber)
+    hideRemoteStartPopup: (gunNumber) => this.hideRemoteStartPopup(gunNumber),
+    // Session Summary Popup state
+    showSessionSummaryPopup: false,
+    sessionSummaryData: null,
+    sessionSummaryPopupShown: false,
+    sessionSummaryPopupShownForCurrentError: false,  // Track if already shown for this error
+    lastSessionSummarySessionStart: null,
+    hideSessionSummaryPopup: () => this.hideSessionSummaryPopup(),
+    showSessionSummaryAfterCharging: (outletState, hasError) => this.showSessionSummaryAfterCharging(outletState, hasError),
   };
 
   setupCache = async () => {
@@ -204,9 +224,13 @@ class ContextProvider extends Component {
     if (pathname === "/authorize" && pilot === 0) {
       this.state.changePath("/plugev");
     } else if (pathname === "/charging" && pilot === 0) {
-      this.state.changePath(`/session-result?user=${user}`);
+      // Normal charging completion - show session summary popup
+      this.showSessionSummaryAfterCharging(selectedState, false);
+      this.state.changePath("/");
     } else if (pathname === "/charging" && (evsestat === 5 || pilot === 7)) {
-      this.state.changePath(`/session-result?user=${user}&iswentwrong=true`);
+      // Error during charging - already handled by handleSessionSummaryPopupLogic
+      // Just navigate to home, popup will be shown by error handler
+      this.state.changePath("/");
     } else if (
       !inStoppingProccess(selectedState) &&
       isNeedUnplug(selectedState) &&
@@ -221,23 +245,25 @@ class ContextProvider extends Component {
     } else if (
       !inStoppingProccess(selectedState) &&
       !isNeedUnplug(selectedState) &&
-      !pathname.includes("/session-result") &&
       pathname === "/unplugev"
     ) {
       if (this.props.location?.search === "?isTimeout=true") {
         this.state.changePath("/");
       } else {
-        this.state.changePath(`/session-result?user=${user}`);
+        // After unplugging - show session summary popup
+        this.showSessionSummaryAfterCharging(selectedState, false);
+        this.state.changePath("/");
       }
     } else if (
       !inStoppingProccess(selectedState) &&
       !isNeedUnplug(selectedState) &&
-      !pathname.includes("/session-result") &&
       pathname === "/charging" &&
       pilot < 3 &&
       phs < 3
     ) {
-      this.state.changePath(`/session-result?user=${user}`);
+      // Charging interrupted - show session summary popup
+      this.showSessionSummaryAfterCharging(selectedState, false);
+      this.state.changePath("/");
     } else if (pathname === "/plugev" && pilot >= 1 && pilot <= 4 && !auth) {
       this.state.changePath("/authorize");
     } else if (
@@ -313,7 +339,7 @@ class ContextProvider extends Component {
         );
 
         this.setState({
-          shouldDisplay:this.displayVCCUPopup()
+          shouldDisplay: this.displayVCCUPopup()
         })
 
         let isVCCU = this.state.chargingMode;
@@ -338,7 +364,7 @@ class ContextProvider extends Component {
           chargerState &&
           Array.isArray(chargerState) &&
           chargerState[0] &&
-          ((chargerState[0].errorObj?.overVoltageErr)||(chargerState[0].errorObj?.underVoltageErr));
+          ((chargerState[0].errorObj?.overVoltageErr) || (chargerState[0].errorObj?.underVoltageErr));
         const isPowerModuleFailure =
           chargerState &&
           Array.isArray(chargerState) &&
@@ -430,7 +456,7 @@ class ContextProvider extends Component {
         eachSession.EVRESSSOC,
         Date.now(),
         eachSession.curr_ses_Wh,
-        
+
       );
     });
   };
@@ -443,7 +469,29 @@ class ContextProvider extends Component {
     this.state.ipcClient.on("message", (topic, payload) => {
       try {
         payload = JSON.parse(payload);
-      } catch (error) {}
+      } catch (error) { }
+
+      // Capture OCPP StopTransaction data for session matching
+      if (topic === "ocpp-client" && payload?.type === "StopTransaction") {
+        const { transactionId, meterStop, connectorId } = payload;
+        console.log(`[SessionSummaryPopup] Received OCPP StopTransaction: connectorId=${connectorId}, transactionId=${transactionId}, meterStop=${meterStop}`);
+
+        // Store the stop transaction data in state for later use
+        this.setState(prevState => {
+          const updatedChargerState = prevState.chargerState.map(outlet => {
+            if (String(outlet.outlet) === String(connectorId)) {
+              return {
+                ...outlet,
+                transactionId: transactionId,
+                ocppMeterStop: meterStop,
+              };
+            }
+            return outlet;
+          });
+          return { chargerState: updatedChargerState };
+        });
+      }
+
       window.dispatchEvent(
         new CustomEvent("auth-res", { bubbles: true, detail: payload })
       );
@@ -566,22 +614,28 @@ class ContextProvider extends Component {
 
     // check if there is an outlet just authenticated now and if so clear the previous session for that user
     const nowAuthenticatedOne = getTheOneAuthenticated(prevState.chargerState, chargerState); // prettier-ignore
-    if (nowAuthenticatedOne) deleteSession(String(nowAuthenticatedOne?.outlet),String(nowAuthenticatedOne?.user));
+    if (nowAuthenticatedOne) deleteSession(String(nowAuthenticatedOne?.outlet), String(nowAuthenticatedOne?.user));
 
     // Remote Start Popup: Detect when outlet becomes authorized but gun is not plugged
     // This handles RemoteStartTransaction from OCPP
+    // Only show popup if user is at home, charging, stopping, or unplugev screen and no error exists
     if (nowAuthenticatedOne) {
       const isGunPlugged = nowAuthenticatedOne.pilot > 0 && nowAuthenticatedOne.pilot !== 7;
-      if (!isGunPlugged) {
-        // Gun not plugged, show remote start popup
+      const validScreens = ["/", "/charging", "/stopping", "/unplugev"];
+      const isAtValidScreen = validScreens.includes(path);
+      const errorObj = nowAuthenticatedOne?.errorObj || {};
+      const hasError = Object.values(errorObj).some(value => value === true);
+      if (!isGunPlugged && isAtValidScreen && !hasError) {
+        // Gun not plugged, user is at valid screen, and no error exists - show remote start popup
         console.log("Remote start detected - showing popup for outlet:", nowAuthenticatedOne.outlet);
         this.showRemoteStartPopup(nowAuthenticatedOne.outlet);
-        // Navigate to home screen to see the popup
-        if (path !== "/") {
-          this.state.changePath("/");
-        }
       }
     }
+
+    // ✅ SESSION SUMMARY POPUP: Show when error occurs during charging and vehicle needs unplug
+    // State-driven logic: depends on needsUnplug, not transitions
+    // Works for single-gun and dual-gun scenarios
+    this.handleSessionSummaryPopupLogic(chargerState, prevState.chargerState);
 
     if (this.state.config?.isRfidFlow) {
       const prevPreparingOutletsIds = prevState.preparingOutletsIds;
@@ -601,7 +655,6 @@ class ContextProvider extends Component {
             path === "/screensaver" ||
             path === "/charging" ||
             path === "/unplugev" ||
-            path === "/session-result" ||
             path === "/stopping")
         ) {
           handleOutletSelect(newChangedState, this.state.setSelectedState);
@@ -686,7 +739,7 @@ class ContextProvider extends Component {
       const { errorObj } = state || {};
       return (
         (errorObj && errorObj?.powerLossErr)
-        );
+      );
     }
   };
 
@@ -697,7 +750,7 @@ class ContextProvider extends Component {
       const { errorObj } = state || {};
       return (
         (errorObj && errorObj?.groundFault)
-        );
+      );
     }
   };
 
@@ -772,9 +825,9 @@ class ContextProvider extends Component {
     if (
       this.state.showAlert &&
       this.state.errorCode &&
-        (outletState?.errorObj?.eStopErr ||
-        outletState?.errorObj?.powerLossErr 
-        ) &&
+      (outletState?.errorObj?.eStopErr ||
+        outletState?.errorObj?.powerLossErr
+      ) &&
       isErrorStillValid(
         chargerState,
         this.state.errorCode,
@@ -798,7 +851,7 @@ class ContextProvider extends Component {
 
     // ErrorObj: added estop errObj
     const isEStop =
-    (errorObj && errorObj.eStopErr);
+      (errorObj && errorObj.eStopErr);
 
     if (isEStop) {
       errorObjReturn = { showAlert: false, showEStop: true, errorCode: "emergency" }; // prettier-ignore
@@ -808,10 +861,10 @@ class ContextProvider extends Component {
 
     // ErrorObj: added doorOpenCheck
     const isDoorOpen =
-    (chargerState &&
-      Array.isArray(chargerState) &&
-      chargerState[0] &&
-      chargerState[0].errorObj?.doorOpenErr);
+      (chargerState &&
+        Array.isArray(chargerState) &&
+        chargerState[0] &&
+        chargerState[0].errorObj?.doorOpenErr);
 
     if (isDoorOpen) {
       errorObjReturn = { showAlert: true, showEStop: false, errorCode: "CHARGER_DOOR_OPEN" }; // prettier-ignore
@@ -835,29 +888,29 @@ class ContextProvider extends Component {
 
     // ErrorObj: Added under/over voltage
     const isSupplyVoltage =
-    (chargerState &&
-      Array.isArray(chargerState) &&
-      ((chargerState[0] && chargerState[0]?.errorObj?.overVoltageErr) ||(
-         chargerState[0] && chargerState[0]?.errorObj?.underVoltageErr)) 
-    );
+      (chargerState &&
+        Array.isArray(chargerState) &&
+        ((chargerState[0] && chargerState[0]?.errorObj?.overVoltageErr) || (
+          chargerState[0] && chargerState[0]?.errorObj?.underVoltageErr))
+      );
     if (
       isSupplyVoltage) {
       // console.log(JSON.parse(this.state.errorEventObj?.data));
       // ErrorObj: put "overVoltageErr" or "underVoltageErr" in errorcode.
-      if(chargerState[0] && chargerState[0]?.errorObj?.underVoltageErr){
+      if (chargerState[0] && chargerState[0]?.errorObj?.underVoltageErr) {
         errorObjReturn = { showAlert: true, showEStop: false, errorCode: "ERR_UNDER_VOLTAGE" }; // prettier-ignore
         return errorObjReturn;
       }
-      else if (chargerState[0] && chargerState[0]?.errorObj?.overVoltageErr){
+      else if (chargerState[0] && chargerState[0]?.errorObj?.overVoltageErr) {
         errorObjReturn = { showAlert: true, showEStop: false, errorCode: "ERR_OVER_VOLTAGE" }; // prettier-ignore
         return errorObjReturn;
       }
     }
     const isPowerModuleFailure =
-    (chargerState &&
-      Array.isArray(chargerState) &&
-      chargerState[0] &&
-      chargerState[0].errorObj?.powerModuleFailureErr);
+      (chargerState &&
+        Array.isArray(chargerState) &&
+        chargerState[0] &&
+        chargerState[0].errorObj?.powerModuleFailureErr);
     if (
       isPowerModuleFailure &&
       this.state.errorEventObj &&
@@ -866,16 +919,16 @@ class ContextProvider extends Component {
     ) {
       const code = JSON.parse(this.state.errorEventObj?.data)?.payload?.code;
       const errorCode = config?.errorCodes[code]?.localizationCode,
-      errorObjReturn = { showAlert: true, showEStop: false, errorCode: errorCode }; // prettier-ignore
+        errorObjReturn = { showAlert: true, showEStop: false, errorCode: errorCode }; // prettier-ignore
       return errorObjReturn;
     }
 
     // ErrorObj: added outletTempCheck
     const outletTempCheck =
-    (chargerState &&
-      Array.isArray(chargerState) &&
-      chargerState[0] &&
-      chargerState[0].errorObj?.outletTemperatureErr);
+      (chargerState &&
+        Array.isArray(chargerState) &&
+        chargerState[0] &&
+        chargerState[0].errorObj?.outletTemperatureErr);
 
     if (outletTempCheck) {
       errorObjReturn = { showAlert: true, showEStop: false, errorCode: "OUTLET_TEMP" }; // prettier-ignore
@@ -885,10 +938,10 @@ class ContextProvider extends Component {
 
     // ErrorObj: added cabinetTempCheck
     const cabinetTempCheck =
-    (chargerState &&
-      Array.isArray(chargerState) &&
-      chargerState[0] &&
-      chargerState[0].errorObj?.cabinetTemperatureErr);
+      (chargerState &&
+        Array.isArray(chargerState) &&
+        chargerState[0] &&
+        chargerState[0].errorObj?.cabinetTemperatureErr);
 
     if (cabinetTempCheck) {
       errorObjReturn = { showAlert: true, showEStop: false, errorCode: "CAB_TEMP" }; // prettier-ignore
@@ -937,7 +990,7 @@ class ContextProvider extends Component {
       this.setState({ acEnergyMeterFailure: false });
     }
     return errorObjReturn;
-  };    
+  };
 
   isInitializing = () => {
     let initializing = this.state.selectedState?.initializing;
@@ -972,8 +1025,8 @@ class ContextProvider extends Component {
           chargerState[0];
         if (
           (state?.errorObj?.eStopErr ||
-            state?.errorObj?.powerLossErr 
-            )
+            state?.errorObj?.powerLossErr
+          )
         ) {
           return;
         } else {
@@ -994,8 +1047,8 @@ class ContextProvider extends Component {
   };
 
   publishChargingMode = (mode) => {
-    const { chargingMode ,config} = this.state;
-    if (config?.comboMode){
+    const { chargingMode, config } = this.state;
+    if (config?.comboMode) {
       // Check if the mode is different from the current one
       if (chargingMode === String(mode)) {
         console.log("Mode is already set to", mode, "No need to publish.");
@@ -1003,7 +1056,7 @@ class ContextProvider extends Component {
       }
 
       this.setState({
-        chargingMode:String(mode)
+        chargingMode: String(mode)
       })
       mode = String(RfidSuffix[mode]);  // This modifies 'mode' to a string from the 'RfidSuffix' mapping
       if (mode === ChargingModes.R || mode === ChargingModes.DVCCU || mode === ChargingModes.SVCCU) {
@@ -1018,10 +1071,10 @@ class ContextProvider extends Component {
 
       }
     }
-    else{
+    else {
       return;
     }
-    
+
   };
 
   setupEventWS = async (config) => {
@@ -1147,24 +1200,408 @@ class ContextProvider extends Component {
     }
   };
 
+  // Fetch finalized sessions from backend database
+  fetchSessionsFromBackend = async () => {
+    try {
+      const response = await fetch("http://10.20.27.50:3001/db/items", {
+        method: "GET",
+        headers: {
+          "db-identifer": "sessions",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Backend request failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Data should be an array of session records
+      if (!Array.isArray(data)) {
+        console.warn("[SessionSummaryPopup] Backend returned non-array data:", data);
+        return [];
+      }
+
+      // Log first record to see actual structure
+      if (data.length > 0) {
+        console.log("[SessionSummaryPopup] Backend response structure (first record):", data[0]);
+      }
+
+      return data;
+    } catch (err) {
+      console.error("[SessionSummaryPopup] Error fetching sessions from backend:", err);
+      return [];
+    }
+  };
+
+  // ✅ Generate a hash of session data to identify unique sessions and prevent re-rendering
+  generateSessionHash = (popupData) => {
+    if (!popupData || !popupData.sessions) return null;
+
+    const sessionIdentifiers = popupData.sessions
+      .map((s) => `${s.outlet}-${s.sessionStart}-${s.gunLetter}`)
+      .sort()
+      .join("|");
+
+    return sessionIdentifiers;
+  };
+
+  // ✅ Session Summary Popup Logic: State-driven, idempotent, works with polling
+  handleSessionSummaryPopupLogic = async (chargerState, prevChargerState) => {
+    if (!chargerState || !Array.isArray(chargerState) || chargerState.length === 0) {
+      // No charger state → hide popup
+      if (this.state.sessionSummaryPopupShown) {
+        console.log("[SessionSummaryPopup] No charger state, hiding popup");
+        this.clearSessionSummaryTimer();
+        this.hideSessionSummaryPopup();
+      }
+      return;
+    }
+
+    // Find all outlets that need unplugging (session ended)
+    // This catches both normal completion and error cases
+    // If errorObj has errors, we'll show error message; otherwise show normal summary
+    const outletsWithError = chargerState.filter((outlet) => {
+      // Primary check: needsUnplug indicates session has ended
+      const needsUnplug = outlet?.needsUnplug === true;
+      if (!needsUnplug) return false;
+
+      // Check if any error in errorObj is true (for error message display)
+      const errorObj = outlet?.errorObj || {};
+      const hasErrorInErrorObj = Object.values(errorObj).some((err) => err === true);
+
+
+      console.log(`[SessionSummaryPopup] Outlet ${outlet.outlet} - needsUnplug=${needsUnplug}, hasErrorInErrorObj=${hasErrorInErrorObj}, user="${outlet.user}", curr_ses_secs=${outlet.curr_ses_secs}`);
+
+      // Show popup for any outlet that needs unplugging (with or without error)
+      // The popup component will show error message only if errorObj has errors
+      return true;
+    });
+
+    console.log("[SessionSummaryPopup] Outlets with error:", outletsWithError.length);
+
+    // No outlets with error → hide popup immediately and reset flag for next error
+    if (outletsWithError.length === 0) {
+      if (this.state.sessionSummaryPopupShown) {
+        console.log("[SessionSummaryPopup] No outlets with error, hiding popup");
+        this.clearSessionSummaryTimer();
+        this.hideSessionSummaryPopup();
+      }
+      // Reset BOTH flags when error clears so next error will trigger new popup
+      this.sessionSummaryPopupProcessing = false;
+      if (this.state.sessionSummaryPopupShownForCurrentError) {
+        this.setState({ sessionSummaryPopupShownForCurrentError: false });
+      }
+      return;
+    }
+
+    // At least one outlet has error → show session summary popup
+    console.log(
+      `[SessionSummaryPopup] Outlets with error: ${outletsWithError.map((o) => o.outlet).join(", ")}`
+    );
+
+    // ✅ Use SYNC flag to prevent re-entry during async operations
+    if (this.sessionSummaryPopupProcessing) {
+      console.log("[SessionSummaryPopup] Already processing popup for current error, skipping");
+      return;
+    }
+
+    // Mark that we're NOW processing (synchronously, not async setState)
+    this.sessionSummaryPopupProcessing = true;
+
+    // Fetch and prepare session data for all outlets with error
+    const sessionsData = [];
+
+    // Show loading state first (5 seconds to allow DB to populate)
+    const countdownStartTime = Date.now();
+    const popupLoadingData = {
+      mode: "loading",
+      sessions: [],
+      countdownStartTime: countdownStartTime,
+    };
+
+    console.log("[SessionSummaryPopup] Showing loading popup for 5 seconds");
+    this.setState({
+      sessionSummaryPopupShown: true,
+      sessionSummaryData: popupLoadingData,
+    });
+
+    // Wait 5 seconds for DB to populate
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
+    // Fetch all sessions from backend database (same as SessionResult screen)
+    const backendSessions = await this.fetchSessionsFromBackend();
+
+    console.log(`[SessionSummaryPopup] Backend returned ${backendSessions.length} sessions`);
+    console.log(`[SessionSummaryPopup] Outlets with error:`, outletsWithError.map(o => ({ outlet: o.outlet, index: o.index })));
+
+    if (!backendSessions || backendSessions.length === 0) {
+      console.warn("[SessionSummaryPopup] No sessions available from backend");
+      this.sessionSummaryPopupProcessing = false;
+      return;
+    }
+
+    // Filter sessions per outlet by connectorID
+    for (const outlet of outletsWithError) {
+      try {
+        // Convert outlet to number for comparison with connectorID (which is a number in backend)
+        const outletNumber = parseInt(outlet.outlet);
+        console.log(`[SessionSummaryPopup] Filtering for outletNumber=${outletNumber} (outlet.outlet=${outlet.outlet})`);
+
+        const connectorSessions = backendSessions.filter(
+          s => s.connectorID === outletNumber
+        );
+
+        console.log(`[SessionSummaryPopup] Found ${connectorSessions.length} sessions for outlet ${outletNumber}`);
+        console.log(`[SessionSummaryPopup] Available connectorIDs in backend:`, backendSessions.map(s => s.connectorID).slice(0, 10));
+
+        if (connectorSessions.length === 0) {
+          console.warn(`[SessionSummaryPopup] ❌ No sessions found for outlet ${outletNumber}`);
+          continue;
+        }
+
+        // Take the LAST (most recent) session for this outlet
+        const session = connectorSessions[connectorSessions.length - 1];
+
+        console.log(`[SessionSummaryPopup] ✅ Using LAST session for outlet ${outletNumber}:`, session);
+
+        const { GunLetters } = require("../constants/constants");
+
+        // Map backend fields directly - use outlet.index which corresponds to gun position
+        // NOTE: Do NOT use DB reason field - error message comes from errorObj mapping in popup
+        const sessionData = {
+          outlet: outletNumber,
+          sessionStart: session.sessionStart,
+          sessionStop: session.sessionStop,
+          sessionDuration: session.sessionDuration,
+          startSoC: session.startSoC,
+          stopSoC: session.stopSoC,
+          energyConsumed: session.consumption,
+          gunLetter: GunLetters[outlet.index],  // ✅ Use outlet.index not outlet.outlet
+          useQAsOutletID: this.state.config?.useQAsOutletID,
+          errorObj: outlet.errorObj,  // ✅ Use charger errorObj for error message mapping
+        };
+
+        console.log(`[SessionSummaryPopup] Session data for outlet ${outletNumber}:`, sessionData);
+        sessionsData.push(sessionData);
+      } catch (err) {
+        console.error(
+          `[SessionSummaryPopup] Error processing session for outlet ${outlet.outlet}:`,
+          err
+        );
+      }
+    }
+
+    // If we have no valid sessions, don't show popup
+    if (sessionsData.length === 0) {
+      console.warn("[SessionSummaryPopup] No valid sessions found");
+      this.sessionSummaryPopupProcessing = false;
+      return;
+    }
+
+    // Show popup with single or dual session data
+    const popupData = {
+      mode: sessionsData.length === 1 ? "single" : "dual",
+      sessions: sessionsData,
+      countdownStartTime: countdownStartTime,  // Pass to component for countdown circle
+    };
+
+    // ✅ Generate hash of current session and check if we've already displayed it
+    const currentSessionHash = this.generateSessionHash(popupData);
+
+    // If this is the SAME session as the last one displayed, don't show it again
+    if (currentSessionHash && this.displayedSessionHash === currentSessionHash) {
+      console.log("[SessionSummaryPopup] Same session already displayed, skipping re-render");
+      this.sessionSummaryPopupProcessing = false;
+      return;
+    }
+
+    // ✅ Mark this session as displayed
+    this.displayedSessionHash = currentSessionHash;
+
+    console.log("[SessionSummaryPopup] Showing popup for 45 seconds:", popupData);
+    this.setState({
+      sessionSummaryPopupShown: true,
+      sessionSummaryPopupShownForCurrentError: true,  // Mark that we've shown it for this error
+      sessionSummaryData: popupData,
+    });
+
+    // ⚠️ DO NOT reset sync flag yet - keep it true until error clears from charger state
+    // This prevents re-rendering even if popup times out while error is still present
+    // The flag will be reset in handleSessionSummaryPopupLogic when outletsWithError.length === 0
+
+    // Auto-hide popup after 45 seconds
+    this.clearSessionSummaryTimer();
+    this.sessionSummaryTimer = setTimeout(() => {
+      console.log("[SessionSummaryPopup] 45 seconds elapsed, hiding popup (but keeping processing flag true to prevent re-render)");
+      this.hideSessionSummaryPopup();
+      // ✅ DO NOT reset the flag here - let it stay true
+      // It will only reset when the error actually clears in handleSessionSummaryPopupLogic
+    }, 45000); // 45 seconds
+  };
+
+  clearSessionSummaryTimer = () => {
+    if (this.sessionSummaryTimer) {
+      clearTimeout(this.sessionSummaryTimer);
+      this.sessionSummaryTimer = null;
+    }
+  };
+
+  // Session Summary Popup methods
+  showSessionSummaryPopup = async (sessionData) => {
+    console.log("Showing session summary popup with data:", sessionData);
+    this.setState({
+      sessionSummaryPopupShown: true,
+      sessionSummaryData: sessionData,
+    });
+  };
+
+  hideSessionSummaryPopup = () => {
+    console.log("Hiding session summary popup");
+    // ✅ Reset the displayed session hash so a new session can be shown
+    this.displayedSessionHash = null;
+    this.setState({
+      sessionSummaryPopupShown: false,
+      sessionSummaryData: null,
+    });
+  };
+
+  // Show session summary after normal charging completion (non-error case)
+  showSessionSummaryAfterCharging = async (outletState, hasError = false) => {
+    if (!outletState) {
+      console.warn("[SessionSummary] No outlet state provided");
+      this.state.changePath("/");
+      return;
+    }
+
+    const countdownStartTime = Date.now();
+
+    // Show loading popup
+    console.log("[SessionSummary] Showing loading popup for normal charging completion");
+    this.setState({
+      sessionSummaryPopupShown: true,
+      sessionSummaryData: {
+        mode: "loading",
+        sessions: [],
+        countdownStartTime: countdownStartTime,
+      },
+    });
+
+    // Wait 3 seconds for DB to populate
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    // Fetch all sessions from backend database
+    const backendSessions = await this.fetchSessionsFromBackend();
+    const outletNumber = parseInt(outletState.outlet);
+
+    if (!backendSessions || backendSessions.length === 0) {
+      console.warn("[SessionSummary] No sessions available from backend");
+      this.hideSessionSummaryPopup();
+      this.state.changePath("/");
+      return;
+    }
+
+    // Filter sessions for this outlet
+    const connectorSessions = backendSessions.filter(s => s.connectorID === outletNumber);
+
+    if (connectorSessions.length === 0) {
+      console.warn(`[SessionSummary] No session found for outlet ${outletNumber}`);
+      this.hideSessionSummaryPopup();
+      this.state.changePath("/");
+      return;
+    }
+
+    // Get the most recent session
+    const session = connectorSessions[connectorSessions.length - 1];
+    console.log(`[SessionSummary] Using session for outlet ${outletNumber}:`, session);
+
+    const { GunLetters } = require("../constants/constants");
+
+    const sessionData = {
+      outlet: outletNumber,
+      sessionStart: session.sessionStart,
+      sessionStop: session.sessionStop,
+      startSoC: session.startSoC,
+      stopSoC: session.stopSoC,
+      energyConsumed: session.consumption,
+      gunLetter: GunLetters[outletState.index],
+      useQAsOutletID: this.state.config?.useQAsOutletID,
+      errorObj: hasError ? outletState.errorObj : null,  // null for normal completion
+    };
+
+    const popupData = {
+      mode: "single",
+      sessions: [sessionData],
+      countdownStartTime: countdownStartTime,
+    };
+
+    console.log("[SessionSummary] Showing popup for normal charging completion:", popupData);
+    this.setState({
+      sessionSummaryPopupShown: true,
+      sessionSummaryData: popupData,
+    });
+
+    // Auto-hide after 45 seconds and navigate home
+    this.clearSessionSummaryTimer();
+    this.sessionSummaryTimer = setTimeout(() => {
+      console.log("[SessionSummary] 45 seconds elapsed, hiding popup and navigating home");
+      this.hideSessionSummaryPopup();
+      this.state.changePath("/");
+    }, 45000);
+  };
+
+  fetchAndShowSessionSummary = async (selectedState) => {
+    try {
+      const session = await fetchSessionByOutletAndUser(
+        selectedState.outlet,
+        selectedState.user
+      );
+
+      if (!session) return;
+
+      let energyConsumed = session.curr_ses_Wh;
+      if (selectedState.outletType !== "AC" && energyConsumed !== undefined) {
+        energyConsumed = energyConsumed / 1000;
+      }
+      energyConsumed = energyConsumed?.toFixed(3);
+
+      const { GunLetters } = require("../constants/constants");
+
+      const sessionData = {
+        sessionStart: session.sessionStart,
+        sessionStop: session.sessionStop || Date.now(),
+        startSoC: session.startPercentage || 0,
+        stopSoC: selectedState.EVRESSSOC || 0,
+        energyConsumed,
+        gunLetter: GunLetters[selectedState.index],
+        useQAsOutletID: this.state.config?.useQAsOutletID,
+      };
+
+      this.showSessionSummaryPopup(sessionData);
+    } catch (err) {
+      console.error("Session summary popup error:", err);
+    }
+  };
+
+
   displayVCCUPopup = () => {
     if (this.state.chargerState.length !== 0 && Array.isArray(this.state.chargerState)) {
       if (this.state?.chargerState[1]) {
         if (this.state.chargingMode === "0") {
           return 0;
-        }      
+        }
         else if (this.state.chargingMode === "1") {
           const chargerState = this.state.chargerState;
 
-          if(chargerState[0].needsUnplug || chargerState[1].needsUnplug){
+          if (chargerState[0].needsUnplug || chargerState[1].needsUnplug) {
             return 0;
           }
           // Check if both guns have phs == 1 and pilot == 0
           else if ((chargerState[0]?.phs === 1 && chargerState[1]?.phs === 1)) {
             return 1;
           }
-          else if((this.state.chargerState[0]?.phs == 1 && this.state.chargerState[1]?.phs == 2)||
-          (this.state.chargerState[0]?.phs == 2 && this.state.chargerState[1]?.phs == 1)  ){
+          else if ((this.state.chargerState[0]?.phs == 1 && this.state.chargerState[1]?.phs == 2) ||
+            (this.state.chargerState[0]?.phs == 2 && this.state.chargerState[1]?.phs == 1)) {
             return 2;
           }
         } else {
@@ -1180,12 +1617,12 @@ class ContextProvider extends Component {
     const outletState_1 = chargerState && Array.isArray(chargerState) && chargerState.length > 0 && chargerState[0]; // prettier-ignore
     const prevOutletState_2 = prevChargerState && Array.isArray(prevChargerState) && prevChargerState.length > 1 && prevChargerState[1]; // prettier-ignore
     const outletState_2 = chargerState && Array.isArray(chargerState) && chargerState.length > 1 && chargerState[1]; // prettier-ignore
-   
+
     // ErrorObj: edited powerModuleCommErr1
     if (
       (!prevOutletState_1?.errorObj?.powerModuleCommErr_1 &&
         outletState_1?.errorObj?.powerModuleCommErr_1)
-      ) {
+    ) {
       this.setState({
         oneShotError: {
           show: true,
@@ -1217,7 +1654,7 @@ class ContextProvider extends Component {
     if (
       (!prevOutletState_2?.errorObj?.powerModuleCommErr_2 &&
         outletState_2?.errorObj?.powerModuleCommErr_2)
-      ) {
+    ) {
       this.setState({
         oneShotError: {
           show: true,
@@ -1233,7 +1670,7 @@ class ContextProvider extends Component {
     if (
       (!prevOutletState_2?.errorObj?.gunTemperatureErr_2 &&
         outletState_2?.errorObj?.gunTemperatureErr_2)
-      ) {
+    ) {
       this.setState({
         oneShotError: {
           show: true,
@@ -1264,7 +1701,7 @@ class ContextProvider extends Component {
       );
     }
 
-    
+
 
 
     return (
@@ -1284,6 +1721,11 @@ class ContextProvider extends Component {
         <RemoteStartPopup
           gun1Shown={this.state.remoteStartPopupGun1}
           gun2Shown={this.state.remoteStartPopupGun2}
+        />
+        <SessionSummaryPopup
+          popupShown={this.state.sessionSummaryPopupShown}
+          sessionData={this.state.sessionSummaryData}
+          onClose={this.hideSessionSummaryPopup}
         />
         <InterruptBoundary {...interruptProps}>
           {this.props.children}

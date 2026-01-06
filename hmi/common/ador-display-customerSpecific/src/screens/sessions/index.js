@@ -19,7 +19,8 @@ import OverlayVCCU from "../../components/VCCU/Overlay";
 import ReservationAlert from "../../components/ReservationAlert";
 
 import {reservationHour} from "../../utils"
-
+import { stopCharging } from "../../utils";
+import { fetchSessionByOutletAndUser } from "../../localDb/dbActions";
 
 import {
   getControllers,
@@ -229,13 +230,122 @@ class Sessions extends Component {
     localStorage.setItem("user", user);
 
     if (this.isActive(eachOutlet)) {
-      changePath("/stopcharging");
+      // Fetch fresh stopAuth status from backend API
+      await this.checkStopAuthAndAct(eachOutlet, changePath);
     } else {
       if (inStoppingProccess(eachOutlet)) changePath("/stopping");
       else if (isNeedUnplug(eachOutlet)) changePath("/unplugev");
       // else if (isComboMode) changePath("/chargingmode");
       else if (pilot >= 1 && pilot <= 2 && !authorized) changePath("/authorize"); // prettier-ignore
       else changePath("/plugev");
+    }
+  };
+
+  checkStopAuthAndAct = async (eachOutlet, changePath) => {
+    try {
+      // Fetch latest config from backend API
+      const response = await fetch('http://10.20.27.50:3001/hmi/config');
+      if (!response.ok) {
+        console.warn("[stopAuth] Failed to fetch hmi/config, status:", response.status);
+        // Fallback to cached config value
+        const stopAuthEnabled = this.context.config?.stopAuth !== false;
+        console.log("[stopAuth] Using cached config value:", stopAuthEnabled);
+        if (stopAuthEnabled) {
+          changePath("/stopcharging");
+        } else {
+          await this.stopChargingWithoutAuth(eachOutlet);
+        }
+        return;
+      }
+
+      const backendConfig = await response.json();
+      const stopAuthEnabled = backendConfig.stopAuth !== false;
+      
+      console.log("[stopAuth] Fresh backend config - stopAuth value:", backendConfig.stopAuth);
+      console.log("[stopAuth] stopAuthEnabled (true=show auth, false=skip auth):", stopAuthEnabled);
+      
+      if (stopAuthEnabled) {
+        // Show Stop Authorization screen (existing behavior)
+        console.log("[stopAuth] Showing auth screen");
+        changePath("/stopcharging");
+      } else {
+        // Skip auth screen - stop charging
+        console.log("[stopAuth] Skipping auth, stopping directly");
+        await this.stopChargingWithoutAuth(eachOutlet);
+      }
+    } catch (error) {
+      console.error("[stopAuth] Error fetching hmi/config:", error);
+      // Fallback to cached config value
+      const stopAuthEnabled = this.context.config?.stopAuth !== false;
+      console.log("[stopAuth] Error occurred, using cached config value:", stopAuthEnabled);
+      if (stopAuthEnabled) {
+        changePath("/stopcharging");
+      } else {
+        await this.stopChargingWithoutAuth(eachOutlet);
+      }
+    }
+  };
+
+  stopChargingWithoutAuth = async (eachOutlet) => {
+    const API = this.context.config?.API;
+    const { changePath, chargingMode, ipcClient } = this.context;
+    const { outlet, user } = eachOutlet;
+
+    try {
+      console.log("[stopAuth] stopChargingWithoutAuth called for outlet:", outlet, "user:", user);
+      
+      // Fetch the active session to get the idTag
+      const session = await fetchSessionByOutletAndUser(outlet, user);
+      
+      console.log("[stopAuth] Session fetched:", session);
+      
+      if (!session) {
+        console.warn(
+          "[stopAuth] No session found for outlet",
+          outlet,
+          "user",
+          user
+        );
+        // For stopAuth: false mode, we proceed without idTag if it's truly needed
+        // The session might not have idTag property, but we still need to stop
+      }
+
+      // Even if session is missing, attempt to stop the charger
+      console.log("[stopAuth] Calling stopCharging API for outlet:", outlet);
+      await stopCharging(API, user, outlet);
+
+      // Publish stop event via IPC
+      const id = Date.now();
+      const type = "charging-operation";
+
+      if (chargingMode > 0) {
+        // Dual-gun scenario
+        console.log("[stopAuth] Dual-gun mode: stopping both outlets");
+        await stopCharging(API, user, 1);
+        await stopCharging(API, user, 2);
+        
+        let payload = { stopReason: "Local", outletId: 1 };
+        let message = JSON.stringify({ id, type, payload });
+        ipcClient.publish("hmi", message);
+        console.log("[stopAuth] HMI Stop published for outlet 1", message);
+
+        payload = { stopReason: "Local", outletId: 2 };
+        message = JSON.stringify({ id, type, payload });
+        ipcClient.publish("hmi", message);
+        console.log("[stopAuth] HMI Stop published for outlet 2", message);
+      } else {
+        // Single outlet scenario
+        console.log("[stopAuth] Single outlet mode: stopping outlet", outlet);
+        const payload = { stopReason: "Local", outletId: outlet };
+        const message = JSON.stringify({ id, type, payload });
+        ipcClient.publish("hmi", message);
+        console.log("[stopAuth] HMI Stop published for outlet", outlet, message);
+      }
+    } catch (error) {
+      console.error("[stopAuth] Error stopping charging without auth:", error);
+      // Fallback to auth screen on error
+      console.log("[stopAuth] Falling back to auth screen due to error");
+      changePath("/stopcharging");
     }
   };
 

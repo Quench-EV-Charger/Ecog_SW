@@ -149,7 +149,12 @@ class SessionSummaryPopup extends React.Component {
   );
 
   // ✅ Extract error message mapping into a shared helper method for both single and dual gun
-  getErrorMessage = (errorObj = {}) => {
+  getErrorMessage = (errorObj) => {
+    // Handle null or undefined errorObj (normal completion case)
+    if (!errorObj) {
+      return null;
+    }
+
     if (errorObj.eStopErr) {
       return "EMERGENCY_PRESSED";
     } else if (errorObj.powerLossErr) {

@@ -1376,7 +1376,7 @@ class ContextProvider extends Component {
           sessionDuration: session.sessionDuration,
           startSoC: session.startSoC,
           stopSoC: session.stopSoC,
-          energyConsumed: session.consumption,
+          energyConsumed: (session.consumption / 1000).toFixed(3),
           gunLetter: GunLetters[outlet.index],  // ✅ Use outlet.index not outlet.outlet
           useQAsOutletID: this.state.config?.useQAsOutletID,
           errorObj: outlet.errorObj,  // ✅ Use charger errorObj for error message mapping
@@ -1523,7 +1523,7 @@ class ContextProvider extends Component {
       sessionStop: session.sessionStop,
       startSoC: session.startSoC,
       stopSoC: session.stopSoC,
-      energyConsumed: session.consumption,
+      energyConsumed: (session.consumption / 1000).toFixed(3),
       gunLetter: GunLetters[outletState.index],
       useQAsOutletID: this.state.config?.useQAsOutletID,
       errorObj: hasError ? outletState.errorObj : null,  // null for normal completion

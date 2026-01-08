@@ -148,51 +148,58 @@ class SessionSummaryPopup extends React.Component {
     </div>
   );
 
-  // ✅ Extract error message mapping into a shared helper method for both single and dual gun
+  // ✅ Extract error message mapping - returns array of ALL active errors (equal priority)
   getErrorMessage = (errorObj) => {
     // Handle null or undefined errorObj (normal completion case)
     if (!errorObj) {
-      return null;
+      return [];
     }
 
-    if (errorObj.eStopErr) {
-      return "EMERGENCY_PRESSED";
-    } else if (errorObj.powerLossErr) {
-      return "POWER_FAILURE";
-    } else if (errorObj.doorOpenErr) {
-      return "CHARGER_DOOR_OPEN";
-    } else if (errorObj.groundFault) {
-      return "GROUND_FAULT";
-    } else if (errorObj.underVoltageErr) {
-      return "ERR_UNDER_VOLTAGE";
-    } else if (errorObj.overVoltageErr) {
-      return "ERR_OVER_VOLTAGE";
-    } else if (errorObj.outletTemperatureErr) {
-      return "OUTLET_TEMP";
-    } else if (errorObj.cabinetTemperatureErr) {
-      return "CAB_TEMP";
-    } else if (errorObj.powerModuleFailureErr) {
-      return "ERR_POWER_MODULE_FAILURE";
-    } else if (errorObj.powerModuleCommErr_1) {
-      return "POWER_MODULE_COMM_GUN_A";
-    } else if (errorObj.powerModuleCommErr_2) {
-      return "POWER_MODULE_COMM_GUN_B";
-    } else if (errorObj.gunTemperatureErr_1) {
-      return "GUN_A_TEMP_ERR";
-    } else if (errorObj.gunTemperatureErr_2) {
-      return "GUN_B_TEMP_ERR";
-    } else if (errorObj.imdFaultyErr_controller1) {
-      return "IMD_DEVICE_FAULT_CONTROLLER_1";
-    } else if (errorObj.imdFaultyErr_controller2) {
-      return "IMD_FAULT_CONTROLLER_2";
-    } else if (errorObj.imdResistanceErr_1) {
-      return "IMD_RESISTANCE_ERR";
-    } else if (errorObj.imdResistanceErr_2) {
-      return "IMD_RESISTANCE_ERR";
-    } else if (errorObj.ac_em_fail) {
-      return "AC_ENERGY_METER_FAILURE";
+    // Error mapping table
+    const errorMap = {
+      eStopErr: "EMERGENCY_PRESSED",
+      powerLossErr: "POWER_FAILURE",
+      doorOpenErr: "CHARGER_DOOR_OPEN",
+      groundFault: "GROUND_FAULT",
+      underVoltageErr: "ERR_UNDER_VOLTAGE",
+      overVoltageErr: "ERR_OVER_VOLTAGE",
+      powerModuleFailureErr: "ERR_POWER_MODULE_FAILURE",
+      outletTemperatureErr: "OUTLET_TEMP",
+      cabinetTemperatureErr: "CAB_TEMP",
+      powerModuleCommErr_1: "POWER_MODULE_COMM_GUN_A",
+      powerModuleCommErr_2: "POWER_MODULE_COMM_GUN_B",
+      gunTemperatureErr_1: "GUN_A_TEMP_ERR",
+      gunTemperatureErr_2: "GUN_B_TEMP_ERR",
+      imdFaultyErr_controller1: "IMD_DEVICE_FAULT_CONTROLLER_1",
+      imdFaultyErr_controller2: "IMD_DEVICE_FAULT_CONTROLLER_2",
+      imdResistanceErr_1: "IMD_RESISTANCE_ERR",
+      imdResistanceErr_2: "IMD_RESISTANCE_ERR",
+      ac_em_fail: "AC_ENERGY_METER_FAILURE",
+    };
+
+    // Collect ALL active errors
+    const activeErrors = [];
+    for (const [errorKey, errorMessage] of Object.entries(errorMap)) {
+      if (errorObj[errorKey] === true) {
+        activeErrors.push(errorMessage);
+      }
     }
-    return null;
+
+    // Check for any unknown errors not in our map
+    const knownErrorKeys = Object.keys(errorMap);
+    const hasUnknownError = Object.entries(errorObj).some(
+      ([key, value]) => value === true && !knownErrorKeys.includes(key)
+    );
+
+    if (hasUnknownError) {
+      console.warn("[SessionSummaryPopup] Unknown error detected in errorObj:", errorObj);
+      activeErrors.push("CHARGING_ERROR");
+    }
+
+    console.log("[SessionSummaryPopup] DEBUG getErrorMessage - Input errorObj:", errorObj);
+    console.log("[SessionSummaryPopup] DEBUG getErrorMessage - Active errors found:", activeErrors);
+
+    return activeErrors;
   };
 
   renderCloseButton = () => {
@@ -399,9 +406,9 @@ class SessionSummaryPopup extends React.Component {
       errorObj: sessionErrorObj = {},
     } = sessionData;
 
-    // ✅ Use shared helper method to get error message
-    const errorMessage = this.getErrorMessage(sessionErrorObj);
-    console.log("[SessionSummaryPopup] Single Gun - errorObj:", sessionErrorObj, "errorMessage:", errorMessage);
+    // ✅ Get ALL active errors (returns array)
+    const errorMessages = this.getErrorMessage(sessionErrorObj);
+    console.log("[SessionSummaryPopup] Single Gun - errorObj:", sessionErrorObj, "errorMessages:", errorMessages);
 
     return (
       <div
@@ -474,27 +481,26 @@ class SessionSummaryPopup extends React.Component {
           </div>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "center", marginTop: "25px", minHeight: "40px" }}>
-          {errorMessage && (
-            <div style={{ display: "flex", alignItems: "center", color: "#E62518", gap: "10px" }}>
+        <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", marginTop: "25px", minHeight: "40px", gap: "10px" }}>
+          {errorMessages && errorMessages.length > 0 && errorMessages.map((errorMsg, idx) => (
+            <div key={idx} style={{ display: "flex", alignItems: "center", color: "#E62518", gap: "10px" }}>
               <Icon type="warning" style={{ fontSize: "24px" }} />
-              <span style={{ fontSize: "18px", fontWeight: "bold" }}>{t ? t(errorMessage) : errorMessage}</span>
+              <span style={{ fontSize: "18px", fontWeight: "bold" }}>{t ? t(errorMsg) : errorMsg}</span>
             </div>
-          )}
+          ))}
         </div>
       </div>
     );
   };
 
   renderDualGunSummary = (sessions, t, timezone) => {
-    // ✅ Use shared helper to get error messages for all sessions
-    const errorMessages = sessions
-      .map((s) => this.getErrorMessage(s.errorObj))
-      .filter(Boolean);
+    // ✅ Collect ALL error messages from all sessions (flatMap to flatten arrays)
+    const allErrorMessages = sessions
+      .flatMap((s) => this.getErrorMessage(s.errorObj));
 
-    console.log("[SessionSummaryPopup] Dual Gun - sessions:", sessions.map(s => ({ outlet: s.outlet, errorObj: s.errorObj })), "errorMessages:", errorMessages);
+    console.log("[SessionSummaryPopup] Dual Gun - sessions:", sessions.map(s => ({ outlet: s.outlet, errorObj: s.errorObj })), "allErrorMessages:", allErrorMessages);
 
-    const uniqueErrorMessages = [...new Set(errorMessages)];
+    const uniqueErrorMessages = [...new Set(allErrorMessages)];
 
     return (
       <div

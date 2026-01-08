@@ -1266,12 +1266,18 @@ class ContextProvider extends Component {
       const needsUnplug = outlet?.needsUnplug === true;
       if (!needsUnplug) return false;
 
+      // Additional check: session should not be pending
+      const sessionPending = outlet?.sessionPending === true;
+      if (sessionPending) {
+        console.log(`[SessionSummaryPopup] Outlet ${outlet.outlet} - needsUnplug=true but sessionPending=true, skipping popup`);
+        return false;
+      }
+
       // Check if any error in errorObj is true (for error message display)
       const errorObj = outlet?.errorObj || {};
       const hasErrorInErrorObj = Object.values(errorObj).some((err) => err === true);
 
-
-      console.log(`[SessionSummaryPopup] Outlet ${outlet.outlet} - needsUnplug=${needsUnplug}, hasErrorInErrorObj=${hasErrorInErrorObj}, user="${outlet.user}", curr_ses_secs=${outlet.curr_ses_secs}`);
+      console.log(`[SessionSummaryPopup] Outlet ${outlet.outlet} - needsUnplug=${needsUnplug}, sessionPending=${sessionPending}, hasErrorInErrorObj=${hasErrorInErrorObj}, user="${outlet.user}", curr_ses_secs=${outlet.curr_ses_secs}`);
 
       // Show popup for any outlet that needs unplugging (with or without error)
       // The popup component will show error message only if errorObj has errors

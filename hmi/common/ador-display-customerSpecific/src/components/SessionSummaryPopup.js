@@ -88,7 +88,7 @@ class SessionSummaryPopup extends React.Component {
             strokeDasharray={circumference}
             strokeDashoffset={strokeDashoffset}
             style={{
-              transition: "stroke-dashoffset 0.1s linear",
+              transition: "stroke-dashoffset 1s linear",
               strokeLinecap: "round",
             }}
           />

@@ -1326,14 +1326,19 @@ class ContextProvider extends Component {
       countdownStartTime: countdownStartTime,
     };
 
-    console.log("[SessionSummaryPopup] Showing loading popup for 5 seconds");
+    console.log("[SessionSummaryPopup] Showing loading popup for 8 seconds");
     this.setState({
       sessionSummaryPopupShown: true,
       sessionSummaryData: popupLoadingData,
     });
 
-    // Wait 5 seconds for DB to populate
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    // Wait 8 seconds for DB to populate and errorObj to update
+    await new Promise(resolve => setTimeout(resolve, 8000));
+
+    // ✅ CRITICAL: Re-read charger state AFTER delay to get updated errorObj
+    // The errorObj captured earlier may not have errors yet, need fresh data
+    const updatedChargerState = this.state.chargerState || [];
+    console.log("[SessionSummaryPopup] Re-reading charger state after delay to get updated errorObj");
 
     // Fetch all sessions from backend database (same as SessionResult screen)
     const backendSessions = await this.fetchSessionsFromBackend();
@@ -1373,6 +1378,13 @@ class ContextProvider extends Component {
 
         const { GunLetters } = require("../constants/constants");
 
+        // ✅ CRITICAL FIX: Find UPDATED outlet data from fresh charger state
+        const updatedOutlet = updatedChargerState.find(o => parseInt(o.outlet) === outletNumber);
+        const currentErrorObj = updatedOutlet?.errorObj || {};
+
+        console.log(`[SessionSummaryPopup] Outlet ${outletNumber} - OLD errorObj:`, outlet.errorObj);
+        console.log(`[SessionSummaryPopup] Outlet ${outletNumber} - UPDATED errorObj:`, currentErrorObj);
+
         // Map backend fields directly - use outlet.index which corresponds to gun position
         // NOTE: Do NOT use DB reason field - error message comes from errorObj mapping in popup
         const sessionData = {
@@ -1385,7 +1397,7 @@ class ContextProvider extends Component {
           energyConsumed: (session.consumption / 1000).toFixed(3),
           gunLetter: GunLetters[outlet.index],  // ✅ Use outlet.index not outlet.outlet
           useQAsOutletID: this.state.config?.useQAsOutletID,
-          errorObj: outlet.errorObj,  // ✅ Use charger errorObj for error message mapping
+          errorObj: currentErrorObj,  // ✅ Use UPDATED errorObj from re-read charger state
         };
 
         console.log(`[SessionSummaryPopup] Session data for outlet ${outletNumber}:`, sessionData);
@@ -1493,8 +1505,8 @@ class ContextProvider extends Component {
       },
     });
 
-    // Wait 3 seconds for DB to populate
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Wait 5 seconds for DB to populate and errorObj to update
+    await new Promise(resolve => setTimeout(resolve, 5000));
 
     // Fetch all sessions from backend database
     const backendSessions = await this.fetchSessionsFromBackend();

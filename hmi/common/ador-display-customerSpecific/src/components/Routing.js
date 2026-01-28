@@ -17,7 +17,7 @@ import ChargingMode from "../screens/chargingmode";
 import RemoteAuth from "../screens/reboot/RemoteAuth";
 import Info from "../screens/info";
 import Setting from "../components/Setting/Setting.js";
-import DLBTest from "../components/DLBTest/DLBTest.js";
+import Maintenance from "../components/Maintenance/Maintenance.js";
 
 class Routing extends Component {
   static contextType = MainContext;
@@ -43,7 +43,7 @@ class Routing extends Component {
               <Route exact path="/remoteauth" component={RemoteAuth} />
               <Route exact path="/info" component={Info} />
               <Route exact path="/settings" component={Setting} />
-              <Route exact path="/dlb-test" component={DLBTest} />
+              <Route exact path="/maintenance" component={Maintenance} />
             </Switch>
           </div>
         )}

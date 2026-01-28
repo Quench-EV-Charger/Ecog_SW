@@ -8,7 +8,7 @@ import { ThemeContext } from "../ThemeContext/ThemeProvider";
 const { Title } = Typography;
 
 function Navbar(props) {
-  const { transparent, heading, onTabChange } = props;
+  const { transparent, heading, onTabChange, isMaintenanceMode } = props;
   const { ocppOnline, networkAccess } = useSelector((state) => state).charging;
   const { theme, toggleTheme } = useContext(ThemeContext);
 
@@ -81,45 +81,62 @@ function Navbar(props) {
   );
 
   return (
-    <Row
-      style={{
-        padding: "15px",
-        minHeight: "15vh",
-        maxHeight: "15vh",
-        opacity: transparent ? "0.7" : "1",
-        backgroundColor: theme === "dark" ? "#000000" : "white",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-      }}
-      data-testid="navbar"
-    >
-      <Col
-        span={7}
-        style={{ height: "15vh", display: "flex", alignItems: "center" }}
-      >
-        <img
-          src={`/brandings/${getLogo()}`}
-          alt="Brand logo"
+    <div style={{ position: "relative" }}>
+      {/* Overlay to block interactions in maintenance mode */}
+      {isMaintenanceMode && (
+        <div
           style={{
-            width: "auto",
-            height: "auto",
-            maxHeight: "60%",
-            maxWidth: "60%",
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0, 0, 0, 0.5)",
+            backdropFilter: "blur(3px)",
+            zIndex: 100,
+            cursor: "not-allowed",
           }}
         />
-      </Col>
-
-      <Col
-        span={10}
+      )}
+      <Row
         style={{
-          height: "100%",
+          padding: "15px",
+          minHeight: "15vh",
+          maxHeight: "15vh",
+          opacity: transparent ? "0.7" : "1",
+          backgroundColor: theme === "dark" ? "#000000" : "white",
           display: "flex",
           justifyContent: "center",
           alignItems: "center",
         }}
+        data-testid="navbar"
       >
-        {/* <label
+        <Col
+          span={7}
+          style={{ height: "15vh", display: "flex", alignItems: "center" }}
+        >
+          <img
+            src={`/brandings/${getLogo()}`}
+            alt="Brand logo"
+            style={{
+              width: "auto",
+              height: "auto",
+              maxHeight: "60%",
+              maxWidth: "60%",
+            }}
+          />
+        </Col>
+
+        <Col
+          span={10}
+          style={{
+            height: "100%",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          {/* <label
           style={{
             position: "relative",
             display: "inline-block",
@@ -165,85 +182,87 @@ function Navbar(props) {
           </span>
         </label> */}
 
-        <Title style={{ fontSize: "4.5vh", fontWeight: "bold", margin: 0 }}>
-          {heading}
-        </Title>
-      </Col>
+          <Title style={{ fontSize: "4.5vh", fontWeight: "bold", margin: 0 }}>
+            {heading}
+          </Title>
+        </Col>
 
-      <Col
-        span={7}
-        style={{
-          height: "100%",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
-        <Row
+        <Col
+          span={7}
           style={{
-            width: "90%",
+            height: "100%",
             display: "flex",
-            justifyContent: "space-between",
+            justifyContent: "center",
             alignItems: "center",
           }}
         >
-          <NavbarButton
-            iconSize="2.5vw"
-            disabled={!networkAccess}
-            theme={theme}
-            iconType="WifiOutlined"
-            strikethrough
-            additionalStyles={{ boxShadow: "none", border: "none" }}
-          />
-          <NavbarButton
-            iconSize="2.5vw"
-            disabled={!ocppOnline}
-            theme={theme}
-            iconType="CloudUploadOutlined"
-            strikethrough
-            additionalStyles={{ boxShadow: "none", border: "none" }}
-          />
-          <NavbarButton
-            disabled={shouldHomeBtnDisabled()}
-            theme={theme}
-            onClick={handleHomeClick}
-            iconType="HomeOutlined"
-            additionalStyles={{
-              opacity: shouldHomeBtnDisabled() ? "0.35" : "1",
+          <Row
+            style={{
+              width: "90%",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
             }}
-          />
-          <NavbarButton
-            theme={theme}
-            onClick={handleSettingsClick}
-            iconType="SettingOutlined"
-            showStrikethroughWhenDisabled={true} // custom visual-only disabling
-          />
+          >
+            <NavbarButton
+              iconSize="2.5vw"
+              disabled={!networkAccess}
+              theme={theme}
+              iconType="WifiOutlined"
+              strikethrough
+              additionalStyles={{ boxShadow: "none", border: "none" }}
+            />
+            <NavbarButton
+              iconSize="2.5vw"
+              disabled={!ocppOnline}
+              theme={theme}
+              iconType="CloudUploadOutlined"
+              strikethrough
+              additionalStyles={{ boxShadow: "none", border: "none" }}
+            />
+            <NavbarButton
+              disabled={shouldHomeBtnDisabled()}
+              theme={theme}
+              onClick={handleHomeClick}
+              iconType="HomeOutlined"
+              additionalStyles={{
+                opacity: shouldHomeBtnDisabled() ? "0.35" : "1",
+              }}
+            />
+            <NavbarButton
+              theme={theme}
+              onClick={handleSettingsClick}
+              iconType="SettingOutlined"
+              showStrikethroughWhenDisabled={true} // custom visual-only disabling
+            />
 
-          {!isLanguageDisabled ? (
-            <Dropdown
-              overlay={languageMenu}
-              trigger={["click"]}
-              placement="bottomRight"
-            >
-              <div>{languageButton}</div>
-            </Dropdown>
-          ) : (
-            <div>{languageButton}</div> // no dropdown when disabled
-          )}
+            {!isLanguageDisabled ? (
+              <Dropdown
+                overlay={languageMenu}
+                trigger={["click"]}
+                placement="bottomRight"
+              >
+                <div>{languageButton}</div>
+              </Dropdown>
+            ) : (
+              <div>{languageButton}</div> // no dropdown when disabled
+            )}
 
-          <NavbarButton
-            disabled={shouldHomeBtnDisabled()}
-            theme={theme}
-            iconType="InfoCircleOutlined"
-            onClick={handleInfoClick}
-            additionalStyles={{
-              opacity: shouldHomeBtnDisabled() ? "0.35" : "1",
-            }}
-          />
-        </Row>
-      </Col>
-    </Row>
+            <NavbarButton
+              disabled={shouldHomeBtnDisabled()}
+              theme={theme}
+              iconType="InfoCircleOutlined"
+              onClick={handleInfoClick}
+              additionalStyles={{
+                opacity: shouldHomeBtnDisabled() ? "0.35" : "1",
+              }}
+            />
+          </Row>
+        </Col>
+      </Row>
+    </div>
   );
 }
 
 export default Navbar;
+

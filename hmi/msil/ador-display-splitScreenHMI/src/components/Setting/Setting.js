@@ -1,8 +1,8 @@
 import React, { useContext, useState, useEffect, useCallback } from "react";
 import { useSelector } from "react-redux";
-import { 
-  FaCog, 
-  FaLock, 
+import {
+  FaCog,
+  FaLock,
   FaUnlock,
   FaDesktop,
   FaMicrochip,
@@ -28,11 +28,11 @@ const PasswordProtection = ({ onAuthenticated, theme, onRestartCharger }) => {
   const passwordInputRef = React.useRef(null);
   const config = useSelector((state) => state.charging?.config);
   const apiUrl = React.useMemo(() => config?.API, [config?.API]);
-  
+
   const isDark = theme === "dark";
-  
+
   // Memoize styles to prevent unnecessary recalculations
-  const styles = React.useMemo(() => 
+  const styles = React.useMemo(() =>
     getStyles(isDark, isDark ? "#f5f5f5" : "#000000", isDark ? "transparent" : "#ffffff"),
     [isDark]
   );
@@ -41,7 +41,7 @@ const PasswordProtection = ({ onAuthenticated, theme, onRestartCharger }) => {
   const MAX_ATTEMPTS = 3;
 
   useEffect(() => {
-     fetch(`${apiUrl}/ocpp-client/config`)
+    fetch(`${apiUrl}/ocpp-client/config`)
       .then(response => response.json())
       .then(data => {
         console.log("Fetched config:", data);
@@ -69,15 +69,17 @@ const PasswordProtection = ({ onAuthenticated, theme, onRestartCharger }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (password === ADMIN_PASSWORD || password === hmiPassword) {
-      onAuthenticated();
+    const isAdminPassword = password === ADMIN_PASSWORD;
+    if (isAdminPassword || password === hmiPassword) {
+      // Authenticate with admin flag - maintenance will show in Settings header
+      onAuthenticated(isAdminPassword);
       setError("");
       setAttempts(0);
     } else {
       setAttempts(prev => prev + 1);
       setError(`Invalid password. Attempts: ${attempts + 1}/${MAX_ATTEMPTS}`);
       setPassword("");
-      
+
       if (attempts + 1 >= MAX_ATTEMPTS) {
         setError("Too many failed attempts. Please try again later.");
         setTimeout(() => {
@@ -111,18 +113,18 @@ const PasswordProtection = ({ onAuthenticated, theme, onRestartCharger }) => {
         maxWidth: "400px"
       }}>
         <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-          <FaLock style={{ 
-            fontSize: "3rem", 
+          <FaLock style={{
+            fontSize: "3rem",
             color: isDark ? "rgb(136 171 226)" : "#ff0000",
             marginBottom: "1rem"
           }} />
-          <h2 style={{ 
-            margin: 0, 
+          <h2 style={{
+            margin: 0,
             color: isDark ? "#f5f5f5" : "#000000",
             fontSize: "1.5rem"
           }}>Settings Access</h2>
-          <p style={{ 
-            margin: "0.5rem 0 0 0", 
+          <p style={{
+            margin: "0.5rem 0 0 0",
             color: isDark ? "#cccccc" : "#666666",
             fontSize: "0.9rem"
           }}>Enter administrator password</p>
@@ -194,8 +196,8 @@ const PasswordProtection = ({ onAuthenticated, theme, onRestartCharger }) => {
             style={{
               width: "100%",
               padding: "12px",
-              background: (!password || isLocked) ? "#666666" : 
-                         (isDark ? "rgb(136 171 226)" : "#ff0000"),
+              background: (!password || isLocked) ? "#666666" :
+                (isDark ? "rgb(136 171 226)" : "#ff0000"),
               color: "#ffffff",
               border: "none",
               borderRadius: "8px",
@@ -271,13 +273,13 @@ const PasswordProtection = ({ onAuthenticated, theme, onRestartCharger }) => {
 const ToggleSetting = React.memo(({ icon, label, description, color, enabled, onToggle, disabled = false }) => {
   const { theme } = useContext(ThemeContext);
   const isDark = theme === "dark";
-  
+
   // Memoize styles to prevent unnecessary recalculations
-  const styles = React.useMemo(() => 
+  const styles = React.useMemo(() =>
     getStyles(isDark, isDark ? "#f5f5f5" : "#000000", isDark ? "transparent" : "#ffffff"),
     [isDark]
   );
-  
+
   // Memoize toggle handler for smoother transitions
   const handleToggle = React.useCallback(() => {
     if (!disabled) {
@@ -286,42 +288,42 @@ const ToggleSetting = React.memo(({ icon, label, description, color, enabled, on
       });
     }
   }, [disabled, onToggle]);
-  
+
   return (
-  <div style={styles.settingRow}>
-    <div style={styles.labelContainer}>
+    <div style={styles.settingRow}>
+      <div style={styles.labelContainer}>
         <span style={styles.label}>
           {React.createElement(icon, { style: { marginRight: "8px", color } })}
           {label}
         </span>
-      {description && (
-        <span style={styles.description}>{description}</span>
-      )}
-    </div>
-    <div
-      style={{
-        ...styles.toggle,
-        background: enabled
-          ? `linear-gradient(90deg, ${color}, #0ff, #00f)`
-          : "#333",
-        boxShadow: enabled ? `0 0 10px ${color}` : "none",
-        opacity: disabled ? 0.4 : 1,
-        cursor: disabled ? "not-allowed" : "pointer",
-      }}
-      onClick={handleToggle}
-    >
+        {description && (
+          <span style={styles.description}>{description}</span>
+        )}
+      </div>
       <div
         style={{
-          ...styles.toggleCircle,
-          transform: enabled ? "translateX(24px)" : "translateX(0)",
+          ...styles.toggle,
           background: enabled
-            ? `radial-gradient(circle, #000 40%, ${color})`
-            : "#888",
-          boxShadow: enabled ? `0 0 8px ${color}` : "none",
+            ? `linear-gradient(90deg, ${color}, #0ff, #00f)`
+            : "#333",
+          boxShadow: enabled ? `0 0 10px ${color}` : "none",
+          opacity: disabled ? 0.4 : 1,
+          cursor: disabled ? "not-allowed" : "pointer",
         }}
-      />
+        onClick={handleToggle}
+      >
+        <div
+          style={{
+            ...styles.toggleCircle,
+            transform: enabled ? "translateX(24px)" : "translateX(0)",
+            background: enabled
+              ? `radial-gradient(circle, #000 40%, ${color})`
+              : "#888",
+            boxShadow: enabled ? `0 0 8px ${color}` : "none",
+          }}
+        />
+      </div>
     </div>
-  </div>
   );
 }, (prevProps, nextProps) => {
   // Enhanced memo comparison - only re-render if actual prop values change
@@ -340,13 +342,13 @@ const ToggleSetting = React.memo(({ icon, label, description, color, enabled, on
 const NumberSetting = React.memo(({ icon, label, description, color, value, onValueChange, min = 0, max = 100, unit = "", disabled = false }) => {
   const { theme } = useContext(ThemeContext);
   const isDark = theme === "dark";
-  
+
   // Memoize styles to prevent unnecessary recalculations
-  const styles = React.useMemo(() => 
+  const styles = React.useMemo(() =>
     getStyles(isDark, isDark ? "#f5f5f5" : "#000000", isDark ? "transparent" : "#ffffff"),
     [isDark]
   );
-  
+
   // Memoize value change handlers to prevent unnecessary re-renders
   const handleIncrement = React.useCallback(() => {
     if (!disabled && value < max) {
@@ -376,7 +378,7 @@ const NumberSetting = React.memo(({ icon, label, description, color, value, onVa
         )}
       </div>
       <div style={styles.numberControl}>
-        <button 
+        <button
           onClick={handleDecrement}
           disabled={disabled || value <= min}
           style={{
@@ -387,15 +389,15 @@ const NumberSetting = React.memo(({ icon, label, description, color, value, onVa
         >
           -
         </button>
-        <span 
-        className="setting-value-transition"
-        style={{
-          ...styles.numberValue,
-          opacity: disabled ? 0.6 : 1
-        }}>
+        <span
+          className="setting-value-transition"
+          style={{
+            ...styles.numberValue,
+            opacity: disabled ? 0.6 : 1
+          }}>
           {value}{unit}
         </span>
-        <button 
+        <button
           onClick={handleIncrement}
           disabled={disabled || value >= max}
           style={{
@@ -416,9 +418,9 @@ const TextSetting = React.memo(
   ({ icon, label, description, color, value, onValueChange, disabled = false }) => {
     const { theme } = useContext(ThemeContext);
     const isDark = theme === "dark";
-    
+
     // Memoize styles to prevent recalculation on every render
-    const styles = React.useMemo(() => 
+    const styles = React.useMemo(() =>
       getStyles(isDark, isDark ? "#f5f5f5" : "#000000", isDark ? "transparent" : "#ffffff"),
       [isDark]
     );
@@ -771,10 +773,10 @@ const DropdownSetting = React.memo(
               {(() => {
                 if (!value) return 'Select an option...';
                 // Handle both string values and object options with value/label
-                const selectedOption = options.find(opt => 
+                const selectedOption = options.find(opt =>
                   typeof opt === 'string' ? opt === value : opt.value === value
                 );
-                return selectedOption 
+                return selectedOption
                   ? (typeof selectedOption === 'string' ? selectedOption : selectedOption.label)
                   : value;
               })()}
@@ -791,7 +793,7 @@ const DropdownSetting = React.memo(
                 const optionValue = typeof option === 'string' ? option : option.value;
                 const optionLabel = typeof option === 'string' ? option : option.label;
                 const isLast = index === options.length - 1;
-                
+
                 return (
                   <div
                     key={index}
@@ -837,23 +839,25 @@ const DropdownSetting = React.memo(
 
 // Main Settings Component
 // Isolated Header Component to prevent re-renders
-const SettingHeader = React.memo(({ 
-  textColor, 
-  hasChanges, 
-  lastUpdateSuccess, 
-  loading, 
-  isDark, 
+const SettingHeader = React.memo(({
+  textColor,
+  hasChanges,
+  lastUpdateSuccess,
+  loading,
+  isDark,
   isRefreshing,
-  onRestartCharger, 
+  onRestartCharger,
   onRefreshConfiguration,
   headerStyle,
-  headingStyle
+  headingStyle,
+  isAdminMode,
+  onEnterMaintenance
 }) => {
   const restartButtonStyle = React.useMemo(() => ({
     background: (!hasChanges || !lastUpdateSuccess || loading) ? "transparent" : (isDark ? "rgb(136 171 226)" : "#ff0000"),
     border: `1px solid ${isDark ? "rgb(136 171 226)" : "#ff0000"}`,
-    color: (!hasChanges || !lastUpdateSuccess || loading) ? 
-      (isDark ? "rgba(136, 171, 226, 0.5)" : "rgba(255, 0, 0, 0.5)") : 
+    color: (!hasChanges || !lastUpdateSuccess || loading) ?
+      (isDark ? "rgba(136, 171, 226, 0.5)" : "rgba(255, 0, 0, 0.5)") :
       "#ffffff",
     padding: "8px 16px",
     borderRadius: "6px",
@@ -869,8 +873,8 @@ const SettingHeader = React.memo(({
   const refreshButtonStyle = React.useMemo(() => ({
     background: (loading || isRefreshing) ? "transparent" : (isDark ? "rgb(136 171 226)" : "#ff0000"),
     border: `1px solid ${isDark ? "rgb(136 171 226)" : "#ff0000"}`,
-    color: (loading || isRefreshing) ? 
-      (isDark ? "rgba(136, 171, 226, 0.5)" : "rgba(255, 0, 0, 0.5)") : 
+    color: (loading || isRefreshing) ?
+      (isDark ? "rgba(136, 171, 226, 0.5)" : "rgba(255, 0, 0, 0.5)") :
       "#ffffff",
     padding: "8px 16px",
     borderRadius: "6px",
@@ -889,7 +893,7 @@ const SettingHeader = React.memo(({
         <FaCog style={{ marginRight: "10px", color: "rgb(136 171 226)" }} />
         System Configuration
       </h2>
-      
+
       {/* Restart OCPP Client Button */}
       <button
         onClick={onRestartCharger}
@@ -897,14 +901,14 @@ const SettingHeader = React.memo(({
         style={restartButtonStyle}
         title={
           !hasChanges ? "No changes made" :
-          !lastUpdateSuccess ? "Changes must be successfully updated first" :
-          loading ? "Processing..." :
-          "Restart Charger"
+            !lastUpdateSuccess ? "Changes must be successfully updated first" :
+              loading ? "Processing..." :
+                "Restart Charger"
         }
       >
         <FaRedo /> Restart Charger
       </button>
-      
+
       {/* Refresh Configuration Button */}
       <button
         onClick={onRefreshConfiguration}
@@ -912,15 +916,38 @@ const SettingHeader = React.memo(({
         style={refreshButtonStyle}
         title={
           loading ? "Configuration loading..." :
-          isRefreshing ? "Refreshing configuration..." :
-          "Refresh Configuration"
+            isRefreshing ? "Refreshing configuration..." :
+              "Refresh Configuration"
         }
       >
         <FaSync style={{
           animation: isRefreshing ? 'spin 1s linear infinite' : 'none'
-        }} /> 
+        }} />
         Refresh
       </button>
+
+      {/* Maintenance Mode Button - only shown for admin users */}
+      {isAdminMode && onEnterMaintenance && (
+        <button
+          onClick={onEnterMaintenance}
+          style={{
+            background: "#ff9800",
+            border: "1px solid #ff9800",
+            color: "#ffffff",
+            padding: "8px 16px",
+            borderRadius: "6px",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            fontSize: "0.9rem",
+            marginLeft: "8px"
+          }}
+          title="Enter Maintenance Mode"
+        >
+          <FaCog /> Maintenance
+        </button>
+      )}
     </div>
   );
 });
@@ -928,7 +955,7 @@ const SettingHeader = React.memo(({
 // Isolated Tab Navigation Component to prevent re-renders
 const ValidationError = React.memo(({ error, isDark }) => {
   if (!error) return null;
-  
+
   return (
     <div style={{
       marginBottom: '15px',
@@ -950,11 +977,11 @@ const ValidationError = React.memo(({ error, isDark }) => {
   );
 });
 
-const TabNavigation = React.memo(({ 
-  activeTab, 
-  loading, 
-  isDark, 
-  onHardwareTabClick, 
+const TabNavigation = React.memo(({
+  activeTab,
+  loading,
+  isDark,
+  onHardwareTabClick,
   onOcppTabClick,
   onOutletTabClick,
   tabContainerStyle,
@@ -962,11 +989,11 @@ const TabNavigation = React.memo(({
 }) => {
   const hardwareTabStyle = React.useMemo(() => ({
     ...tabStyle,
-    backgroundColor: activeTab === "hardware" 
+    backgroundColor: activeTab === "hardware"
       ? (isDark ? "rgb(136 171 226)" : "#ff0000")
       : "transparent",
-    color: activeTab === "hardware" 
-      ? "#ffffff" 
+    color: activeTab === "hardware"
+      ? "#ffffff"
       : (isDark ? "rgb(136 171 226)" : "#ff0000"),
     borderColor: isDark ? "rgb(136 171 226)" : "#ff0000",
     opacity: loading ? 0.5 : 1,
@@ -975,11 +1002,11 @@ const TabNavigation = React.memo(({
 
   const ocppTabStyle = React.useMemo(() => ({
     ...tabStyle,
-    backgroundColor: activeTab === "ocpp" 
+    backgroundColor: activeTab === "ocpp"
       ? (isDark ? "rgb(136 171 226)" : "#ff0000")
       : "transparent",
-    color: activeTab === "ocpp" 
-      ? "#ffffff" 
+    color: activeTab === "ocpp"
+      ? "#ffffff"
       : (isDark ? "rgb(136 171 226)" : "#ff0000"),
     borderColor: isDark ? "rgb(136 171 226)" : "#ff0000",
     opacity: loading ? 0.5 : 1,
@@ -988,11 +1015,11 @@ const TabNavigation = React.memo(({
 
   const outletTabStyle = React.useMemo(() => ({
     ...tabStyle,
-    backgroundColor: activeTab === "outlet" 
+    backgroundColor: activeTab === "outlet"
       ? (isDark ? "rgb(136 171 226)" : "#ff0000")
       : "transparent",
-    color: activeTab === "outlet" 
-      ? "#ffffff" 
+    color: activeTab === "outlet"
+      ? "#ffffff"
       : (isDark ? "rgb(136 171 226)" : "#ff0000"),
     borderColor: isDark ? "rgb(136 171 226)" : "#ff0000",
     opacity: loading ? 0.5 : 1,
@@ -1029,13 +1056,14 @@ const TabNavigation = React.memo(({
   );
 });
 
-const Setting = React.memo(() => {
+const Setting = React.memo(({ onTabChange }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAdminMode, setIsAdminMode] = useState(false);
   const [activeTab, setActiveTab] = useState("hardware");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const { theme } = useContext(ThemeContext);
-  
+
   // Only subscribe to the specific config value, not the entire charging state
   const config = useSelector((state) => state.charging?.config);
 
@@ -1063,7 +1091,7 @@ const Setting = React.memo(() => {
       }
     `;
     document.head.appendChild(style);
-    
+
     return () => {
       if (document.head.contains(style)) {
         document.head.removeChild(style);
@@ -1076,11 +1104,11 @@ const Setting = React.memo(() => {
   const [hardwareConfig, setHardwareConfig] = useState({});
   const [outletConfig, setOutletConfig] = useState({});
   const [rawConfig, setRawConfig] = useState({});
-  
+
   // Configuration validation state for cross-endpoint comparison
   const [configValidation, setConfigValidation] = useState({});
   const [validationErrors, setValidationErrors] = useState({});
-  
+
   // Restart button state tracking
   const [hasChanges, setHasChanges] = useState(false);
   const [lastUpdateSuccess, setLastUpdateSuccess] = useState(false);
@@ -1105,7 +1133,7 @@ const Setting = React.memo(() => {
     'underVoltageThreshold': { source: 'ocpp', path: 'underVoltageThreshold' },
     'overVoltageThreshold': { source: 'ocpp', path: 'overVoltageThreshold' },
     'acceptRemoteStartOnPreparingOnly': { source: 'ocpp', path: 'acceptRemoteStartOnPreparingOnly' },
-    
+
     // Keys from UserConfig API (nested paths)
     'powerSaveInIdleMode': { source: 'ocpp', path: 'powerSaveInIdleMode', syncWith: 'userPowerSaveInIdleMode' },
     'userPowerSaveInIdleMode': { source: 'userconfig', path: 'ccs.stack.powerSaveInIdleMode', syncWith: 'powerSaveInIdleMode' },
@@ -1139,17 +1167,17 @@ const Setting = React.memo(() => {
   const addDefaultDlbMode = async (userConfig, endpoint) => {
     // Create a deep copy to avoid mutating the original
     const config = JSON.parse(JSON.stringify(userConfig));
-    
+
     // Ensure ccs object exists
     if (!config.ccs) {
       config.ccs = {};
     }
-    
+
     // Check if dlbMode is missing and add default
     if (!config.ccs.dlbMode) {
       config.ccs.dlbMode = "singleCombo";
       console.log(`Adding default dlbMode to ${endpoint}`);
-      
+
       // Update the backend userconfig with the default dlbMode
       try {
         const response = await fetch(endpoint, {
@@ -1159,7 +1187,7 @@ const Setting = React.memo(() => {
           },
           body: JSON.stringify(config),
         });
-        
+
         if (!response.ok) {
           console.error(`Failed to update ${endpoint} with default dlbMode:`, response.status, response.statusText);
         } else {
@@ -1169,7 +1197,7 @@ const Setting = React.memo(() => {
         console.error(`Error updating ${endpoint} with default dlbMode:`, error);
       }
     }
-    
+
     return config;
   };
 
@@ -1232,7 +1260,7 @@ const Setting = React.memo(() => {
       } else {
         console.error('Failed to GET outlets:', outletResponse?.status, outletResponse?.statusText);
       }
-      
+
       // Add default dlbMode if not present in userconfig responses and update backend
       userConfig100Data = await addDefaultDlbMode(userConfig100Data, 'http://10.20.27.100/api/system/userconfig');
       userConfig101Data = await addDefaultDlbMode(userConfig101Data, 'http://10.20.27.101/api/system/userconfig');
@@ -1241,17 +1269,17 @@ const Setting = React.memo(() => {
       userConfig100Data = await addDefaultImd(userConfig100Data, 'http://10.20.27.100/api/system/userconfig');
       userConfig101Data = await addDefaultImd(userConfig101Data, 'http://10.20.27.101/api/system/userconfig');
 
-      
+
       // Store all configurations for validation
       const allConfigs = {
         ocpp: ocppData,
         userconfig100: userConfig100Data,
         userconfig101: userConfig101Data
       };
-      
+
       // Validate configurations across endpoints
       validateConfigurationsAcrossEndpoints(allConfigs);
-      
+
       // Categorize configuration from both sources (using 100 as primary)
       categorizeConfiguration(ocppData, userConfig100Data);
 
@@ -1269,13 +1297,13 @@ const Setting = React.memo(() => {
       // Extend raw config with outlet data
       setRawConfig(prev => ({ ...prev, outlet: outletData }));
     } catch (err) {
-       console.error('Error fetching configuration:', err);
-       // Clear any existing configuration on error
-       setRawConfig({});
-       setSoftwareConfig({});
-       setHardwareConfig({});
-       setConfigValidation({});
-       setValidationErrors({});
+      console.error('Error fetching configuration:', err);
+      // Clear any existing configuration on error
+      setRawConfig({});
+      setSoftwareConfig({});
+      setHardwareConfig({});
+      setConfigValidation({});
+      setValidationErrors({});
     } finally {
       setLoading(false);
     }
@@ -1314,25 +1342,25 @@ const Setting = React.memo(() => {
       } else {
         console.error('Failed to GET outlets:', outletResponse?.status, outletResponse?.statusText);
       }
-      
+
       // Add default dlbMode if not present in userconfig responses and update backend
       userConfig100Data = await addDefaultDlbMode(userConfig100Data, 'http://10.20.27.100/api/system/userconfig');
       userConfig101Data = await addDefaultDlbMode(userConfig101Data, 'http://10.20.27.101/api/system/userconfig');
 
-       // Add default imd if not present in userconfig responses and update backend
+      // Add default imd if not present in userconfig responses and update backend
       userConfig100Data = await addDefaultImd(userConfig100Data, 'http://10.20.27.100/api/system/userconfig');
       userConfig101Data = await addDefaultImd(userConfig101Data, 'http://10.20.27.101/api/system/userconfig');
-      
+
       // Store all configurations for validation
       const allConfigs = {
         ocpp: ocppData,
         userconfig100: userConfig100Data,
         userconfig101: userConfig101Data
       };
-      
+
       // Validate configurations across endpoints
       validateConfigurationsAcrossEndpoints(allConfigs);
-      
+
       // Categorize configuration from both sources (using 100 as primary)
       categorizeConfiguration(ocppData, userConfig100Data);
 
@@ -1351,8 +1379,8 @@ const Setting = React.memo(() => {
       setHasChanges(false);
       setLastUpdateSuccess(true);
     } catch (err) {
-       setError(`Failed to refresh configuration: ${err.message}`);
-       console.error('Error refreshing configuration:', err);
+      setError(`Failed to refresh configuration: ${err.message}`);
+      console.error('Error refreshing configuration:', err);
     } finally {
       setIsRefreshing(false);
     }
@@ -1415,7 +1443,7 @@ const Setting = React.memo(() => {
         // Get current userconfig to maintain structure
         const currentUserConfig = rawConfig.userconfig || {};
         const updatedUserConfig = { ...currentUserConfig };
-        
+
         // Set the nested value
         setNestedValue(updatedUserConfig, mapping.path, value);
 
@@ -1426,7 +1454,7 @@ const Setting = React.memo(() => {
         ];
 
         // Create fetch promises for both endpoints
-        const fetchPromises = endpoints.map(endpoint => 
+        const fetchPromises = endpoints.map(endpoint =>
           fetch(endpoint, {
             method: 'POST',
             headers: {
@@ -1460,7 +1488,7 @@ const Setting = React.memo(() => {
 
         setLastUpdateSuccess(true);
         console.log('Successfully updated UserConfig on both endpoints:', endpoints);
-        
+
         // Refresh configuration after successful update to both endpoints
         await fetchAllConfigurations();
       } catch (err) {
@@ -1549,49 +1577,49 @@ const Setting = React.memo(() => {
       setNestedValue(updated100, mapping.path, value);
       setNestedValue(updated101, mapping.path, value);
 
-    // Create POST payloads for each endpoint individually
-    const postPromises = [
-      fetch(endpoints[0], {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated100)
-      }),
-      fetch(endpoints[1], {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated101)
-      })
-    ];
+      // Create POST payloads for each endpoint individually
+      const postPromises = [
+        fetch(endpoints[0], {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updated100)
+        }),
+        fetch(endpoints[1], {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updated101)
+        })
+      ];
 
-    // Execute both requests in parallel
-    const responses = await Promise.all(postPromises);
+      // Execute both requests in parallel
+      const responses = await Promise.all(postPromises);
 
-    // Collect failed endpoints
-    const failedEndpoints = responses
-      .map((response, index) => !response.ok ? ({
-        endpoint: endpoints[index],
-        status: response.status,
-        statusText: response.statusText
-      }) : null)
-      .filter(Boolean);
+      // Collect failed endpoints
+      const failedEndpoints = responses
+        .map((response, index) => !response.ok ? ({
+          endpoint: endpoints[index],
+          status: response.status,
+          statusText: response.statusText
+        }) : null)
+        .filter(Boolean);
 
-    if (failedEndpoints.length > 0) {
-      const errorMessages = failedEndpoints.map(
-        f => `${f.endpoint}: ${f.status} ${f.statusText}`
-      );
-      throw new Error(`Failed to update endpoints: ${errorMessages.join(', ')}`);
+      if (failedEndpoints.length > 0) {
+        const errorMessages = failedEndpoints.map(
+          f => `${f.endpoint}: ${f.status} ${f.statusText}`
+        );
+        throw new Error(`Failed to update endpoints: ${errorMessages.join(', ')}`);
+      }
+
+      setLastUpdateSuccess(true);
+      // Refresh configuration after successful updates
+      await fetchAllConfigurations();
+    } catch (err) {
+      setError(err.message);
+      setLastUpdateSuccess(false);
+    } finally {
+      setLoading(false);
     }
-
-    setLastUpdateSuccess(true);
-    // Refresh configuration after successful updates
-    await fetchAllConfigurations();
-  } catch (err) {
-    setError(err.message);
-    setLastUpdateSuccess(false);
-  } finally {
-    setLoading(false);
-  }
-}, [rawConfig, fetchAllConfigurations]);
+  }, [rawConfig, fetchAllConfigurations]);
 
   // Synchronized update function for keys that need to be kept in sync
   const updateSynchronizedConfig = useCallback(async (key, value) => {
@@ -1607,7 +1635,7 @@ const Setting = React.memo(() => {
 
     try {
       const updates = [];
-      
+
       // Update the primary configuration
       if (mapping.source === 'ocpp') {
         updates.push(updateOcppConfig(key, value));
@@ -1619,7 +1647,7 @@ const Setting = React.memo(() => {
       if (mapping.syncWith) {
         const syncKey = mapping.syncWith;
         const syncMapping = configKeyMapping[syncKey];
-        
+
         if (syncMapping) {
           if (syncMapping.source === 'ocpp') {
             updates.push(updateOcppConfig(syncKey, value));
@@ -1631,10 +1659,10 @@ const Setting = React.memo(() => {
 
       // Wait for all updates to complete
       await Promise.all(updates);
-      
+
       setLastUpdateSuccess(true);
       console.log(`Successfully synchronized ${key} with value:`, value);
-      
+
     } catch (err) {
       console.error('Error in synchronized update:', err);
       setError(err.message);
@@ -1649,7 +1677,7 @@ const Setting = React.memo(() => {
     setLoading(true);
     setError(null);
     setIsRestarting(true); // Show restarting screen
-    
+
     try {
       const response = await fetch(`${apiUrl}/reset`, {
         method: 'POST',
@@ -1695,7 +1723,7 @@ const Setting = React.memo(() => {
   const validateConfigurationsAcrossEndpoints = useCallback((allConfigs) => {
     const { ocpp, userconfig100, userconfig101 } = allConfigs;
     const errors = {};
-    
+
     // Define the keys to validate and their mappings
     const validationKeys = [
       {
@@ -1704,7 +1732,7 @@ const Setting = React.memo(() => {
         displayName: 'Max Power Limit (kW)'
       },
       {
-        ocppKey: 'maxCurrentLimitInAmps', 
+        ocppKey: 'maxCurrentLimitInAmps',
         userconfigKey: 'maxA',
         displayName: 'Max Current Limit (Amps)'
       },
@@ -1714,28 +1742,28 @@ const Setting = React.memo(() => {
         displayName: 'Power Save in Idle Mode'
       }
     ];
-    
+
     validationKeys.forEach(({ ocppKey, userconfigKey, displayName }) => {
       // Get values from all three sources
       const ocppValue = ocpp[ocppKey];
       const userconfig100Value = userconfig100?.ccs?.stack?.[userconfigKey];
       const userconfig101Value = userconfig101?.ccs?.stack?.[userconfigKey];
-      
+
       // Create array of all values for comparison
       const values = [
         { source: 'OCPP Client', value: ocppValue },
         { source: 'SECC User Config', value: userconfig100Value },
         { source: 'LE User Config', value: userconfig101Value }
       ];
-      
+
       // Filter out undefined/null values
       const definedValues = values.filter(v => v.value !== undefined && v.value !== null);
-      
+
       if (definedValues.length > 1) {
         // Check if all defined values are the same
         const firstValue = definedValues[0].value;
         const hasDiscrepancy = definedValues.some(v => v.value !== firstValue);
-        
+
         if (hasDiscrepancy) {
           // Create detailed error message
           const valueDescriptions = definedValues.map(v => `${v.source}: ${v.value}`).join(', ');
@@ -1747,7 +1775,7 @@ const Setting = React.memo(() => {
         }
       }
     });
-    
+
     // Define userconfig-only keys to validate between endpoints 100 and 101
     const userconfigOnlyKeys = [
       {
@@ -1757,25 +1785,25 @@ const Setting = React.memo(() => {
       },
       {
         key: 'num_of_modules',
-        path: 'ccs.num_of_modules', 
+        path: 'ccs.num_of_modules',
         displayName: 'Number of Modules'
-      },{
+      }, {
         key: 'imd',
         path: 'ccs.stack.imd',
         displayName: 'IMD'
       },
       {
         key: 'Convertor Type',
-        path: 'ccs.intcc.conv', 
+        path: 'ccs.intcc.conv',
         displayName: 'Convertor Type'
       }
     ];
-    
+
     // Validate userconfig-only keys between endpoints 100 and 101
     userconfigOnlyKeys.forEach(({ key, path, displayName }) => {
       const userconfig100Value = getNestedValue(userconfig100, path);
       const userconfig101Value = getNestedValue(userconfig101, path);
-      
+
       // Only validate if both values exist
       if (userconfig100Value !== undefined && userconfig101Value !== undefined) {
         if (userconfig100Value !== userconfig101Value) {
@@ -1842,11 +1870,11 @@ const Setting = React.memo(() => {
     } catch (e) {
       console.warn('Failed to validate num_of_modules options across endpoints:', e);
     }
-    
+
     // Update validation state
     setValidationErrors(errors);
     setConfigValidation(allConfigs);
-    
+
     // Log validation results
     if (Object.keys(errors).length > 0) {
       console.warn('Configuration validation errors found:', errors);
@@ -1858,17 +1886,17 @@ const Setting = React.memo(() => {
   // Categorize configuration from both API sources
   const categorizeConfiguration = React.useCallback((ocppConfig, userConfig) => {
     const displayConfig = {};
-    
+
     // Process each configured key
     Object.entries(configKeyMapping).forEach(([displayKey, mapping]) => {
       let value;
-      
+
       if (mapping.source === 'ocpp' && ocppConfig) {
         value = getNestedValue(ocppConfig, mapping.path);
       } else if (mapping.source === 'userconfig' && userConfig) {
         value = getNestedValue(userConfig, mapping.path);
       }
-      
+
       if (value !== undefined) {
         displayConfig[displayKey] = {
           value: value,
@@ -1879,11 +1907,11 @@ const Setting = React.memo(() => {
     });
 
     // Separate into categories for display
-    const ocppKeys = Object.keys(configKeyMapping).filter(key => 
+    const ocppKeys = Object.keys(configKeyMapping).filter(key =>
       configKeyMapping[key].source === 'ocpp'
     );
-    
-    const userConfigKeys = Object.keys(configKeyMapping).filter(key => 
+
+    const userConfigKeys = Object.keys(configKeyMapping).filter(key =>
       configKeyMapping[key].source === 'userconfig'
     );
 
@@ -1926,7 +1954,7 @@ const Setting = React.memo(() => {
     }
 
     console.log(`Updating hardware config: ${key} = ${value}`);
-    
+
     // Optimistically update the UI state immediately
     React.startTransition(() => {
       setHardwareConfig(prev => ({
@@ -1940,7 +1968,7 @@ const Setting = React.memo(() => {
     if (updateTimeouts.current[updateKey]) {
       clearTimeout(updateTimeouts.current[updateKey]);
     }
-    
+
     updateTimeouts.current[updateKey] = setTimeout(async () => {
       try {
         // Check if this key needs synchronization
@@ -1976,7 +2004,7 @@ const Setting = React.memo(() => {
     }
 
     console.log(`Updating OCPP config: ${key} = ${value}`);
-    
+
     // Optimistically update the UI state immediately
     React.startTransition(() => {
       setSoftwareConfig(prev => ({
@@ -1990,7 +2018,7 @@ const Setting = React.memo(() => {
     if (updateTimeouts.current[updateKey]) {
       clearTimeout(updateTimeouts.current[updateKey]);
     }
-    
+
     updateTimeouts.current[updateKey] = setTimeout(async () => {
       try {
         // Check if this key needs synchronization
@@ -2051,8 +2079,8 @@ const Setting = React.memo(() => {
     const label = configKey
     const icon = React.useMemo(() => getSettingIcon(configKey), [configKey]);
     const color = React.useMemo(() => getSettingColor(configKey), [configKey]);
-    const updateFunction = React.useMemo(() => 
-      category === 'ocpp' ? memoizedUpdateOcppConfig : memoizedUpdateHardwareConfig, 
+    const updateFunction = React.useMemo(() =>
+      category === 'ocpp' ? memoizedUpdateOcppConfig : memoizedUpdateHardwareConfig,
       [category, memoizedUpdateOcppConfig, memoizedUpdateHardwareConfig]
     );
 
@@ -2062,15 +2090,15 @@ const Setting = React.memo(() => {
       const keyMappings = {
         'maxPowerLimitInkW': 'maxPowerLimitInkW',
         'maxKW': 'maxPowerLimitInkW',
-        'maxCurrentLimitInAmps': 'maxCurrentLimitInAmps', 
+        'maxCurrentLimitInAmps': 'maxCurrentLimitInAmps',
         'maxA': 'maxCurrentLimitInAmps',
         'powerSaveInIdleMode': 'powerSaveInIdleMode',
-        "dlbMode":"dlbMode",
-        "num_of_modules":"num_of_modules",
-        "Convertor Type":"Convertor Type",
-        "imd":"imd"
+        "dlbMode": "dlbMode",
+        "num_of_modules": "num_of_modules",
+        "Convertor Type": "Convertor Type",
+        "imd": "imd"
       };
-      
+
       const validationKey = keyMappings[configKey];
       return validationKey ? validationErrors[validationKey] : null;
     }, [configKey, validationErrors]);
@@ -2115,20 +2143,20 @@ const Setting = React.memo(() => {
       try {
         const outletPayload = newValue === 1
           ? [
-              { type: 'CCS', ip: '10.20.27.100', outletId: 1, port: 5683, out_of_order: false, ocmf: false }
-            ]
+            { type: 'CCS', ip: '10.20.27.100', outletId: 1, port: 5683, out_of_order: false, ocmf: false }
+          ]
           : [
-              { type: 'CCS', ip: '10.20.27.100', outletId: 1, port: 5683, out_of_order: false, ocmf: false },
-              { type: 'CCS', ip: '10.20.27.101', outletId: 2, port: 5683, out_of_order: false, ocmf: false }
-            ];
+            { type: 'CCS', ip: '10.20.27.100', outletId: 1, port: 5683, out_of_order: false, ocmf: false },
+            { type: 'CCS', ip: '10.20.27.101', outletId: 2, port: 5683, out_of_order: false, ocmf: false }
+          ];
         const controllersPayload = newValue === 1
           ? [
-              { id: 1, ip: '10.20.27.100' }
-            ]
+            { id: 1, ip: '10.20.27.100' }
+          ]
           : [
-              { id: 1, ip: '10.20.27.100' },
-              { id: 2, ip: '10.20.27.101' }
-            ];
+            { id: 1, ip: '10.20.27.100' },
+            { id: 2, ip: '10.20.27.101' }
+          ];
 
         const responses = await Promise.all([
           fetch(`${apiUrl}/outlets`, {
@@ -2187,14 +2215,14 @@ const Setting = React.memo(() => {
       };
       fetchOutlets();
     }, [configKey, apiUrl]);
- 
+
     const { debouncedCallback: debouncedAutoModuleUpdate } = useDebounce(
       async (autoModules) => {
         try {
           // Get current userconfig to maintain structure
           const currentUserConfig = rawConfig.userconfig || {};
           const updatedUserConfig = { ...currentUserConfig };
-          
+
           // Set the num_of_modules value
           if (!updatedUserConfig.ccs) updatedUserConfig.ccs = {};
           updatedUserConfig.ccs.num_of_modules = autoModules;
@@ -2206,7 +2234,7 @@ const Setting = React.memo(() => {
           ];
 
           // Create fetch promises for both endpoints
-          const fetchPromises = endpoints.map(endpoint => 
+          const fetchPromises = endpoints.map(endpoint =>
             fetch(endpoint, {
               method: 'POST',
               headers: {
@@ -2248,41 +2276,41 @@ const Setting = React.memo(() => {
 
     // dlbMode value change handler - always created but only used when needed
     const dlbComboHandleValueChange = React.useCallback(async (newValue) => {
-        // First update the dlbMode using debounced API call
-        debouncedUpdateUserConfig('dlbMode', newValue);
-        
-        // Then automatically set num_of_modules based on dlbMode
-        let autoModules = null;
-        if (newValue === 'dualCombo') {
-          autoModules = 3;
-        } else if (newValue === 'tripleCombo') {
-          autoModules = 4;
-        }
-        
-        // If we need to auto-set modules, use debounced update
-        if (autoModules !== null) {
-          debouncedAutoModuleUpdate(autoModules);
-        }
+      // First update the dlbMode using debounced API call
+      debouncedUpdateUserConfig('dlbMode', newValue);
+
+      // Then automatically set num_of_modules based on dlbMode
+      let autoModules = null;
+      if (newValue === 'dualCombo') {
+        autoModules = 3;
+      } else if (newValue === 'tripleCombo') {
+        autoModules = 4;
+      }
+
+      // If we need to auto-set modules, use debounced update
+      if (autoModules !== null) {
+        debouncedAutoModuleUpdate(autoModules);
+      }
     }, [debouncedUpdateUserConfig, debouncedAutoModuleUpdate]);
 
     // CRITICAL FIX: Use stable reference for dlbMode value to prevent cross-dependencies
     const dlbComboValue = React.useMemo(() => {
       if (configKey !== 'num_of_modules') return null;
-      
+
       // Get dlbMode value from rawConfig to avoid state dependencies
       const dlbComboFromRaw = rawConfig?.userconfig?.ccs?.dlbMode;
       if (dlbComboFromRaw) return dlbComboFromRaw;
-      
+
       // Fallback to config states only if rawConfig is not available
-      return category === 'hardware' ? 
-        hardwareConfig['dlbMode']?.value : 
+      return category === 'hardware' ?
+        hardwareConfig['dlbMode']?.value :
         softwareConfig['dlbMode']?.value;
     }, [configKey, rawConfig?.userconfig?.ccs?.dlbMode, category, hardwareConfig, softwareConfig]);
 
     // num_of_modules computed options and state - always computed but only used when needed
     const numModulesConfig = React.useMemo(() => {
       if (configKey !== 'num_of_modules') return null;
-      
+
       let isDisabled = false;
       let defaultValue = value;
       let options = [];
@@ -2315,18 +2343,18 @@ const Setting = React.memo(() => {
 
     // num_of_modules value change handler - always created but only used when needed
     const numModulesHandleValueChange = React.useCallback((newValue) => {
-        handleValueChange(newValue);
+      handleValueChange(newValue);
     }, [handleValueChange]);
 
     // CRITICAL FIX: Debounced effect to prevent rapid cascading updates
     const [pendingUpdate, setPendingUpdate] = React.useState(null);
-    
+
     React.useEffect(() => {
       if (configKey !== 'num_of_modules' || !numModulesConfig) return;
-      
+
       const { options } = numModulesConfig;
       let newValue = null;
-      
+
       if (dlbComboValue === 'singleCombo' && !options.some(option => option.value === value)) {
         newValue = 2;
       } else if (dlbComboValue === 'dualCombo' && value !== 3) {
@@ -2334,10 +2362,10 @@ const Setting = React.memo(() => {
       } else if (dlbComboValue === 'tripleCombo' && value !== 4) {
         newValue = 4;
       }
-      
+
       if (newValue !== null && newValue !== pendingUpdate) {
         setPendingUpdate(newValue);
-        
+
         // Use longer debounce to prevent flickering
         const timeoutId = setTimeout(() => {
           React.startTransition(() => {
@@ -2345,7 +2373,7 @@ const Setting = React.memo(() => {
             setPendingUpdate(null);
           });
         }, 100); // Increased debounce time
-        
+
         return () => clearTimeout(timeoutId);
       }
     }, [configKey, dlbComboValue, value, numModulesConfig, handleValueChange, pendingUpdate]);
@@ -2451,7 +2479,7 @@ const Setting = React.memo(() => {
       // Determine appropriate min/max based on key name
       let min = 0, max = 100, unit = "";
       const keyLower = configKey.toLowerCase();
-      
+
       if (keyLower.includes('timeout')) {
         min = 1; max = 300; unit = "s";
       } else if (keyLower.includes('current')) {
@@ -2510,16 +2538,16 @@ const Setting = React.memo(() => {
     if (prevProps.configKey !== nextProps.configKey) return false;
     if (prevProps.category !== nextProps.category) return false;
     if (prevProps.onValueChange !== nextProps.onValueChange) return false;
-    
+
     // Deep comparison only for the value that matters
     const prevValue = prevProps.settingData?.value;
     const nextValue = nextProps.settingData?.value;
-    
+
     // For primitive values, direct comparison
     if (typeof prevValue !== 'object' && typeof nextValue !== 'object') {
       return prevValue === nextValue;
     }
-    
+
     // For objects, compare stringified version (but this should be rare)
     return JSON.stringify(prevValue) === JSON.stringify(nextValue);
   });
@@ -2527,10 +2555,10 @@ const Setting = React.memo(() => {
   const isDark = theme === "dark";
   const backgroundColor = isDark ? "transparent" : "#ffffff";
   const textColor = isDark ? "#f5f5f5" : "#000000";
-  
+
   // Memoize styles to prevent unnecessary recalculations and flickering
-  const styles = React.useMemo(() => 
-    getStyles(isDark, textColor, backgroundColor), 
+  const styles = React.useMemo(() =>
+    getStyles(isDark, textColor, backgroundColor),
     [isDark, textColor, backgroundColor]
   );
 
@@ -2572,12 +2600,12 @@ const Setting = React.memo(() => {
   // RestartingScreen component with animation
   const RestartingScreen = () => {
     const [dots, setDots] = useState('');
-    
+
     useEffect(() => {
       const interval = setInterval(() => {
         setDots(prev => prev.length >= 3 ? '' : prev + '.');
       }, 500);
-      
+
       return () => clearInterval(interval);
     }, []);
 
@@ -2609,7 +2637,7 @@ const Setting = React.memo(() => {
           animation: 'spin 1s linear infinite',
           marginBottom: '20px'
         }} />
-        
+
         {/* Status message */}
         <div style={{
           color: isDark ? 'rgb(136, 171, 226)' : '#ff0000',
@@ -2620,7 +2648,7 @@ const Setting = React.memo(() => {
         }}>
           Restarting Charger{dots}
         </div>
-        
+
         <div style={{
           color: isDark ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)',
           fontSize: '0.9rem',
@@ -2644,13 +2672,20 @@ const Setting = React.memo(() => {
           `}
         </style>
         <RestartingScreen />
-        <PasswordProtection onAuthenticated={() => setIsAuthenticated(true)} theme={theme} onRestartCharger={handleRestartCharger} />
+        <PasswordProtection
+          onAuthenticated={(isAdmin) => {
+            setIsAuthenticated(true);
+            setIsAdminMode(isAdmin);
+          }}
+          theme={theme}
+          onRestartCharger={handleRestartCharger}
+        />
       </>
     );
   }
 
   return (
-      <div style={{ ...styles.container, backgroundColor, color: textColor }}>
+    <div style={{ ...styles.container, backgroundColor, color: textColor }}>
       {/* Add CSS keyframes for spinning animation */}
       <style>
         {`
@@ -2660,7 +2695,7 @@ const Setting = React.memo(() => {
           }
         `}
       </style>
-      
+
       {/* Restarting Screen Overlay */}
       <RestartingScreen />
       {/* Header */}
@@ -2675,6 +2710,8 @@ const Setting = React.memo(() => {
         onRefreshConfiguration={handleRefreshConfiguration}
         headerStyle={styles.header}
         headingStyle={styles.heading}
+        isAdminMode={isAdminMode}
+        onEnterMaintenance={onTabChange ? () => onTabChange("maintenance") : null}
       />
 
       {/* Tab Navigation */}
@@ -2702,8 +2739,8 @@ const Setting = React.memo(() => {
             <div style={styles.errorDetails}>
               <strong>Error:</strong> {error}
             </div>
-            <button 
-              style={styles.retryButtonLarge} 
+            <button
+              style={styles.retryButtonLarge}
               onClick={fetchAllConfigurations}
               disabled={loading}
             >
@@ -2846,32 +2883,32 @@ const getStyles = (isDark, textColor, backgroundColor) => ({
     boxSizing: "border-box",
   },
   scrollableContent: {
-     flex: 1,
-     overflowY: "auto",
-     overflowX: "hidden",
-     paddingRight: "0.5rem",
-     marginRight: "-0.5rem",
-     maxHeight: "calc(83vh - 250px)",
-     minHeight: 0,
-     boxSizing: "border-box",
-     scrollbarWidth: "thin",
-     scrollbarColor: isDark ? "rgba(136, 171, 226, 0.5) transparent" : "rgba(255, 0, 0, 0.4) transparent",
-     '&::-webkit-scrollbar': {
-       width: "8px",
-     },
-     '&::-webkit-scrollbar-track': {
-       background: isDark ? "rgba(136, 171, 226, 0.1)" : "rgba(255, 0, 0, 0.08)",
-       borderRadius: "4px",
-     },
-     '&::-webkit-scrollbar-thumb': {
-       background: isDark ? "rgba(136, 171, 226, 0.5)" : "rgba(255, 0, 0, 0.4)",
-       borderRadius: "4px",
-       border: isDark ? "1px solid rgba(136, 171, 226, 0.3)" : "1px solid rgba(255, 0, 0, 0.2)",
-     },
-     '&::-webkit-scrollbar-thumb:hover': {
-       background: isDark ? "rgba(136, 171, 226, 0.7)" : "rgba(255, 0, 0, 0.6)",
-     },
-   },
+    flex: 1,
+    overflowY: "auto",
+    overflowX: "hidden",
+    paddingRight: "0.5rem",
+    marginRight: "-0.5rem",
+    maxHeight: "calc(83vh - 250px)",
+    minHeight: 0,
+    boxSizing: "border-box",
+    scrollbarWidth: "thin",
+    scrollbarColor: isDark ? "rgba(136, 171, 226, 0.5) transparent" : "rgba(255, 0, 0, 0.4) transparent",
+    '&::-webkit-scrollbar': {
+      width: "8px",
+    },
+    '&::-webkit-scrollbar-track': {
+      background: isDark ? "rgba(136, 171, 226, 0.1)" : "rgba(255, 0, 0, 0.08)",
+      borderRadius: "4px",
+    },
+    '&::-webkit-scrollbar-thumb': {
+      background: isDark ? "rgba(136, 171, 226, 0.5)" : "rgba(255, 0, 0, 0.4)",
+      borderRadius: "4px",
+      border: isDark ? "1px solid rgba(136, 171, 226, 0.3)" : "1px solid rgba(255, 0, 0, 0.2)",
+    },
+    '&::-webkit-scrollbar-thumb:hover': {
+      background: isDark ? "rgba(136, 171, 226, 0.7)" : "rgba(255, 0, 0, 0.6)",
+    },
+  },
   sectionTitle: {
     fontSize: "1.5rem",
     fontWeight: "600",
@@ -2911,9 +2948,9 @@ const getStyles = (isDark, textColor, backgroundColor) => ({
     flexDirection: "column",
     flex: 1,
     minWidth: 0,
-     overflow: "hidden",
-   },
-   label: {
+    overflow: "hidden",
+  },
+  label: {
     fontSize: "1.2rem",
     letterSpacing: "1px",
     display: "flex",
@@ -2923,18 +2960,18 @@ const getStyles = (isDark, textColor, backgroundColor) => ({
     overflowWrap: "break-word",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
-     overflow: "hidden",
-   },
-   description: {
+    overflow: "hidden",
+  },
+  description: {
     fontSize: "0.9rem",
     color: isDark ? "#aaa" : "#666",
     marginTop: "0.25rem",
     fontStyle: "italic",
     wordWrap: "break-word",
     overflowWrap: "break-word",
-     lineHeight: "1.4",
-   },
-   badge: {
+    lineHeight: "1.4",
+  },
+  badge: {
     marginTop: "4px",
     fontSize: "0.75rem",
     backgroundColor: "#ff0055",
@@ -2970,10 +3007,10 @@ const getStyles = (isDark, textColor, backgroundColor) => ({
     border: isDark ? "1px solid rgba(136, 171, 226, 0.4)" : "1px solid rgba(255, 0, 0, 0.3)",
     boxShadow: isDark ? "inset 0 0 10px rgba(136, 171, 226, 0.1)" : "inset 0 0 10px rgba(255, 0, 0, 0.08)",
     boxSizing: "border-box",
-     minWidth: 0,
-     flexShrink: 0,
-   },
-   numberButton: {
+    minWidth: 0,
+    flexShrink: 0,
+  },
+  numberButton: {
     width: "36px",
     height: "36px",
     borderRadius: "8px",

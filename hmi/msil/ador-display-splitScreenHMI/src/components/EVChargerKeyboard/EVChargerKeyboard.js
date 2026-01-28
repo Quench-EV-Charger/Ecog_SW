@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useRef, useContext, useCallback } from 'react';
-import { ThemeContext } from '../ThemeContext/ThemeProvider';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './EVChargerKeyboard.css';
 
 const EVChargerKeyboard = ({ 
@@ -12,7 +11,7 @@ const EVChargerKeyboard = ({
   maxLength = null,
   allowedChars = null
 }) => {
-  const { theme } = useContext(ThemeContext);
+  const theme  = 'light';
   const keyboardRef = useRef(null);
   const [capsLock, setCapsLock] = useState(false);
   const [shift, setShift] = useState(false);
@@ -54,13 +53,13 @@ const EVChargerKeyboard = ({
         ['!', '@', '#', '$', '%'],
         ['^', '&', '*', '(', ')'],
         ['-', '_', '=', '+', '['],
-        [']', '{', '}', '|', '\\','/']
+        [']', '{', '}', '|', '\\', '/', ',']
       ],
       shift: [
         ['!', '@', '#', '$', '%'],
         ['^', '&', '*', '(', ')'],
         ['-', '_', '=', '+', '['],
-        [']', '{', '}', '|', '\\','/']
+        [']', '{', '}', '|', '\\', '/', ',']
       ]
     }
   };
@@ -92,7 +91,7 @@ const EVChargerKeyboard = ({
 
   // Handle key press
   const handleKeyPress = useCallback((key) => {
-    if (!targetRef?.current) return;
+    if (!(targetRef && targetRef.current)) return;
 
     const input = targetRef.current;
     const start = input.selectionStart || 0;
@@ -185,7 +184,7 @@ const EVChargerKeyboard = ({
 
   // Initialize keyboard when it becomes visible
   useEffect(() => {
-    if (isVisible && targetRef?.current) {
+    if (isVisible && targetRef && targetRef.current) {
       const inputElement = targetRef.current;
       const fieldValue = inputElement.value || '';
       setCurrentValue(fieldValue);
@@ -201,7 +200,7 @@ const EVChargerKeyboard = ({
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (keyboardRef.current && !keyboardRef.current.contains(event.target) && 
-          targetRef?.current && !targetRef.current.contains(event.target)) {
+          (targetRef && targetRef.current) && !targetRef.current.contains(event.target)) {
         // Optional: auto-close on outside click
         // onClose();
       }
@@ -226,7 +225,6 @@ const EVChargerKeyboard = ({
         {/* Header */}
         <div className="ev-keyboard-header">
           <div className="keyboard-title">
-            <span className="keyboard-icon">⌨️</span>
             <span>EV Charger Keyboard</span>
           </div>
           <button
@@ -235,7 +233,7 @@ const EVChargerKeyboard = ({
             onClick={() => handleKeyPress('Close')}
             title="Close Keyboard"
           >
-            ✕
+            CLOSE
           </button>
         </div>
         
@@ -276,7 +274,7 @@ const EVChargerKeyboard = ({
                 onClick={() => handleKeyPress('CapsLock')}
                 title="Caps Lock"
               >
-                ⇪
+                CAPS
               </button>
               <button
                 type="button"
@@ -284,7 +282,7 @@ const EVChargerKeyboard = ({
                 onClick={() => handleKeyPress('Shift')}
                 title="Shift"
               >
-                ⇧
+                SHIFT
               </button>
             </>
           )}
@@ -326,9 +324,9 @@ const EVChargerKeyboard = ({
             onClick={() => handleKeyPress('Backspace')}
             title="Backspace"
           >
-            ⌫ Backspace
+            Backspace
           </button>
-          
+
           {inputType !== 'number' && inputType !== 'email' && (
             <button
               type="button"
@@ -339,14 +337,14 @@ const EVChargerKeyboard = ({
               Space
             </button>
           )}
-          
+
           <button
             type="button"
             className="action-btn enter-btn"
             onClick={() => handleKeyPress('Enter')}
             title="Enter"
           >
-            ↵ Enter
+            Enter
           </button>
         </div>
       </div>

@@ -541,6 +541,31 @@ class ContextProvider extends Component {
 
   getPath = () => this.props?.location?.pathname;
 
+  connectionTimeOutInterval = null;
+  lastConnectionTimeOut = null;
+
+  fetchConnectionTimeOut = async () => {
+    const { config } = this.state;
+
+    if (!config?.API) return;
+
+    try {
+      const response = await fetch(`${config.API}/ocpp-client/config`);
+      const data = await response.json();
+
+      if (data?.standard?.ConnectionTimeOut !== undefined) {
+        // Check if ConnectionTimeOut has changed
+        if (this.lastConnectionTimeOut !== data.standard.ConnectionTimeOut) {
+          this.lastConnectionTimeOut = data.standard.ConnectionTimeOut;
+          this.setState({ connectionTimeOut: data.standard.ConnectionTimeOut });
+          console.log("[ContextProvider] ConnectionTimeOut updated:", data.standard.ConnectionTimeOut);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to fetch ConnectionTimeOut:", err);
+    }
+  };
+
   async componentDidMount() {
     this.setupIpcMqtt();
 
@@ -549,7 +574,12 @@ class ContextProvider extends Component {
     setImmediate(this.fetchState);
 
     const config = await buildConfig();
-    this.setState({ config });
+    const connectionTimeOut = config?.standard?.ConnectionTimeOut || 60;
+    this.lastConnectionTimeOut = connectionTimeOut;
+    console.log("[ContextProvider] Full config object:", config);
+    console.log("[ContextProvider] config.standard:", config?.standard);
+    console.log("[ContextProvider] ConnectionTimeOut extracted:", connectionTimeOut);
+    this.setState({ config, connectionTimeOut });
 
     // Execute startup API call
     try {
@@ -568,6 +598,9 @@ class ContextProvider extends Component {
     this.checkNetworkAccess();
     this.ocppOnlineInterval = setInterval(() => this.checkOCPPStatus(config?.API), 10000); // prettier-ignore
     this.networkAccessInterval = setInterval(this.checkNetworkAccess, 10000);
+
+    // Start polling for ConnectionTimeOut changes every 5 seconds
+    this.connectionTimeOutInterval = setInterval(() => this.fetchConnectionTimeOut(), 5000);
 
     this.pollConnectorInterval = setInterval(this.fetchActiveConnector, 1000);
     setImmediate(this.fetchActiveConnector);
@@ -684,6 +717,9 @@ class ContextProvider extends Component {
   componentWillUnmount() {
     clearInterval(this.pollStateInterval);
     clearInterval(this.pollConnectorInterval);
+    clearInterval(this.connectionTimeOutInterval);
+    clearInterval(this.ocppOnlineInterval);
+    clearInterval(this.networkAccessInterval);
     window.removeEventListener("reset", this.handleReset, false);
     window.removeEventListener("remoteauth", this.handleRemoteAuth, false);
     this.state.ipcClient.end(true);
@@ -1266,6 +1302,7 @@ class ContextProvider extends Component {
       const needsUnplug = outlet?.needsUnplug === true;
       if (!needsUnplug) return false;
 
+
       // Additional check: session should not be pending
       const sessionPending = outlet?.sessionPending === true;
       if (sessionPending) {
@@ -1398,6 +1435,7 @@ class ContextProvider extends Component {
           gunLetter: GunLetters[outlet.index],  // ✅ Use outlet.index not outlet.outlet
           useQAsOutletID: this.state.config?.useQAsOutletID,
           errorObj: currentErrorObj,  // ✅ Use UPDATED errorObj from re-read charger state
+          currSesError: updatedOutlet?.curr_ses_error || 0,  // ✅ Pass session error code for error-only screen
         };
 
         console.log(`[SessionSummaryPopup] Session data for outlet ${outletNumber}:`, sessionData);
@@ -1545,6 +1583,7 @@ class ContextProvider extends Component {
       gunLetter: GunLetters[outletState.index],
       useQAsOutletID: this.state.config?.useQAsOutletID,
       errorObj: hasError ? outletState.errorObj : null,  // null for normal completion
+      currSesError: hasError ? outletState.curr_ses_error || 0 : 0,  // ✅ Pass session error code for error-only screen
     };
 
     const popupData = {

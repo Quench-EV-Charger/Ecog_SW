@@ -45,7 +45,7 @@ class Navbar extends Component {
 
   shouldHomeBtnDisabled = () => {
     return (
-      this.context.showAlert || this.props.location?.pathname === "/checkpoints"
+      this.props.disableAll || this.context.showAlert || this.props.location?.pathname === "/checkpoints"
     );
   };
 
@@ -54,8 +54,8 @@ class Navbar extends Component {
     const headingColor = headerColor
       ? headerColor
       : theme === "dark"
-      ? "white"
-      : "#373744";
+        ? "white"
+        : "#373744";
 
     return (
       <MainContext.Consumer>
@@ -160,16 +160,27 @@ class Navbar extends Component {
                   }}
                 />
                 <NavbarButton
+                  disabled={this.shouldHomeBtnDisabled()}
                   theme={theme}
                   onClick={this.handleSettingsClick}
                   iconType="setting"
+                  additionalStyles={{
+                    opacity: this.shouldHomeBtnDisabled() ? "0.35" : "1",
+                  }}
                 />
-                <NavbarButton theme={theme}>
+                <NavbarButton
+                  theme={theme}
+                  disabled={this.shouldHomeBtnDisabled()}
+                  additionalStyles={{
+                    opacity: this.shouldHomeBtnDisabled() ? "0.35" : "1",
+                  }}
+                >
                   <LanguageDropdown
                     theme={theme}
                     onClick={this.handleLanguageClick}
                     language={this.props.i18n?.language}
                     languages={context?.config?.languages}
+                    disabled={this.shouldHomeBtnDisabled()}
                   />
                 </NavbarButton>
 

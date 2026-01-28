@@ -58,9 +58,9 @@
       "localizationCode": "ERR_OVER_VOLTAGE"
     }
   },
-  "uiConfiguration":{
+  "uiConfiguration": {
     "theme": "dark",
-    "otpEnable":false,
+    "otpEnable": false,
     "qrCode": {
       "qrCodeEnabled": false,
       "QRHashStr": "62987db08f88870e6524d06a_GJ0053"

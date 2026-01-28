@@ -9,6 +9,7 @@ import Footer from "../Footer/Footer";
 import Startup from "../LoadingScreen/Startup";
 import Info from "../InfoTab/Info.js";
 import Setting from "../Setting/Setting.js";
+import Maintenance from "../Maintenance/Maintenance.js";
 import e_stop from "../../assets/images/e_stop.gif";
 import warning_icon from "../../assets/icons/warning.png";
 import { ThemeContext } from "../../components/ThemeContext/ThemeProvider.js";
@@ -61,7 +62,7 @@ const ERROR_OVERLAYS = [
   },
   {
     condition: (code) => code === "IMD_FAULTY_ERR_CONTROLLER1",
-    messages: [ "IMD_FAULTY_ERR_CONTROLLER1"],
+    messages: ["IMD_FAULTY_ERR_CONTROLLER1"],
   },
   {
     condition: (code) => code === "IMD_FAULTY_ERR_CONTROLLER2",
@@ -198,7 +199,7 @@ function Dashboard() {
     const handleReset = (e) => {
       const data = e.detail;
       if (data.type === "reset" && data.payload?.reboot) {
-        setIsRebooting(true)      
+        setIsRebooting(true)
       }
     };
 
@@ -234,7 +235,9 @@ function Dashboard() {
       case "info":
         return <Info />;
       case "setting":
-        return <Setting />;
+        return <Setting onTabChange={setSelectedTab} />;
+      case "maintenance":
+        return <Maintenance onTabChange={setSelectedTab} />;
       default:
         return null;
     }
@@ -254,10 +257,10 @@ function Dashboard() {
                   : undefined
               } />
             ) : !chargerState[0] ? (
-              <EVChargerStatus/>
+              <EVChargerStatus />
             ) : (
               <>
-                <Navbar onTabChange={setSelectedTab} />
+                <Navbar onTabChange={setSelectedTab} isMaintenanceMode={selectedTab === "maintenance"} />
                 {renderContent()}
                 <Footer />
                 {chargerState[0] && (
@@ -274,7 +277,7 @@ function Dashboard() {
             altText="Emergency stop"
             messages={["EMERGENCY_PRESSED", "EMERGENCY_RELEASE"]}
           />
-  
+
           {ERROR_OVERLAYS.map(({ condition, messages }, i) =>
             condition(errorCode) ? (
               <ErrorOverlay

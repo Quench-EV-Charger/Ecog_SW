@@ -40,14 +40,14 @@
   --ev-kb-font-weight: 500;
   --ev-kb-font-weight-bold: 600;
   
-  /* Shadows */
-  --ev-kb-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
-  --ev-kb-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
-  --ev-kb-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
-  
-  /* Transitions */
-  --ev-kb-transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  --ev-kb-transition-fast: all 0.15s ease-out;
+  /* Shadows - Simplified for embedded displays */
+  --ev-kb-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
+  --ev-kb-shadow-md: 0 2px 4px rgba(0, 0, 0, 0.15);
+  --ev-kb-shadow-lg: 0 3px 6px rgba(0, 0, 0, 0.2);
+
+  /* Transitions - Optimized for performance */
+  --ev-kb-transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  --ev-kb-transition-fast: background-color 0.1s ease, opacity 0.1s ease;
 }
 
 /* Overlay - Full Screen Coverage */
@@ -57,8 +57,8 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.7);
+  /* backdrop-filter removed for better performance on embedded displays */
   z-index: 1000;
   display: flex;
   align-items: center;
@@ -123,25 +123,32 @@
 
 /* Close Button */
 .ev-keyboard-close {
-  width: 32px;
-  height: 32px;
-  border: none;
+  min-width: 70px;
+  height: 36px;
+  padding: 0 var(--ev-kb-padding-md);
+  border: 1px solid var(--ev-kb-border);
   border-radius: var(--ev-kb-border-radius-sm);
-  background: transparent;
-  color: var(--ev-kb-text-secondary);
+  background: var(--ev-kb-primary);
+  color: var(--ev-kb-text);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
-  font-weight: bold;
+  font-size: var(--ev-kb-font-size-sm);
+  font-weight: var(--ev-kb-font-weight-bold);
   transition: var(--ev-kb-transition);
 }
 
 .ev-keyboard-close:hover {
   background: var(--ev-kb-danger);
   color: white;
-  transform: scale(1.1);
+  border-color: var(--ev-kb-danger);
+}
+
+.ev-keyboard-close:active {
+  background: #d9363e;
+  color: white;
+  border-color: #d9363e;
 }
 
 .dark .ev-keyboard-close {
@@ -239,7 +246,11 @@
   background: var(--ev-kb-accent);
   color: white;
   border-color: var(--ev-kb-accent);
-  transform: translateY(-1px);
+}
+
+.control-btn:active {
+  background: #096dd9;
+  border-color: #096dd9;
 }
 
 .control-btn.active {
@@ -306,13 +317,13 @@
   background: var(--ev-kb-accent-hover);
   color: white;
   border-color: var(--ev-kb-accent-hover);
-  transform: translateY(-2px);
-  box-shadow: var(--ev-kb-shadow-md);
 }
 
 .key:active {
-  transform: translateY(0);
-  box-shadow: var(--ev-kb-shadow-sm);
+  background: #1890ff;
+  border-color: #1890ff;
+  color: white;
+  opacity: 0.9;
 }
 
 .key.disabled {
@@ -378,8 +389,7 @@
 }
 
 .action-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--ev-kb-shadow-md);
+  opacity: 0.9;
 }
 
 .backspace-btn:hover {
@@ -388,16 +398,32 @@
   border-color: var(--ev-kb-warning);
 }
 
+.backspace-btn:active {
+  background: #d48806;
+  border-color: #d48806;
+}
+
 .space-btn:hover {
   background: var(--ev-kb-accent);
   color: white;
   border-color: var(--ev-kb-accent);
 }
 
+.space-btn:active {
+  background: #096dd9;
+  border-color: #096dd9;
+}
+
 .enter-btn:hover {
   background: var(--ev-kb-success);
   color: white;
   border-color: var(--ev-kb-success);
+}
+
+.enter-btn:active {
+  background: #389e0d;
+  border-color: #389e0d;
+  color: white;
 }
 
 .dark .action-btn {

@@ -30,7 +30,10 @@ class OutletImage extends Component {
     qrUrl: null,
   };
 
-  async componentDidMount() {
+  qrPollInterval = null;
+  lastQRHash = null;
+
+  fetchQRCode = async () => {
     const { config, eachItem } = this.props;
   
     if (!config?.API) return;
@@ -39,30 +42,66 @@ class OutletImage extends Component {
       const response = await fetch(`${config.API}/ocpp-client/config`);
       const data = await response.json();
   
-      if (data.QRHashStr) {
-        let qrStringToUse = data.QRHashStr;
-        
-        // Check if multiple QR strings are provided (comma-separated)
-        if (data.QRHashStr.includes(",")) {
-          // Multiple QR strings - use outlet-specific one
-          const qrStrings = data.QRHashStr.split(",").map(str => str.trim());
-          const outletIndex = parseInt(eachItem?.outlet) - 1; // Convert outlet number to index
+      if (data.QRHashStr && data.QRHashStr.trim()) {
+        // Check if QR string has changed
+        if (this.lastQRHash !== data.QRHashStr) {
+          this.lastQRHash = data.QRHashStr;
+          let qrStringToUse = data.QRHashStr;
           
-          // Use corresponding QR string, or fallback to first one
-          qrStringToUse = qrStrings[outletIndex] || qrStrings[0];
-        }
-        
-        // Generate and cache QR for this outlet
-        const cacheKey = `outlet_${eachItem?.outlet}`;
-        if (!qrCache[cacheKey]) {
+          // Check if multiple QR strings are provided (comma-separated)
+          if (data.QRHashStr.includes(",")) {
+            // Multiple QR strings - use outlet-specific one
+            const qrStrings = data.QRHashStr.split(",").map(str => str.trim());
+            const outletIndex = parseInt(eachItem?.outlet) - 1; // Convert outlet number to index
+            
+            // Use corresponding QR string, or fallback to first one
+            qrStringToUse = qrStrings[outletIndex] || qrStrings[0];
+          }
+          
+          // Clear cache and generate new QR for this outlet
+          const cacheKey = `outlet_${eachItem?.outlet}`;
           const url = await QRCode.toDataURL(qrStringToUse, { width: 300 });
           qrCache[cacheKey] = url;
+          
+          this.setState({ qrUrl: url });
+          console.log(`[OutletImage] QR updated for outlet ${eachItem?.outlet}`);
         }
-        
-        this.setState({ qrUrl: qrCache[cacheKey] });
+      } else {
+        // QR string is empty/cleared - reset to normal
+        if (this.lastQRHash !== null) {
+          this.lastQRHash = null;
+          const cacheKey = `outlet_${eachItem?.outlet}`;
+          delete qrCache[cacheKey]; // Clear cache
+          this.setState({ qrUrl: null });
+          console.log(`[OutletImage] QR cleared for outlet ${eachItem?.outlet}`);
+        }
       }
     } catch (err) {
       console.warn("QR generation failed:", err);
+    }
+  };
+
+  async componentDidMount() {
+    // Initial fetch
+    await this.fetchQRCode();
+    
+    // Start polling every 5 seconds
+    this.qrPollInterval = setInterval(() => {
+      this.fetchQRCode();
+    }, 5000);
+  }
+
+  componentDidUpdate(prevProps) {
+    // If outlet changes, immediately refetch
+    if (prevProps.eachItem?.outlet !== this.props.eachItem?.outlet) {
+      this.lastQRHash = null; // Reset to force refresh
+      this.fetchQRCode();
+    }
+  }
+
+  componentWillUnmount() {
+    if (this.qrPollInterval) {
+      clearInterval(this.qrPollInterval);
     }
   }
   

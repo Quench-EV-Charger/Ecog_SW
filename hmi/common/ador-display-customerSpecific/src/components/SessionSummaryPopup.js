@@ -148,6 +148,42 @@ class SessionSummaryPopup extends React.Component {
     </div>
   );
 
+  // Session error code mapping for curr_ses_error (lowest priority check)
+  // These errors occur during finishing state and require error-only display
+  // Maps error codes to translation keys in en.json
+  SESSION_ERROR_CODES = {
+    4: "SESSION_ERR_4",
+    5: "SESSION_ERR_5",
+    6: "SESSION_ERR_6",
+    9: "SESSION_ERR_9",
+    21: "SESSION_ERR_21",
+    22: "SESSION_ERR_22",
+    24: "SESSION_ERR_24",
+    28: "SESSION_ERR_28",
+    29: "SESSION_ERR_29",
+    30: "SESSION_ERR_30",
+    31: "SESSION_ERR_31",
+    34: "SESSION_ERR_34",
+    35: "SESSION_ERR_35",
+    36: "SESSION_ERR_36",
+    37: "SESSION_ERR_37",
+    38: "SESSION_ERR_38",
+    39: "SESSION_ERR_39",
+    40: "SESSION_ERR_40",
+    41: "SESSION_ERR_41",
+    54: "SESSION_ERR_54",
+    67: "SESSION_ERR_67",
+    68: "SESSION_ERR_68",
+    69: "SESSION_ERR_69",
+  };
+
+  // Get session error translation key from curr_ses_error code
+  getSessionErrorKey = (errorCode) => {
+    if (!errorCode || errorCode === 0) return null;
+    const code = parseInt(errorCode);
+    return this.SESSION_ERROR_CODES[code] || "SESSION_ERR_UNKNOWN";
+  };
+
   // ✅ Extract error message mapping - returns array of ALL active errors (equal priority)
   getErrorMessage = (errorObj) => {
     // Handle null or undefined errorObj (normal completion case)
@@ -329,6 +365,135 @@ class SessionSummaryPopup extends React.Component {
     );
   };
 
+  // Render error-only screen when curr_ses_error is detected
+  // Shows caution icon and error message in red instead of session summary
+  renderErrorOnlyScreen = (errorKey, gunLetter, useQAsOutletID) => {
+    const { t } = this.context;
+
+    return (
+      <>
+        {/* Blur Background Overlay */}
+        <div
+          style={{
+            background: "rgba(0, 0, 0, 0.3)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            display: "flex",
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100vh",
+            justifyContent: "center",
+            alignItems: "center",
+            flexDirection: "column",
+            zIndex: "1000",
+          }}
+          data-testid="session-summary-blur-overlay"
+        >
+          <div
+            style={{
+              position: "relative",
+              padding: "20px",
+              maxWidth: "95vw",
+              pointerEvents: "auto",
+            }}
+            data-testid="session-summary-error-only"
+          >
+            <div
+              style={{
+                backgroundColor: "#FFFFFF",
+                borderRadius: "16px",
+                padding: "50px 60px",
+                boxShadow: "0 10px 40px rgba(0, 0, 0, 0.3)",
+                border: "2px solid #E62518",
+                width: "100%",
+                maxWidth: "700px",
+                position: "relative",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "25px",
+              }}
+            >
+              {/* Close Button */}
+              {this.renderCloseButton()}
+
+              {/* Header with countdown */}
+              <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "15px" }}>
+                {this.renderCountdownCircle()}
+                <div
+                  style={{
+                    color: "#E62518",
+                    fontSize: "23px",
+                    fontWeight: "bold",
+                  }}
+                >
+                  {t ? t("CHARGING_ERROR") : "Charging Error"}
+                </div>
+              </div>
+
+              {/* Gun Letter (if available) */}
+              {gunLetter && (
+                <div>{this.renderGunLetter(gunLetter, useQAsOutletID)}</div>
+              )}
+
+              {/* Caution Icon and Error Message */}
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "20px",
+                  padding: "20px",
+                  backgroundColor: "#FFF5F5",
+                  borderRadius: "12px",
+                  border: "1px solid #FFCCCC",
+                  width: "100%",
+                }}
+              >
+                {/* Large Caution Icon */}
+                <Icon
+                  type="warning"
+                  style={{
+                    fontSize: "60px",
+                    color: "#E62518",
+                  }}
+                />
+
+                {/* Error Message - translated using errorKey */}
+                <div
+                  style={{
+                    color: "#E62518",
+                    fontSize: "20px",
+                    fontWeight: "bold",
+                    textAlign: "center",
+                    lineHeight: "1.4",
+                  }}
+                >
+                  {t ? t(errorKey) : errorKey}
+                </div>
+              </div>
+
+              {/* Unplug instruction */}
+              <div
+                style={{
+                  color: "#666666",
+                  fontSize: "16px",
+                  textAlign: "center",
+                  marginTop: "10px",
+                }}
+              >
+                {t ? t("PLEASE_UNPLUG") : "Please unplug the charging cable"}
+              </div>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  };
+
   renderSessionSummary = () => {
     const { sessionData } = this.props;
     const { t } = this.context;
@@ -352,6 +517,29 @@ class SessionSummaryPopup extends React.Component {
     } else if (sessionData.sessionStart !== undefined) {
       mode = "single";
       sessions = [sessionData];
+    }
+
+    // ✅ LOWEST PRIORITY CHECK: Check for session error (curr_ses_error) from charger state
+    // ONLY show error-only screen if errorObj has NO active errors
+    // This ensures errorObj errors (e-stop, power loss, etc.) take priority over session errors
+    if (sessions.length > 0) {
+      for (const session of sessions) {
+        const sessionError = session.currSesError;
+        if (sessionError && sessionError !== 0) {
+          // First check if errorObj has any active errors - if so, skip error-only screen
+          const activeErrorsFromErrorObj = this.getErrorMessage(session.errorObj);
+          if (activeErrorsFromErrorObj && activeErrorsFromErrorObj.length > 0) {
+            console.log(`[SessionSummaryPopup] errorObj has active errors, skipping error-only screen. errorObj errors: ${activeErrorsFromErrorObj.join(", ")}`);
+            // Continue to normal session summary which will show these errors
+            break;
+          }
+
+          // No errors in errorObj, show error-only screen for curr_ses_error
+          const errorKey = this.getSessionErrorKey(sessionError);
+          console.log(`[SessionSummaryPopup] No errorObj errors, showing error-only screen. Session error detected: code=${sessionError}, errorKey=${errorKey}`);
+          return this.renderErrorOnlyScreen(errorKey, session.gunLetter, session.useQAsOutletID);
+        }
+      }
     }
 
     const timezone = this.context.config?.timezone;

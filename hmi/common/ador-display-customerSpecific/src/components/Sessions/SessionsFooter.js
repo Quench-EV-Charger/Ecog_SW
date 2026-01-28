@@ -20,8 +20,11 @@ export default class SessionsFooter extends Component {
       config:props.config
     };
   }
-  async componentDidMount() {
 
+  qrPollInterval = null;
+  lastQRHashStr = null;
+
+  fetchQRString = async () => {
     const { config } = this.state;
 
     if (config?.API) {
@@ -29,25 +32,52 @@ export default class SessionsFooter extends Component {
         const response = await fetch(`${config.API}/ocpp-client/config`);
         const data = await response.json();
 
-        if (data.QRHashStr) {
-          // Always get first QR string (in case of comma-separated)
-          const firstQrString = data.QRHashStr.includes(",") 
-            ? data.QRHashStr.split(",")[0].trim() 
-            : data.QRHashStr;
-          
-          // Check if FIRST string has underscore
-          if (firstQrString.includes("_")) {
-            const parts = firstQrString.split("_");
-            const extractedString = parts[parts.length - 1];
-            this.setState({ qrString: extractedString });
+        // Check if QR string has changed
+        if (this.lastQRHashStr !== data.QRHashStr) {
+          this.lastQRHashStr = data.QRHashStr;
+
+          if (data.QRHashStr && data.QRHashStr.trim()) {
+            // Always get first QR string (in case of comma-separated)
+            const firstQrString = data.QRHashStr.includes(",") 
+              ? data.QRHashStr.split(",")[0].trim() 
+              : data.QRHashStr;
+            
+            // Check if FIRST string has underscore
+            if (firstQrString.includes("_")) {
+              const parts = firstQrString.split("_");
+              const extractedString = parts[parts.length - 1];
+              this.setState({ qrString: extractedString });
+              console.log("[SessionsFooter] QR footer text updated:", extractedString);
+            } else {
+              // First string has no underscore, don't show anything
+              this.setState({ qrString: "" });
+              console.log("[SessionsFooter] QR footer text cleared");
+            }
           } else {
-            // First string has no underscore, don't show anything
+            // QR string is empty/cleared
             this.setState({ qrString: "" });
+            console.log("[SessionsFooter] QR footer text cleared (empty)");
           }
         }
       } catch (err) {
         console.warn("Failed to fetch QR string:", err);
       }
+    }
+  };
+
+  async componentDidMount() {
+    // Initial fetch
+    await this.fetchQRString();
+    
+    // Start polling every 5 seconds
+    this.qrPollInterval = setInterval(() => {
+      this.fetchQRString();
+    }, 5000);
+  }
+
+  componentWillUnmount() {
+    if (this.qrPollInterval) {
+      clearInterval(this.qrPollInterval);
     }
   }
 

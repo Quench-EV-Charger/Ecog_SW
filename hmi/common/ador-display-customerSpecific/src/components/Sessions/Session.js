@@ -22,19 +22,50 @@ class OutletSession extends Component {
     };
   }
 
-  async componentDidMount() {
+  qrPollInterval = null;
+  lastQRHash = null;
+
+  fetchQRCode = async () => {
     const { context } = this.props;
     if (context?.config?.API) {
       try {
         const response = await fetch(`${context.config.API}/ocpp-client/config`);
         const data = await response.json();
-        if (data.QRHashStr) {
-          const qrUrl = await QRCode.toDataURL(data.QRHashStr, { width: 300 });
-          this.setState({ qrData: qrUrl });
+        if (data.QRHashStr && data.QRHashStr.trim()) {
+          // Check if QR string has changed
+          if (this.lastQRHash !== data.QRHashStr) {
+            this.lastQRHash = data.QRHashStr;
+            const qrUrl = await QRCode.toDataURL(data.QRHashStr, { width: 300 });
+            this.setState({ qrData: qrUrl });
+            console.log("[Session] QR updated");
+          }
+        } else {
+          // QR string is empty/cleared - reset to normal
+          if (this.lastQRHash !== null) {
+            this.lastQRHash = null;
+            this.setState({ qrData: null });
+            console.log("[Session] QR cleared");
+          }
         }
       } catch (err) {
         console.warn("QR generation failed:", err);
       }
+    }
+  };
+
+  async componentDidMount() {
+    // Initial fetch
+    await this.fetchQRCode();
+    
+    // Start polling every 5 seconds
+    this.qrPollInterval = setInterval(() => {
+      this.fetchQRCode();
+    }, 5000);
+  }
+
+  componentWillUnmount() {
+    if (this.qrPollInterval) {
+      clearInterval(this.qrPollInterval);
     }
   }
 

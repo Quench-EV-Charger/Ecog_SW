@@ -286,12 +286,34 @@ export const buildConfig = async () => {
           comboMode: hmiConfig.comboMode !== undefined ? hmiConfig.comboMode : config.comboMode,
           timezone: hmiConfig.timezone !== undefined ? hmiConfig.timezone : config.timezone,
           OTPEnabled: hmiConfig.OTPEnabled !== undefined ? hmiConfig.OTPEnabled : config.OTPEnabled,
+          standard: hmiConfig.standard || config.standard,
         };
         console.log("[buildConfig] Merged config with backend HMI values:", config);
       }
     }
   } catch (error) {
     console.warn("[buildConfig] Failed to fetch HMI config from backend, using local config:", error);
+  }
+
+  // Fetch OCPP config to get ConnectionTimeOut and other OCPP-specific settings
+  try {
+    const ocppConfigEndpoint = `${config.API}/ocpp-client/config`;
+    const ocppConfigResponse = await fetch(ocppConfigEndpoint);
+    if (ocppConfigResponse.ok) {
+      const ocppConfig = await ocppConfigResponse.json();
+      console.log("[buildConfig] OCPP config:", ocppConfig);
+      
+      // Merge OCPP config, especially the standard object with ConnectionTimeOut
+      if (ocppConfig) {
+        config = {
+          ...config,
+          standard: ocppConfig.standard || config.standard,
+        };
+        console.log("[buildConfig] Merged OCPP config:", config);
+      }
+    }
+  } catch (error) {
+    console.warn("[buildConfig] Failed to fetch OCPP config:", error);
   }
   
   return config;

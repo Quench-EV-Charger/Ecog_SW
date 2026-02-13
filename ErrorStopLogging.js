@@ -10,8 +10,8 @@
 /***********************************/
 
 // Globals:
-// const url = "localhost:3001";
-const url = "10.20.27.50:3001";
+const url = "localhost:3001";
+// const url = "10.20.27.50:3001";
 const errorStartTimes = {}; // Track start times for multiple errors
 
 const vendorErrorMapping = {

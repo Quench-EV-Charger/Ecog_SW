@@ -37,7 +37,7 @@
 // import fetch from "node-fetch";
 
 // Script Version
-const SCRIPT_VERSION = "1.1.2";
+const SCRIPT_VERSION = "1.1.5";
 
 // Global Objects
 const errorObjCount = {
@@ -55,7 +55,10 @@ const errorObjCount = {
   powerModuleCommErr_2: 0,
   groundFault: 0,
   imdResistanceErr_1: 0,
-  imdResistanceErr_2: 0
+  imdResistanceErr_2: 0,
+  imdFaultyErr_controller1: 0,
+  imdFaultyErr_controller2: 0,
+  ac_em_fail: 0
 };
 
 const errorObjRecoveryCount = {
@@ -68,7 +71,14 @@ const errorObjRecoveryCount = {
   overVoltageErr: 0,
   gunTemperatureErr_1: 0,
   gunTemperatureErr_2: 0,
-  groundFault: 0
+  powerModuleCommErr_1: 0,
+  powerModuleCommErr_2: 0,
+  groundFault: 0,
+  imdResistanceErr_1: 0,
+  imdResistanceErr_2: 0,
+  imdFaultyErr_controller1: 0,
+  imdFaultyErr_controller2: 0,
+  ac_em_fail: 0
 };
 
 let lastMonitoringSource = null;
@@ -89,6 +99,9 @@ const errorObj = {
   groundFault: false,
   imdResistanceErr_1: false, // Added IMD resistance error state for gun 1
   imdResistanceErr_2: false, // Added IMD resistance error state for gun 2
+  imdFaultyErr_controller1: false,
+  imdFaultyErr_controller2: false,
+  ac_em_fail: false
 };
 
 const errorObjThreshold = {
@@ -108,6 +121,12 @@ const errorObjThreshold = {
   groundFault: 5,
   imdResistanceErr_1: 1, // Added IMD resistance threshold for gun 1 (3 consecutive readings)
   imdResistanceErr_2: 1, // Added IMD resistance threshold for gun 2 (3 consecutive readings)
+  imdFaultyErr_controller1: 55,
+  imdFaultyErr_controller2: 55,
+  imdFaultyRecovery_controller1: 5,
+  imdFaultyRecovery_controller2: 5,
+  ac_em_fail: 23,
+  ac_em_fail_recovery: 5,
   // Recovery thresholds - require 3 consecutive stable cycles before clearing errors
   eStopErr_recovery: 3,
   doorOpenErr_recovery: 3,
@@ -117,7 +136,11 @@ const errorObjThreshold = {
   overVoltageErr_recovery: 3,
   gunTemperatureErr_1_recovery: 3,
   gunTemperatureErr_2_recovery: 3,
-  groundFault_recovery: 3
+  powerModuleCommErr_1_recovery: 3,
+  powerModuleCommErr_2_recovery: 3,
+  groundFault_recovery: 3,
+  imdResistanceErr_1_recovery: 3,
+  imdResistanceErr_2_recovery: 3
 };
 
 const errorObjFlags = {
@@ -125,7 +148,10 @@ const errorObjFlags = {
   overVoltageErr: false,
   underVoltageErr: false,
   powerModuleFailureErr: false,
+  ac_em_fail: false,
 };
+
+
 
 const UVTripState = {
   Idle: "Idle",
@@ -147,8 +173,8 @@ var Constants = {
 // Modified: 16 August 2025 by Kushagra Mittal
 let powerSaveInIdleMode = false; // Default to false for safety
 
-const configEndpoint = "http://localhost:3001/db/config";
-const baseURL = "http://localhost:3001/";
+const configEndpoint = "http://10.20.27.50:3001/db/config";
+const baseURL = "http://10.20.27.50:3001/";
 const baseURLsecc = "http://10.20.27.100/api/system/userconfig";
 const baseURLseccle = "http://10.20.27.101/api/system/userconfig";
 let tripCaseUV = UVTripState.Idle;
@@ -189,7 +215,7 @@ let imdMonitorActive = false;
 // High-frequency IMD resistance monitoring loop
 const startIMDResistanceMonitor = async () => {
   imdMonitorActive = true;
-  
+
   const loop = async () => {
     try {
       // Check if monitoring should continue
@@ -197,7 +223,7 @@ const startIMDResistanceMonitor = async () => {
         console.log(`[v${SCRIPT_VERSION}] IMD monitor loop stopped.`);
         return;
       }
-      
+
       // Fetch the latest IO Mapper data
       const iostateValue = await ioMapperState();
       if (iostateValue !== undefined && iostateValue.controller1 !== null) {
@@ -400,6 +426,7 @@ const untrip = async (states, code) => {
     }
   }
 };
+
 
 // BEFORE FIX: Function was synchronous but called with await
 // AFTER FIX: Made function async to properly support await calls
@@ -771,11 +798,11 @@ const powerOffErrCheck = async (states, volts) => {
   } else {
     // Reset power loss counter when none of the conditions are met
     // (voltage is normal and no module unavailability)
-    if (!errorObj.powerLossErr && 
-        volts.length > 0 && 
-        !volts.some(checkVoltsBelow200) && 
-        !volts.every(checkVoltsBelowThres) && 
-        !isModuleUnavilable) {
+    if (!errorObj.powerLossErr &&
+      volts.length > 0 &&
+      !volts.some(checkVoltsBelow200) &&
+      !volts.every(checkVoltsBelowThres) &&
+      !isModuleUnavilable) {
       if (errorObjCount.powerLossErr > 0) {
         console.log(`[v${SCRIPT_VERSION}] [PL] Power loss counter reset: 0/${errorObjThreshold.powerLossErr}, voltage normal and modules available`);
       }
@@ -812,14 +839,14 @@ const checkUnderVoltageThroughPowerModule = async (
     }
     return;
   }
-  
+
   if (voltages.every(checkVoltsBelowThres)) {
     !!onTestingMode &&
       console.log(
         `[v${SCRIPT_VERSION}] Condition UnderVoltage, for phase ` +
-          t_case +
-          ` count ` +
-          errorObjCount.underVoltageErr
+        t_case +
+        ` count ` +
+        errorObjCount.underVoltageErr
       );
 
     if (tripCaseUV == UVTripState.Idle) {
@@ -891,7 +918,7 @@ async function checkSuppyVoltageTripACmeter(states, volts, iostate) {
 
   // MODIFIED: Check for undervoltage when 2 phases < 200V and Bender is online
   const benderOnline = iostate && iostate["modbus.ccs_bender.online"] === true;
-  
+
   if (checkTwoPhasesBelow200(volts) && benderOnline) {
     console.log(`[v${SCRIPT_VERSION}] [UV-AC] Undervoltage detected - 2+ phases < ${Constants.powermoduleundervoltage}V with Bender online: ${volts}`);
     if (!errorObj.underVoltageErr && !errorObjFlags.underVoltageErr) {
@@ -915,12 +942,12 @@ async function checkSuppyVoltageTripACmeter(states, volts, iostate) {
     console.log(`[v${SCRIPT_VERSION}] [PL-AC] Power loss detected - 2+ phases < ${Constants.powermoduleundervoltage}V: ${volts}`);
     incrementErrorCounter('powerLossErr');
     errorObj.powerLossErr = errorObjCount.powerLossErr >= errorObjThreshold.powerLossErr;
-    
+
     // Reset undervoltage counter since power loss takes priority
     if (errorObjCount.underVoltageErr > 0) {
       errorObjCount.underVoltageErr = 0;
     }
-    
+
     // Trip power loss if threshold reached
     if (errorObj.powerLossErr && !errorObjFlags.powerLossErr) {
       errorObjFlags.powerLossErr = true;
@@ -933,7 +960,7 @@ async function checkSuppyVoltageTripACmeter(states, volts, iostate) {
     }
     return; // Exit early, don't check undervoltage
   }
-  
+
   // NEW IMPLEMENTATION: Check for single phase undervoltage alarm (1 phase < 200V)
   if (checkOnePhasesBelow200(volts)) {
     console.log(`[v${SCRIPT_VERSION}] [UV-AC] Single phase undervoltage alarm - 1 phase < ${Constants.powermoduleundervoltage}V: ${volts}`);
@@ -1017,7 +1044,7 @@ async function checkSuppyVoltageTrip(states, volts, iostate) {
 
   // MODIFIED: Check for undervoltage when 2 phases < 200V and Bender is online
   const benderOnline = iostate && iostate["modbus.ccs_bender.online"] === true;
-  
+
   if (checkTwoPhasesBelow200(volts) && benderOnline) {
     console.log(`[v${SCRIPT_VERSION}] [UV-PM] Undervoltage detected - 2+ phases < ${Constants.powermoduleundervoltage}V with Bender online: ${volts}`);
     if (!errorObj.underVoltageErr && !errorObjFlags.underVoltageErr) {
@@ -1041,12 +1068,12 @@ async function checkSuppyVoltageTrip(states, volts, iostate) {
     console.log(`[v${SCRIPT_VERSION}] [PL-PM] Power loss detected - 2+ phases < ${Constants.powermoduleundervoltage}V: ${volts}`);
     incrementErrorCounter('powerLossErr');
     errorObj.powerLossErr = errorObjCount.powerLossErr >= errorObjThreshold.powerLossErr;
-    
+
     // Reset undervoltage counter since power loss takes priority
     if (errorObjCount.underVoltageErr > 0) {
       errorObjCount.underVoltageErr = 0;
     }
-    
+
     // Trip power loss if threshold reached
     if (errorObj.powerLossErr && !errorObjFlags.powerLossErr) {
       errorObjFlags.powerLossErr = true;
@@ -1059,7 +1086,7 @@ async function checkSuppyVoltageTrip(states, volts, iostate) {
     }
     return; // Exit early, don't check undervoltage
   }
-  
+
   // NEW IMPLEMENTATION: Check for single phase undervoltage alarm (1 phase < 200V)
   if (checkOnePhasesBelow200(volts)) {
     console.log(`[v${SCRIPT_VERSION}] [UV-PM] Single phase undervoltage alarm - 1 phase < ${Constants.powermoduleundervoltage}V: ${volts}`);
@@ -1322,30 +1349,30 @@ async function checkIMDResistance(states, iostate) {
     // Get IMD resistance values for both guns
     const gun1Data = iostate.controller1
       ? {
-          negativeResistance:
-            iostate.controller1[
-              "modbus.gongyuan.Negative Pole-to-Ground Insulation Resistance"
-            ],
-          positiveResistance:
-            iostate.controller1[
-              "modbus.gongyuan.Positive Pole-to-Ground Insulation Resistance"
-            ],
-          isUnhealthy: false,
-        }
+        negativeResistance:
+          iostate.controller1[
+          "modbus.gongyuan.Negative Pole-to-Ground Insulation Resistance"
+          ],
+        positiveResistance:
+          iostate.controller1[
+          "modbus.gongyuan.Positive Pole-to-Ground Insulation Resistance"
+          ],
+        isUnhealthy: false,
+      }
       : null;
 
     const gun2Data = iostate.controller2
       ? {
-          negativeResistance:
-            iostate.controller2[
-              "modbus.gongyuan.Negative Pole-to-Ground Insulation Resistance"
-            ],
-          positiveResistance:
-            iostate.controller2[
-              "modbus.gongyuan.Positive Pole-to-Ground Insulation Resistance"
-            ],
-          isUnhealthy: false,
-        }
+        negativeResistance:
+          iostate.controller2[
+          "modbus.gongyuan.Negative Pole-to-Ground Insulation Resistance"
+          ],
+        positiveResistance:
+          iostate.controller2[
+          "modbus.gongyuan.Positive Pole-to-Ground Insulation Resistance"
+          ],
+        isUnhealthy: false,
+      }
       : null;
 
     // Check unhealthy state for both guns
@@ -1471,7 +1498,7 @@ async function checkIMDResistance(states, iostate) {
       }
     }
     // Handle single gun charging
-    else if(isSingleCharging) {
+    else if (isSingleCharging) {
       // Process Gun 1 (only if controller 1 is connected)
       if (iostate.controller1 && iostate.controller1 !== null && isGunInValidState(outlet0)) {
         if (gun1Data.isUnhealthy) {
@@ -1601,6 +1628,328 @@ async function checkIMDResistance(states, iostate) {
   }
 }
 
+// Function to check IMD device faults for both controllers
+async function checkIMDDeviceFaults(states, controller1State, controller2State) {
+  try {
+    const controller1IMD = await getIMDData(controller1State);
+    const controller2IMD = controller2State !== null ? await getIMDData(controller2State) : null;
+
+    // Diagnostic logging for IMD status
+    console.log(`[v${SCRIPT_VERSION}][IMD-DEBUG] Controller 1 IMD: ${controller1IMD ? `${controller1IMD.type}, online=${controller1IMD.isOnline}` : 'null'}`);
+    console.log(`[v${SCRIPT_VERSION}][IMD-DEBUG] Controller 2 IMD: ${controller2IMD ? `${controller2IMD.type}, online=${controller2IMD.isOnline}` : 'null'}`);
+
+    // IMPORTANT: Only trigger IMD device fault if:
+    // 1. One IMD is offline AND the other is online (device-specific fault)
+    // 2. Power loss error is NOT already active (both offline = power loss, not IMD fault)
+
+    const bothOffline = controller1IMD && controller1IMD.isOnline === false &&
+      (controller2IMD === null || controller2IMD.isOnline === false);
+
+    console.log(`[v${SCRIPT_VERSION}][IMD-DEBUG] bothOffline status: ${bothOffline}`);
+
+    // If both IMDs are offline, check if this is power loss or IMD device fault
+    if (bothOffline) {
+      // Get voltage data to determine if power is available
+      let volts = [];
+
+      // Try to get voltage from AC meter first
+      if (controller1State && "modbus.selec.online" in controller1State && controller1State["modbus.selec.online"] === true) {
+        volts = [
+          controller1State["modbus.selec.voltage_L1_L2"] || 0,
+          controller1State["modbus.selec.voltage_L1_L3"] || 0,
+          controller1State["modbus.selec.voltage_L3_L2"] || 0
+        ];
+        console.log(`[v${SCRIPT_VERSION}][IMD-DEBUG] AC Meter voltages: ${volts}`);
+      } else {
+        // Fallback to power module voltages
+        volts = await getVoltageArr(states);
+        console.log(`[v${SCRIPT_VERSION}][IMD-DEBUG] Power Module voltages: ${volts}`);
+      }
+
+      // Check if voltage is available (2 or more phases >= 200V means power is OK)
+      const voltageOK = !checkTwoPhasesBelow200(volts);
+      console.log(`[v${SCRIPT_VERSION}][IMD-DEBUG] Voltage OK (≥2 phases ≥200V): ${voltageOK}`);
+
+      if (voltageOK) {
+        // Both IMDs offline BUT power is available = IMD device faults, not power loss
+        console.log(`[v${SCRIPT_VERSION}][IMD-FAULT] Both IMDs offline with power available - triggering IMD device faults for both controllers`);
+
+        // Trigger fault for Controller 1
+        if (controller1IMD && connectedControllers.includes(1)) {
+          if (!errorObj.imdFaultyErr_controller1) {
+            incrementErrorCounter('imdFaultyErr_controller1');
+            console.log(`[v${SCRIPT_VERSION}][IMD-FAULT] Controller 1 IMD offline (power OK), counter: ${errorObjCount.imdFaultyErr_controller1}/${errorObjThreshold.imdFaultyErr_controller1}`);
+          }
+          errorObjRecoveryCount.imdFaultyErr_controller1 = 0;
+          errorObj.imdFaultyErr_controller1 = errorObjCount.imdFaultyErr_controller1 >= errorObjThreshold.imdFaultyErr_controller1;
+
+          if (errorObj.imdFaultyErr_controller1 && errorObjCount.imdFaultyErr_controller1 === errorObjThreshold.imdFaultyErr_controller1) {
+            console.log(`[v${SCRIPT_VERSION}][IMD-FAULT] Controller 1 IMD device fault alarm triggered! Type: ${controller1IMD.type}`);
+            // Trip only connector 1 for controller 1 IMD fault
+            const controller1States = states.filter((state) => state.outlet == 1);
+            if (controller1States.length > 0) {
+              await trip(controller1States, {
+                msg: "ERR_IMD_FAULT_C1",
+                code: "78",
+                stopReason: "IMDFaultC1",
+                vendorErrorCode: 78,
+              });
+            }
+          }
+        }
+
+        // Trigger fault for Controller 2
+        if (controller2IMD && connectedControllers.includes(2)) {
+          if (!errorObj.imdFaultyErr_controller2) {
+            incrementErrorCounter('imdFaultyErr_controller2');
+            console.log(`[v${SCRIPT_VERSION}][IMD-FAULT] Controller 2 IMD offline (power OK), counter: ${errorObjCount.imdFaultyErr_controller2}/${errorObjThreshold.imdFaultyErr_controller2}`);
+          }
+          errorObjRecoveryCount.imdFaultyErr_controller2 = 0;
+          errorObj.imdFaultyErr_controller2 = errorObjCount.imdFaultyErr_controller2 >= errorObjThreshold.imdFaultyErr_controller2;
+
+          if (errorObj.imdFaultyErr_controller2 && errorObjCount.imdFaultyErr_controller2 === errorObjThreshold.imdFaultyErr_controller2) {
+            console.log(`[v${SCRIPT_VERSION}][IMD-FAULT] Controller 2 IMD device fault alarm triggered! Type: ${controller2IMD.type}`);
+            // Trip only connector 2 for controller 2 IMD fault
+            const controller2States = states.filter((state) => state.outlet == 2);
+            if (controller2States.length > 0) {
+              await trip(controller2States, {
+                msg: "ERR_IMD_FAULT_C2",
+                code: "79",
+                stopReason: "IMDFaultC2",
+                vendorErrorCode: 79,
+              });
+            }
+          }
+        }
+
+        return; // Exit after handling both IMD faults
+      } else {
+        // Both IMDs offline AND voltage is low = power loss scenario
+        console.log(`[v${SCRIPT_VERSION}][IMD-FAULT] Both IMDs offline with low voltage - this is power loss, not IMD device fault. Skipping IMD fault detection.`);
+        // Reset IMD fault counters since this is not an IMD device issue
+        errorObjCount.imdFaultyErr_controller1 = 0;
+        errorObjCount.imdFaultyErr_controller2 = 0;
+        errorObjRecoveryCount.imdFaultyErr_controller1 = 0;
+        errorObjRecoveryCount.imdFaultyErr_controller2 = 0;
+        return;
+      }
+    }
+
+    // Check Controller 1 IMD (only if controller 1 is present and Controller 2 IMD is online or unavailable)
+    if (controller1IMD && connectedControllers.includes(1)) {
+      if (controller1IMD.isOnline === false && !errorObj.powerLossErr) {
+        // Controller 1 IMD is offline but Controller 2 is online (or unavailable) - this is a device fault
+        if (controller2IMD === null || controller2IMD.isOnline === true) {
+          // Only increment counter if error is not already active
+          if (!errorObj.imdFaultyErr_controller1) {
+            incrementErrorCounter('imdFaultyErr_controller1');
+            console.log(`[v${SCRIPT_VERSION}][IMD-FAULT] Controller 1 IMD offline (Controller 2 OK), counter: ${errorObjCount.imdFaultyErr_controller1}/${errorObjThreshold.imdFaultyErr_controller1}`);
+          }
+
+          // Reset recovery counter
+          errorObjRecoveryCount.imdFaultyErr_controller1 = 0;
+
+          // Check if threshold reached
+          errorObj.imdFaultyErr_controller1 =
+            errorObjCount.imdFaultyErr_controller1 >= errorObjThreshold.imdFaultyErr_controller1;
+
+          if (errorObj.imdFaultyErr_controller1 && errorObjCount.imdFaultyErr_controller1 === errorObjThreshold.imdFaultyErr_controller1) {
+            console.log(`[v${SCRIPT_VERSION}][IMD-FAULT] Controller 1 IMD device fault alarm triggered! Type: ${controller1IMD.type}`);
+            // Trip only connector 1 for controller 1 IMD fault
+            const controller1States = states.filter((state) => state.outlet == 1);
+            if (controller1States.length > 0) {
+              await trip(controller1States, {
+                msg: "ERR_IMD_FAULT_C1",
+                code: "78",
+                stopReason: "IMDFaultC1",
+                vendorErrorCode: 78,
+              });
+            }
+          }
+        } else {
+          // Both are offline - reset Controller 1 IMD fault counter
+          console.log(`[v${SCRIPT_VERSION}][IMD-FAULT] Controller 1 IMD offline but Controller 2 also offline - not an IMD device fault`);
+          errorObjCount.imdFaultyErr_controller1 = 0;
+          errorObjRecoveryCount.imdFaultyErr_controller1 = 0;
+        }
+      } else if (controller1IMD.isOnline === true) {
+        // IMD is online - check for recovery
+        if (errorObj.imdFaultyErr_controller1) {
+          errorObjRecoveryCount.imdFaultyErr_controller1++;
+          console.log(`[v${SCRIPT_VERSION}][IMD-RECOVERY] Controller 1 IMD online, recovery counter: ${errorObjRecoveryCount.imdFaultyErr_controller1}/${errorObjThreshold.imdFaultyRecovery_controller1}`);
+
+          if (errorObjRecoveryCount.imdFaultyErr_controller1 >= errorObjThreshold.imdFaultyRecovery_controller1) {
+            console.log(`[v${SCRIPT_VERSION}][IMD-RECOVERY] Controller 1 IMD device fault recovered after ${errorObjThreshold.imdFaultyRecovery_controller1} cycles`);
+            errorObjCount.imdFaultyErr_controller1 = 0;
+            errorObjRecoveryCount.imdFaultyErr_controller1 = 0;
+            errorObj.imdFaultyErr_controller1 = false;
+            // Untrip only connector 1
+            const controller1States = states.filter((state) => state.outlet == 1);
+            if (controller1States.length > 0) {
+              await untrip(controller1States, "78");
+            }
+          }
+        } else {
+          // Reset counter if not in error state
+          errorObjCount.imdFaultyErr_controller1 = 0;
+          errorObjRecoveryCount.imdFaultyErr_controller1 = 0;
+        }
+      }
+    }
+
+    // Check Controller 2 IMD (only if controller 2 is present and Controller 1 IMD is online)
+    if (controller2IMD && connectedControllers.includes(2)) {
+      if (controller2IMD.isOnline === false && !errorObj.powerLossErr) {
+        // Controller 2 IMD is offline but Controller 1 is online - this is a device fault
+        if (controller1IMD && controller1IMD.isOnline === true) {
+          // Only increment counter if error is not already active
+          if (!errorObj.imdFaultyErr_controller2) {
+            incrementErrorCounter('imdFaultyErr_controller2');
+            console.log(`[v${SCRIPT_VERSION}][IMD-FAULT] Controller 2 IMD offline (Controller 1 OK), counter: ${errorObjCount.imdFaultyErr_controller2}/${errorObjThreshold.imdFaultyErr_controller2}`);
+          }
+
+          // Reset recovery counter
+          errorObjRecoveryCount.imdFaultyErr_controller2 = 0;
+
+          // Check if threshold reached
+          errorObj.imdFaultyErr_controller2 =
+            errorObjCount.imdFaultyErr_controller2 >= errorObjThreshold.imdFaultyErr_controller2;
+
+          if (errorObj.imdFaultyErr_controller2 && errorObjCount.imdFaultyErr_controller2 === errorObjThreshold.imdFaultyErr_controller2) {
+            console.log(`[v${SCRIPT_VERSION}][IMD-FAULT] Controller 2 IMD device fault alarm triggered! Type: ${controller2IMD.type}`);
+            // Trip only connector 2 for controller 2 IMD fault
+            const controller2States = states.filter((state) => state.outlet == 2);
+            if (controller2States.length > 0) {
+              await trip(controller2States, {
+                msg: "ERR_IMD_FAULT_C2",
+                code: "79",
+                stopReason: "IMDFaultC2",
+                vendorErrorCode: 79,
+              });
+            }
+          }
+        } else {
+          // Both are offline - reset Controller 2 IMD fault counter
+          console.log(`[v${SCRIPT_VERSION}][IMD-FAULT] Controller 2 IMD offline but Controller 1 also offline - not an IMD device fault`);
+          errorObjCount.imdFaultyErr_controller2 = 0;
+          errorObjRecoveryCount.imdFaultyErr_controller2 = 0;
+        }
+      } else if (controller2IMD.isOnline === true) {
+        // IMD is online - check for recovery
+        if (errorObj.imdFaultyErr_controller2) {
+          errorObjRecoveryCount.imdFaultyErr_controller2++;
+          console.log(`[v${SCRIPT_VERSION}][IMD-RECOVERY] Controller 2 IMD online, recovery counter: ${errorObjRecoveryCount.imdFaultyErr_controller2}/${errorObjThreshold.imdFaultyRecovery_controller2}`);
+
+          if (errorObjRecoveryCount.imdFaultyErr_controller2 >= errorObjThreshold.imdFaultyRecovery_controller2) {
+            console.log(`[v${SCRIPT_VERSION}][IMD-RECOVERY] Controller 2 IMD device fault recovered after ${errorObjThreshold.imdFaultyRecovery_controller2} cycles`);
+            errorObjCount.imdFaultyErr_controller2 = 0;
+            errorObjRecoveryCount.imdFaultyErr_controller2 = 0;
+            errorObj.imdFaultyErr_controller2 = false;
+            // Untrip only connector 2
+            const controller2States = states.filter((state) => state.outlet == 2);
+            if (controller2States.length > 0) {
+              await untrip(controller2States, "79");
+            }
+          }
+        } else {
+          // Reset counter if not in error state
+          errorObjCount.imdFaultyErr_controller2 = 0;
+          errorObjRecoveryCount.imdFaultyErr_controller2 = 0;
+        }
+      }
+    }
+  } catch (err) {
+    console.error(`[v${SCRIPT_VERSION}][IMD-FAULT] Error in checkIMDDeviceFaults:`, err);
+  }
+}
+
+// Function to check AC Energy Meter failure
+async function checkACEnergyMeterFail(states, controller1State, controller2State, powerSaveInIdleMode) {
+  try {
+    // Only check if powerSaveInIdleMode is enabled (AC meter should be present)
+    if (!powerSaveInIdleMode) {
+      // Reset counters if powerSaveInIdleMode is false (no AC meter expected)
+      if (errorObjCount.ac_em_fail > 0 || errorObj.ac_em_fail) {
+        console.log(`[v${SCRIPT_VERSION}][AC-EM] powerSaveInIdleMode=false, resetting AC meter failure counters`);
+        errorObjCount.ac_em_fail = 0;
+        errorObjRecoveryCount.ac_em_fail = 0;
+        errorObj.ac_em_fail = false;
+      }
+      return;
+    }
+
+    // Check if AC meter is offline
+    const acMeterOffline = !controller1State ||
+      !("modbus.selec.online" in controller1State) ||
+      controller1State["modbus.selec.online"] === false;
+
+    // Get IMD status
+    const controller1IMD = await getIMDData(controller1State);
+    const controller2IMD = controller2State !== null ? await getIMDData(controller2State) : null;
+
+    // Check if at least one IMD is online
+    const atLeastOneIMDOnline = (controller1IMD && controller1IMD.isOnline === true) ||
+      (controller2IMD && controller2IMD.isOnline === true);
+
+    console.log(`[v${SCRIPT_VERSION}][AC-EM-DEBUG] powerSaveInIdleMode: ${powerSaveInIdleMode}, AC meter offline: ${acMeterOffline}, At least one IMD online: ${atLeastOneIMDOnline}`);
+
+    // Trigger AC EM fail if: powerSaveInIdleMode=true AND AC meter offline AND at least one IMD online
+    if (acMeterOffline && atLeastOneIMDOnline) {
+      // AC meter is offline but IMD is online - this is an AC meter failure
+      if (!errorObj.ac_em_fail) {
+        incrementErrorCounter('ac_em_fail');
+        console.log(`[v${SCRIPT_VERSION}][AC-EM-FAULT] AC Energy Meter offline with IMD online, counter: ${errorObjCount.ac_em_fail}/${errorObjThreshold.ac_em_fail}`);
+      }
+
+      // Reset recovery counter
+      errorObjRecoveryCount.ac_em_fail = 0;
+
+      // Check if threshold reached
+      errorObj.ac_em_fail = errorObjCount.ac_em_fail >= errorObjThreshold.ac_em_fail;
+
+      if (errorObj.ac_em_fail && errorObjCount.ac_em_fail === errorObjThreshold.ac_em_fail) {
+        console.log(`[v${SCRIPT_VERSION}][AC-EM-FAULT] AC Energy Meter failure alarm triggered!`);
+        errorObjFlags.ac_em_fail = true;
+        await trip(states, {
+          msg: "ERR_AC_EM_FAIL",
+          code: "80",
+          stopReason: "ACEnergyMeterFailure",
+          vendorErrorCode: 80,
+        });
+      }
+    } else {
+      // AC meter is online OR no IMD is online - check for recovery
+      if (errorObj.ac_em_fail) {
+        if (!acMeterOffline) {
+          // AC meter came back online
+          errorObjRecoveryCount.ac_em_fail++;
+          console.log(`[v${SCRIPT_VERSION}][AC-EM-RECOVERY] AC meter online, recovery counter: ${errorObjRecoveryCount.ac_em_fail}/${errorObjThreshold.ac_em_fail_recovery}`);
+
+          if (errorObjRecoveryCount.ac_em_fail >= errorObjThreshold.ac_em_fail_recovery) {
+            console.log(`[v${SCRIPT_VERSION}][AC-EM-RECOVERY] AC Energy Meter failure recovered after ${errorObjThreshold.ac_em_fail_recovery} cycles`);
+            errorObjCount.ac_em_fail = 0;
+            errorObjRecoveryCount.ac_em_fail = 0;
+            errorObj.ac_em_fail = false;
+            errorObjFlags.ac_em_fail = false;
+            await untrip(states, "80");
+          }
+        } else {
+          // AC meter still offline but all IMDs are offline now - reset counters
+          console.log(`[v${SCRIPT_VERSION}][AC-EM] AC meter offline but all IMDs offline - resetting AC meter failure counters`);
+          errorObjCount.ac_em_fail = 0;
+          errorObjRecoveryCount.ac_em_fail = 0;
+        }
+      } else {
+        // Reset counter if not in error state
+        errorObjCount.ac_em_fail = 0;
+        errorObjRecoveryCount.ac_em_fail = 0;
+      }
+    }
+  } catch (err) {
+    console.error(`[v${SCRIPT_VERSION}][AC-EM-FAULT] Error in checkACEnergyMeterFail:`, err);
+  }
+}
+
 const checkPowerModuleFailureErr = async (states) => {
   for (const obj of states) {
     checkModuleFailure(obj);
@@ -1632,12 +1981,12 @@ const checkPowerModuleCommErr = async (states, iostate) => {
           errorObj.powerModuleCommErr_1 = false;
           chargingStartTime.outlet1 = Date.now();
         }
-        
+
         if (obj.phs > 4 && obj.phs < 8) {
           // Check if we're still in grace period
-          const inGracePeriod = chargingStartTime.outlet1 && 
-                               (Date.now() - chargingStartTime.outlet1) < COMM_GRACE_PERIOD_MS;
-          
+          const inGracePeriod = chargingStartTime.outlet1 &&
+            (Date.now() - chargingStartTime.outlet1) < COMM_GRACE_PERIOD_MS;
+
           if (!inGracePeriod) {
             // Normal monitoring after grace period
             if (obj.can1_RX_time && obj.can1_RX_time.conv_timeout) {
@@ -1655,7 +2004,7 @@ const checkPowerModuleCommErr = async (states, iostate) => {
           } else {
             // Still in grace period, skip error checking
             const remainingGrace = COMM_GRACE_PERIOD_MS - (Date.now() - chargingStartTime.outlet1);
-            console.log(`[v${SCRIPT_VERSION}] [PMCE] Gun 1 in grace period, ${Math.ceil(remainingGrace/1000)}s remaining`);
+            console.log(`[v${SCRIPT_VERSION}] [PMCE] Gun 1 in grace period, ${Math.ceil(remainingGrace / 1000)}s remaining`);
           }
         } else {
           // Clear counter when leaving charging phases
@@ -1692,12 +2041,12 @@ const checkPowerModuleCommErr = async (states, iostate) => {
           errorObj.powerModuleCommErr_2 = false;
           chargingStartTime.outlet2 = Date.now();
         }
-        
+
         if (obj.phs > 4 && obj.phs < 8) {  // Changed to match Gun A logic
           // Check if we're still in grace period
-          const inGracePeriod = chargingStartTime.outlet2 && 
-                               (Date.now() - chargingStartTime.outlet2) < COMM_GRACE_PERIOD_MS;
-          
+          const inGracePeriod = chargingStartTime.outlet2 &&
+            (Date.now() - chargingStartTime.outlet2) < COMM_GRACE_PERIOD_MS;
+
           if (!inGracePeriod) {
             // Normal monitoring after grace period
             if (obj.can1_RX_time && obj.can1_RX_time.conv_timeout) {
@@ -1715,7 +2064,7 @@ const checkPowerModuleCommErr = async (states, iostate) => {
           } else {
             // Still in grace period, skip error checking
             const remainingGrace = COMM_GRACE_PERIOD_MS - (Date.now() - chargingStartTime.outlet2);
-            console.log(`[v${SCRIPT_VERSION}] [PMCE] Gun 2 in grace period, ${Math.ceil(remainingGrace/1000)}s remaining`);
+            console.log(`[v${SCRIPT_VERSION}] [PMCE] Gun 2 in grace period, ${Math.ceil(remainingGrace / 1000)}s remaining`);
           }
         } else {
           // Clear counter when leaving charging phases
@@ -1852,10 +2201,10 @@ const checkErrors = async () => {
               "modbus.selec.voltage_L3_L2",
             ];
             const acVolts = voltageKeys.map((key) => iostate[key] || 0);
-            
+
             // MODIFIED: Check for undervoltage when 2 phases < 200V and Bender is online
             const benderOnline = iostate["modbus.ccs_bender.online"] === true;
-            
+
             if (checkTwoPhasesBelow200(acVolts) && benderOnline) {
               console.log(`[v${SCRIPT_VERSION}] [AC Meter] Undervoltage condition - 2+ phases < ${Constants.powermoduleundervoltage}V with Bender online:`, acVolts);
               // Set undervoltage error directly here since we're not going through the normal voltage check
@@ -1863,7 +2212,7 @@ const checkErrors = async () => {
                 incrementErrorCounter('underVoltageErr');
                 console.log(`[v${SCRIPT_VERSION}] [UV-AC Meter] Undervoltage counter incremented (2 phases < 200V, Bender online): ${errorObjCount.underVoltageErr}/${errorObjThreshold.underVoltageErr}`);
                 errorObj.underVoltageErr = errorObjCount.underVoltageErr >= errorObjThreshold.underVoltageErr;
-                
+
                 if (errorObj.underVoltageErr) {
                   console.log(`[v${SCRIPT_VERSION}] Supply voltage too low (2 phases < 200V with Bender online): ${acVolts}`);
                   errorObjFlags.underVoltageErr = true;
@@ -1921,7 +2270,7 @@ const checkErrors = async () => {
               tripCaseUV = UVTripState.Idle;
             }
             lastMonitoringSource = 'ac_meter';
-            
+
             const voltageKeys = [
               "modbus.selec.voltage_L1_L2",
               "modbus.selec.voltage_L1_L3",
@@ -1929,7 +2278,7 @@ const checkErrors = async () => {
             ];
             // Extract specific voltage values from iostate
             var voltsFiltered = voltageKeys.map((key) => iostate[key]);
-            
+
             // NEW IMPLEMENTATION: Check for power loss condition before undervoltage
             if (checkTwoPhasesBelow200(voltsFiltered)) {
               console.log(`[v${SCRIPT_VERSION}] [AC Meter] Skipping UV/OV check - power loss condition detected (2+ phases < ${Constants.powermoduleundervoltage}V):`, voltsFiltered);
@@ -1950,7 +2299,7 @@ const checkErrors = async () => {
               tripCaseUV = UVTripState.Idle;
             }
             lastMonitoringSource = 'power_module';
-            
+
             // Log the actual configuration status
             if (powerSaveInIdleMode === false) {
               console.log(`[v${SCRIPT_VERSION}] No AC meter installed (powerSaveInIdleMode=false), using power module voltages`);
@@ -1978,6 +2327,12 @@ const checkErrors = async () => {
           }
           // // Check for power module failure errors
           await checkPowerModuleFailureErr(states);
+
+          // Check for IMD device faults
+          await checkIMDDeviceFaults(states, iostate, iostateValue.controller2);
+
+          // Check for AC Energy Meter failure
+          await checkACEnergyMeterFail(states, iostate, iostateValue.controller2, powerSaveInIdleMode);
         }
       }
 
@@ -1985,98 +2340,100 @@ const checkErrors = async () => {
       console.log(`[v${SCRIPT_VERSION}] [ERROR OBJ] Current error states:`, JSON.stringify(errorObj, null, 2));
       console.log(`[v${SCRIPT_VERSION}] [ERROR COUNT] Error counters:`, JSON.stringify(errorObjCount, null, 2));
 
+
+
       // post data to state obj
-      if(iostateValue !== undefined && iostateValue.controller1 !== null){
+      if (iostateValue !== undefined && iostateValue.controller1 !== null) {
         const iostate = iostateValue.controller1
         if ("modbus.selec.online" in iostate) {
-        if (iostate["modbus.selec.online"] === false) {
-          for (const obj of states) {
-            const payload = {
-              temperatures: temperatures,
-              errorObj: errorObj,
-              modbus_selec_online: false,
-              voltage_L1_L2: 0,
-              voltage_L2_L3: 0,
-              voltage_L3_L1: 0,
-              current_L1: 0,
-              current_L2: 0,
-              current_L3: 0,
-              average_pf: 0,
-              reactive_import_total: 0,
-              reactive_total: 0,
-              active_total: 0,
-              total_net_kWh: 0,
-            };
+          if (iostate["modbus.selec.online"] === false) {
+            for (const obj of states) {
+              const payload = {
+                temperatures: temperatures,
+                errorObj: errorObj,
+                modbus_selec_online: false,
+                voltage_L1_L2: 0,
+                voltage_L2_L3: 0,
+                voltage_L3_L1: 0,
+                current_L1: 0,
+                current_L2: 0,
+                current_L3: 0,
+                average_pf: 0,
+                reactive_import_total: 0,
+                reactive_total: 0,
+                active_total: 0,
+                total_net_kWh: 0,
+              };
 
-            // Add either bender or gongyuan based on availability
-            if (typeof iostate["modbus.ccs_bender.online"] !== "undefined") {
-              payload.modbus_ccs_bender_online =
-                iostate["modbus.ccs_bender.online"];
-            } else if (
-              typeof iostate["modbus.gongyuan.online"] !== "undefined"
-            ) {
-              payload.modbus_gongyuan_online =
-                iostate["modbus.gongyuan.online"];
+              // Add either bender or gongyuan based on availability
+              if (typeof iostate["modbus.ccs_bender.online"] !== "undefined") {
+                payload.modbus_ccs_bender_online =
+                  iostate["modbus.ccs_bender.online"];
+              } else if (
+                typeof iostate["modbus.gongyuan.online"] !== "undefined"
+              ) {
+                payload.modbus_gongyuan_online =
+                  iostate["modbus.gongyuan.online"];
+              }
+
+              await postRequest(
+                `${baseURL}outlets/${obj.outlet}/state`,
+                payload
+              ).catch(function (err) {
+                console.error(`[v${SCRIPT_VERSION}] failed to post on outlet ` + obj.outlet, err);
+              });
             }
+          } else {
+            for (const obj of states) {
+              const payload = {
+                temperatures: temperatures,
+                errorObj: errorObj,
+                modbus_selec_online: iostate["modbus.selec.online"],
+                voltage_L1_L2: iostate["modbus.selec.voltage_L1_L2"],
+                voltage_L2_L3: iostate["modbus.selec.voltage_L3_L2"],
+                voltage_L3_L1: iostate["modbus.selec.voltage_L1_L3"],
+                current_L1: iostate["modbus.selec.current_L1"],
+                current_L2: iostate["modbus.selec.current_L2"],
+                current_L3: iostate["modbus.selec.current_L3"],
+                total_net_kWh: iostate["modbus.selec.active_import_total"],
+                average_pf: iostate["modbus.selec.average_pf"],
+                reactive_import_total:
+                  iostate["modbus.selec.reactive_import_total"],
+                reactive_total: iostate["modbus.selec.reactive_total"],
+                active_total: iostate["modbus.selec.active_total"],
+              };
 
-            await postRequest(
-              `${baseURL}outlets/${obj.outlet}/state`,
-              payload
-            ).catch(function (err) {
-              console.error(`[v${SCRIPT_VERSION}] failed to post on outlet ` + obj.outlet, err);
-            });
+              // Add either bender or gongyuan based on availability
+              if (typeof iostate["modbus.ccs_bender.online"] !== "undefined") {
+                payload.modbus_ccs_bender_online =
+                  iostate["modbus.ccs_bender.online"];
+              } else if (
+                typeof iostate["modbus.gongyuan.online"] !== "undefined"
+              ) {
+                payload.modbus_gongyuan_online =
+                  iostate["modbus.gongyuan.online"];
+              }
+
+              await postRequest(
+                `${baseURL}outlets/${obj.outlet}/state`,
+                payload
+              ).catch(function (err) {
+                console.error(`[v${SCRIPT_VERSION}] failed to post on outlet ` + obj.outlet, err);
+              });
+            }
           }
         } else {
           for (const obj of states) {
-            const payload = {
+            await postRequest(`${baseURL}outlets/${obj.outlet}/state`, {
               temperatures: temperatures,
               errorObj: errorObj,
-              modbus_selec_online: iostate["modbus.selec.online"],
-              voltage_L1_L2: iostate["modbus.selec.voltage_L1_L2"],
-              voltage_L2_L3: iostate["modbus.selec.voltage_L3_L2"],
-              voltage_L3_L1: iostate["modbus.selec.voltage_L1_L3"],
-              current_L1: iostate["modbus.selec.current_L1"],
-              current_L2: iostate["modbus.selec.current_L2"],
-              current_L3: iostate["modbus.selec.current_L3"],
-              total_net_kWh: iostate["modbus.selec.active_import_total"],
-              average_pf: iostate["modbus.selec.average_pf"],
-              reactive_import_total:
-                iostate["modbus.selec.reactive_import_total"],
-              reactive_total: iostate["modbus.selec.reactive_total"],
-              active_total: iostate["modbus.selec.active_total"],
-            };
-
-            // Add either bender or gongyuan based on availability
-            if (typeof iostate["modbus.ccs_bender.online"] !== "undefined") {
-              payload.modbus_ccs_bender_online =
-                iostate["modbus.ccs_bender.online"];
-            } else if (
-              typeof iostate["modbus.gongyuan.online"] !== "undefined"
-            ) {
-              payload.modbus_gongyuan_online =
-                iostate["modbus.gongyuan.online"];
-            }
-
-            await postRequest(
-              `${baseURL}outlets/${obj.outlet}/state`,
-              payload
-            ).catch(function (err) {
-              console.error(`[v${SCRIPT_VERSION}] failed to post on outlet ` + obj.outlet, err);
+            }).catch((err) => {
+              console.error(`[v${SCRIPT_VERSION}] failed to post on outlet ${obj.outlet}`, err);
             });
           }
         }
-      } else {
-        for (const obj of states) {
-          await postRequest(`${baseURL}outlets/${obj.outlet}/state`, {
-            temperatures: temperatures,
-            errorObj: errorObj,
-          }).catch((err) => {
-            console.error(`[v${SCRIPT_VERSION}] failed to post on outlet ${obj.outlet}`, err);
-          });
-        }
       }
-      }
-      
+
     });
   } catch (err) {
     console.error(`[v${SCRIPT_VERSION}] [ERROR] Error in checkErrors function:`, err.message || err);

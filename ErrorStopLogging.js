@@ -10,24 +10,29 @@
 /***********************************/
 
 // Globals:
-const url = "localhost:3001";
-//const url = "10.20.27.50:3001";
+// const url = "localhost:3001";
+const url = "10.20.27.50:3001";
 const errorStartTimes = {}; // Track start times for multiple errors
 
 const vendorErrorMapping = {
   "powerLossErr": "19", // PowerFailure
   "eStopErr": "17", // EmergencyPressed
   "doorOpenErr": "18", // DoorOpen
-  "outletTemperatureErr": "6", // ModuleOutletTempHigh
-  "cabinetTemperatureErr": "5", // CabinetTempHigh
-  "overVoltageErr": "21", // InputOverVoltage
+  "outletTemperatureErr": "83", // ModuleOutletTempHigh
+  "cabinetTemperatureErr": "82", // CabinetTempHigh
+  "overVoltageErr": "85", // InputOverVoltage
   "underVoltageErr": "26", // InputUnderVoltage
   "powerModuleFailureErr": "14", // PowerModuleFailure
-  "gunTemperatureErr_1": "27", // CableHighTemperature
-  "gunTemperatureErr_2": "27", // CableHighTemperature
+  "gunTemperatureErr_1": "27", // OutletTempHigh
+  "gunTemperatureErr_2": "27", // OutletTempHigh
   "powerModuleCommErr_1": "15", // PowerModuleCommError
   "powerModuleCommErr_2": "15", // PowerModuleCommError
-  "groundFault": "30" // GroundFault
+  "groundFault": "90", // GroundFault
+  "imdResistanceErr_1": "75", // IMDResistance
+  "imdResistanceErr_2": "75", // IMDResistance
+  "imdFaultyErr_controller1": "78", // IMDFaultC1
+  "imdFaultyErr_controller2": "79", // IMDFaultC2
+  "ac_em_fail": "80" // ACEnergyMeterFailure
 };
 
 
@@ -63,15 +68,15 @@ async function getCustomDB(errorKey) {
     const vendorErrorCode = vendorErrorMapping[errorKey];
 
     // Find the most recent entry for connector ID 1 without faultDuration
-    let specificErrorEntry = reversedData.find(entry => 
-      entry.vendorErrorCode === vendorErrorCode && 
+    let specificErrorEntry = reversedData.find(entry =>
+      entry.vendorErrorCode === vendorErrorCode &&
       entry.connectorId === 1 &&
       !entry.hasOwnProperty('faultDuration') // Check if faultDuration is not present
     );
 
     // If no entry was found for connector ID 1, check for specific cases with connector ID 2 without faultDuration
     if (!specificErrorEntry) {
-      specificErrorEntry = reversedData.find(entry => 
+      specificErrorEntry = reversedData.find(entry =>
         entry.vendorErrorCode === vendorErrorCode &&
         entry.connectorId === 2 &&
         !entry.hasOwnProperty('faultDuration')

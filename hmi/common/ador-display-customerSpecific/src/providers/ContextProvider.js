@@ -1,4 +1,4 @@
-/* eslint eqeqeq: "off"*/
+﻿/* eslint eqeqeq: "off"*/
 import React, { Component } from "react";
 import mqtt from "mqtt";
 import { withTranslation } from "react-i18next";
@@ -107,6 +107,7 @@ class ContextProvider extends Component {
     stoppingOutlet: false,
     ocppOnline: false,
     networkAccess: false,
+    networkFailCount: 0,
     errTogglingTimeout: false,
     seccTimeSynced: false,
     setSeccTimeSynced: (seccTimeSynced) => this.setState({ seccTimeSynced }),
@@ -817,20 +818,66 @@ class ContextProvider extends Component {
     return response;
   };
 
+  // Multi-level internet check: OCPP fast-path → multi-endpoint fallback → debounce
   checkNetworkAccess = async () => {
-    let networkAccess = null;
-    try {
-      await this.fetchWithTimeout("https://api.ipify.org/", {
-        method: "GET",
-        mode: "no-cors",
-        cache: "no-cache",
-        timeout: 2000,
-      });
-      networkAccess = true;
-    } catch (error) {
-      networkAccess = false;
+    let pingSuccess = false;
+
+    // Level 1: OCPP fast-path — if OCPP is connected, internet must be reachable
+    // Skip all pings to save bandwidth and compute
+    const ocppOnline = this.state.ocppOnline;
+    if (ocppOnline) {
+      pingSuccess = true;
     }
-    this.setState({ networkAccess });
+
+    // Level 2: Multi-endpoint fallback (only if OCPP is not connected)
+    // Tries endpoints in sequence — if ANY responds, internet is reachable
+    if (!pingSuccess) {
+      const endpoints = [
+        "https://www.google.com",
+        "https://quenchcms.com/",
+        "https://1.1.1.1",
+      ];
+
+      for (const url of endpoints) {
+        try {
+          await this.fetchWithTimeout(url, {
+            method: "GET",
+            mode: "no-cors",
+            cache: "no-cache",
+            timeout: 2000,
+          });
+          pingSuccess = true;
+          break; // One success is enough, no need to try remaining endpoints
+        } catch (error) {
+          // This endpoint failed, try the next one
+          continue;
+        }
+      }
+    }
+
+    // Level 3: Debounce / Hysteresis — prevent flickering
+    // Go offline only after 3 consecutive failures (~30s at 10s interval)
+    // Go online immediately on first success
+    let networkAccess;
+    if (pingSuccess) {
+      // Immediate recovery on success
+      networkAccess = true;
+      this.setState({ networkAccess, networkFailCount: 0 });
+    } else {
+      const newFailCount = this.state.networkFailCount + 1;
+      if (newFailCount >= 3) {
+        // 3 consecutive failures — mark as offline
+        networkAccess = false;
+        this.setState({ networkAccess, networkFailCount: newFailCount });
+        console.log(`[NetworkCheck] ${newFailCount} consecutive failures — marking offline`);
+      } else {
+        // Not enough failures yet — keep current state
+        networkAccess = this.state.networkAccess;
+        this.setState({ networkFailCount: newFailCount });
+        console.log(`[NetworkCheck] Failure ${newFailCount}/3 — holding current state (${networkAccess})`);
+      }
+    }
+
     return networkAccess;
   };
 

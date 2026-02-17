@@ -27,6 +27,7 @@ const initialState = {
   stoppingOutlet: false,
   ocppOnline: false,
   networkAccess: false,
+  networkFailCount: 0,
   errTogglingTimeout: false,
   seccTimeSynced: false,
   reservedOutlets: [],
@@ -103,6 +104,9 @@ const chargingSlice = createSlice({
     setNetworkAccess: (state, action) => {
       state.networkAccess = action.payload;
     },
+    setNetworkFailCount: (state, action) => {
+      state.networkFailCount = action.payload;
+    },
     setAllowToPublishNetworkAccess: (state, action) => {
       state.allowToPublishNetworkAccess = action.payload;
     },
@@ -121,7 +125,7 @@ const chargingSlice = createSlice({
     setPowerFailureRoutingHandled: (state, action) => {
       state.powerFailureRoutingHandled = action.payload
     },
-    setEStopRoutingHandled : (state,action) => {
+    setEStopRoutingHandled: (state, action) => {
       state.eStopRoutingHandled = action.payload
     },
     setStoppingOutlet: (state, action) => {
@@ -133,18 +137,18 @@ const chargingSlice = createSlice({
     setIsCommunicationError: (state, action) => {
       state.isCommunicationError = action.payload
     },
-    setIsOutletNotActive : (state, action) => {
+    setIsOutletNotActive: (state, action) => {
       state.isOutletNotActive = action.payload
     }
-  }, 
+  },
   extraReducers: (builder) => {
     builder
       .addCase(initializeConfig.fulfilled, (state, action) => {
         state.config = action.payload;
       })
-      // .addCase(fetchChargerState.fulfilled, (state, action) => {
-      //   // state.chargerState = action.payload;
-      // });
+    // .addCase(fetchChargerState.fulfilled, (state, action) => {
+    //   // state.chargerState = action.payload;
+    // });
   },
 });
 
@@ -162,6 +166,7 @@ export const {
   setIpcClient,
   setErrTogglingTimeout,
   setNetworkAccess,
+  setNetworkFailCount,
   setAllowToPublishNetworkAccess,
   setErrorCode,
   setActiveConnector,

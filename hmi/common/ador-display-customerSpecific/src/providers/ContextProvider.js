@@ -796,10 +796,11 @@ class ContextProvider extends Component {
     const ocppOnline = await fetch(endpoint)
       .then((response) => response.json())
       .then((data) => {
+        console.log(`[NetworkCheck] OCPP status response:`, data?.connectionStatus);
         return data?.connectionStatus === "connected";
       })
       .catch((error) => {
-        console.log("Getting /services/ocpp/status failed!!");
+        console.log(`[NetworkCheck] OCPP status check failed — endpoint: ${endpoint}`, error?.message);
       });
     this.setState({ ocppOnline });
     return ocppOnline;
@@ -818,24 +819,26 @@ class ContextProvider extends Component {
     return response;
   };
 
-  // Multi-level internet check: OCPP fast-path → multi-endpoint fallback → debounce
+  // Multi-level internet check: OCPP fast-path → CMS ping → ipify ping → debounce
   checkNetworkAccess = async () => {
     let pingSuccess = false;
+    let resolvedBy = "none";
 
     // Level 1: OCPP fast-path — if OCPP is connected, internet must be reachable
     // Skip all pings to save bandwidth and compute
     const ocppOnline = this.state.ocppOnline;
+    console.log(`[NetworkCheck] Level 1: ocppOnline = ${ocppOnline}`);
     if (ocppOnline) {
       pingSuccess = true;
+      resolvedBy = "OCPP";
     }
 
-    // Level 2: Multi-endpoint fallback (only if OCPP is not connected)
-    // Tries endpoints in sequence — if ANY responds, internet is reachable
+    // Level 2: CMS ping fallback (only if OCPP is not connected)
+    // quenchcms.com first (whitelisted on M2M SIM), then ipify.org as last resort
     if (!pingSuccess) {
       const endpoints = [
-        "https://www.google.com",
         "https://quenchcms.com/",
-        "https://1.1.1.1",
+        "https://api.ipify.org/",
       ];
 
       for (const url of endpoints) {
@@ -844,12 +847,14 @@ class ContextProvider extends Component {
             method: "GET",
             mode: "no-cors",
             cache: "no-cache",
-            timeout: 2000,
+            timeout: 5000,
           });
           pingSuccess = true;
-          break; // One success is enough, no need to try remaining endpoints
+          resolvedBy = url;
+          console.log(`[NetworkCheck] Level 2: ${url} — ✅ reachable`);
+          break; // One success is enough
         } catch (error) {
-          // This endpoint failed, try the next one
+          console.log(`[NetworkCheck] Level 2: ${url} — ❌ failed (${error?.message})`);
           continue;
         }
       }
@@ -863,18 +868,19 @@ class ContextProvider extends Component {
       // Immediate recovery on success
       networkAccess = true;
       this.setState({ networkAccess, networkFailCount: 0 });
+      console.log(`[NetworkCheck] ✅ Online — resolved by: ${resolvedBy}`);
     } else {
       const newFailCount = this.state.networkFailCount + 1;
       if (newFailCount >= 3) {
         // 3 consecutive failures — mark as offline
         networkAccess = false;
         this.setState({ networkAccess, networkFailCount: newFailCount });
-        console.log(`[NetworkCheck] ${newFailCount} consecutive failures — marking offline`);
+        console.log(`[NetworkCheck] ❌ ${newFailCount} consecutive failures — marking offline`);
       } else {
         // Not enough failures yet — keep current state
         networkAccess = this.state.networkAccess;
         this.setState({ networkFailCount: newFailCount });
-        console.log(`[NetworkCheck] Failure ${newFailCount}/3 — holding current state (${networkAccess})`);
+        console.log(`[NetworkCheck] ⏳ Failure ${newFailCount}/3 — holding current state (${networkAccess})`);
       }
     }
 
@@ -1368,7 +1374,7 @@ class ContextProvider extends Component {
       return true;
     });
 
-    console.log("[SessionSummaryPopup] Outlets with error:", outletsWithError.length);
+    // console.log("[SessionSummaryPopup] Outlets with error:", outletsWithError.length);
 
     // No outlets with error → hide popup immediately and reset flag for next error
     if (outletsWithError.length === 0) {

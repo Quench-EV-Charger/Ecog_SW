@@ -23,8 +23,8 @@ class RemoteStartPopup extends React.Component {
   componentDidUpdate(prevProps) {
     const { connectionTimeOut } = this.context;
     const timeout = connectionTimeOut || 60;
-    console.log("[RemoteStartPopup] componentDidUpdate - connectionTimeOut from context:", connectionTimeOut);
-    console.log("[RemoteStartPopup] componentDidUpdate - final timeout value:", timeout);
+    // console.log("[RemoteStartPopup] componentDidUpdate - connectionTimeOut from context:", connectionTimeOut);
+    // console.log("[RemoteStartPopup] componentDidUpdate - final timeout value:", timeout);
     if (!prevProps.gun1Shown && this.props.gun1Shown) {
       this.setState({ gun1SecondsRemaining: timeout, totalSeconds: timeout });
       this.startGun1Countdown();
@@ -126,7 +126,7 @@ class RemoteStartPopup extends React.Component {
             boxShadow: "0 10px 40px rgba(0, 0, 0, 0.4)",
             border: "4px solid #99B7E6",
             width: "480px",          // ⬅️ increased width
-            maxWidth: "48vw",   
+            maxWidth: "48vw",
             height: "600px",
             marginTop: "60px",        // ⬅️ optional, larger max width
           }}

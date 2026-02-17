@@ -854,6 +854,7 @@ export const checkOCPPStatus = async () => {
   try {
     const response = await fetch(endpoint);
     const data = await response.json();
+    console.log(`[NetworkCheck] OCPP status response:`, data?.connectionStatus);
     const ocppOnline = data?.connectionStatus === "connected";
 
     // Dispatch to Redux store
@@ -861,30 +862,32 @@ export const checkOCPPStatus = async () => {
 
     return ocppOnline;
   } catch (error) {
-    console.error("Getting /services/ocpp/status failed!!", error);
+    console.log(`[NetworkCheck] OCPP status check failed — endpoint: ${endpoint}`, error?.message);
     store.dispatch(setOCPPOnline(false)); // or null if you want an indeterminate state
     return false;
   }
 };
 
-// Multi-level internet check: OCPP fast-path → multi-endpoint fallback → debounce
+// Multi-level internet check: OCPP fast-path → CMS ping → ipify ping → debounce
 export const checkNetworkAccess = async () => {
   let pingSuccess = false;
+  let resolvedBy = "none";
 
   // Level 1: OCPP fast-path — if OCPP is connected, internet must be reachable
   // Skip all pings to save bandwidth and compute
   const ocppOnline = store.getState().charging.ocppOnline;
+  console.log(`[NetworkCheck] Level 1: ocppOnline = ${ocppOnline}`);
   if (ocppOnline) {
     pingSuccess = true;
+    resolvedBy = "OCPP";
   }
 
-  // Level 2: Multi-endpoint fallback (only if OCPP is not connected)
-  // Tries endpoints in sequence — if ANY responds, internet is reachable
+  // Level 2: CMS ping fallback (only if OCPP is not connected)
+  // quenchcms.com first (whitelisted on M2M SIM), then ipify.org as last resort
   if (!pingSuccess) {
     const endpoints = [
-      "https://www.google.com",
       "https://quenchcms.com/",
-      "https://1.1.1.1",
+      "https://api.ipify.org/",
     ];
 
     for (const url of endpoints) {
@@ -893,12 +896,14 @@ export const checkNetworkAccess = async () => {
           method: "GET",
           mode: "no-cors",
           cache: "no-cache",
-          timeout: 2000,
+          timeout: 5000,
         });
         pingSuccess = true;
-        break; // One success is enough, no need to try remaining endpoints
+        resolvedBy = url;
+        console.log(`[NetworkCheck] Level 2: ${url} — ✅ reachable`);
+        break; // One success is enough
       } catch (error) {
-        // This endpoint failed, try the next one
+        console.log(`[NetworkCheck] Level 2: ${url} — ❌ failed (${error?.message})`);
         continue;
       }
     }
@@ -913,6 +918,7 @@ export const checkNetworkAccess = async () => {
     networkAccess = true;
     store.dispatch(setNetworkAccess(networkAccess));
     store.dispatch(setNetworkFailCount(0));
+    console.log(`[NetworkCheck] ✅ Online — resolved by: ${resolvedBy}`);
   } else {
     const currentFailCount = store.getState().charging.networkFailCount;
     const newFailCount = currentFailCount + 1;
@@ -921,12 +927,12 @@ export const checkNetworkAccess = async () => {
       networkAccess = false;
       store.dispatch(setNetworkAccess(networkAccess));
       store.dispatch(setNetworkFailCount(newFailCount));
-      console.log(`[NetworkCheck] ${newFailCount} consecutive failures — marking offline`);
+      console.log(`[NetworkCheck] ❌ ${newFailCount} consecutive failures — marking offline`);
     } else {
       // Not enough failures yet — keep current state
       networkAccess = store.getState().charging.networkAccess;
       store.dispatch(setNetworkFailCount(newFailCount));
-      console.log(`[NetworkCheck] Failure ${newFailCount}/3 — holding current state (${networkAccess})`);
+      console.log(`[NetworkCheck] ⏳ Failure ${newFailCount}/3 — holding current state (${networkAccess})`);
     }
   }
 

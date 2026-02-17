@@ -3,8 +3,9 @@ FROM python:3.11-alpine AS builder
 
 WORKDIR /usr/src/app
 
-# Install build dependencies for Alpine
-RUN apk add --no-cache gcc musl-dev linux-headers
+# Update package manager and install build dependencies with retry logic
+RUN apk update && \
+    apk add --no-cache --virtual .build-deps gcc musl-dev linux-headers
 
 # Copy and install Python dependencies
 COPY requirements.txt .
@@ -15,8 +16,9 @@ FROM python:3.11-alpine
 
 WORKDIR /usr/src/app
 
-# Install only runtime dependencies if needed
-RUN apk add --no-cache libstdc++
+# Update package manager before installing runtime dependencies
+RUN apk update && \
+    apk add --no-cache libstdc++
 
 # Copy Python packages from builder
 COPY --from=builder /root/.local /root/.local

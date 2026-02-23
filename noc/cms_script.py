@@ -526,7 +526,7 @@ NOTE: Actual consumption varies based on:
 
 import requests
 import time
-import websocket
+# websocket import removed - using polling-only architecture
 # import rel  # Removed - no longer using rel dispatcher for WebSocket stability
 import threading
 import json
@@ -559,9 +559,7 @@ SERVER_URL = "https://quenchcms.com/"
 HARDWARE_HOST = "10.20.27.50"  # IP address of the real hardware
 HARDWARE_PORT = 3001  # Port for HTTP APIs
 HARDWARE_BASE_URL = f"http://{HARDWARE_HOST}:{HARDWARE_PORT}"
-WEBSOCKET_HOST = HARDWARE_HOST  # Same as hardware host
-WEBSOCKET_PORT = HARDWARE_PORT  # Same port for WebSocket
-WEBSOCKET_URL = f"ws://{WEBSOCKET_HOST}:{WEBSOCKET_PORT}/events/stream"
+# WebSocket config removed - using polling-only architecture
 
 # Option 2: SIMULATOR CONFIGURATION (ACTIVE)
 # Uncomment these lines for simulator testing:
@@ -658,8 +656,7 @@ try:
 except:
     pass  # Not critical if this fails
 
-# Thread management variables for proper lifecycle
-api_thread = None
+# Thread management (simplified — single polling thread, no WebSocket)
 thread_lock = threading.Lock()
 
 # CMS connectivity status tracking
@@ -677,19 +674,7 @@ CMS_RETRY_INTERVAL = 10  # Retry every 10 seconds when disconnected
 # When CMS reconnects, just process the next new event from WebSocket
 # No buffering or storage of events
 
-# CRITICAL FIX: Global websocket instance for proper closure
-current_ws = None
-ws_lock = threading.Lock()
-
-# WebSocket connection state tracking to prevent duplicate connections
-ws_connecting = False  # Flag to track if connection is in progress
-ws_connected = False  # Flag to track if WebSocket is connected
-last_ws_attempt = 0  # Last WebSocket connection attempt timestamp
-ws_reconnect_delay = 5  # Initial reconnect delay (will use exponential backoff)
-ws_max_reconnect_delay = 60  # Maximum reconnect delay (1 minute) - User configured
-ws_max_reconnect_attempts = 10  # Maximum attempts before capping delay - User configured
-ws_reconnect_attempts = 0  # Track reconnection attempts for backoff
-WS_COOLDOWN_PERIOD = 1  # Reduced from 2s - Minimum seconds between connection attempts
+# WebSocket removed - using polling-only architecture
 
 # Interrupt handling for graceful shutdown
 interrupt_counter = 0
@@ -725,6 +710,26 @@ last_alert_state = {
     "B": {"errorObj": set(), "ses_errors": set(), "had_errors": False}
 }
 alert_lock = threading.Lock()
+
+# Session tracking state for each gun
+# Tracks curr_ses_active transitions to detect session_start/session_stop
+# Tracks phs (phase state) for start_charging/stop_charging detection
+last_session_state = {
+    "A": {"active": False, "snapshot": {}, "phs": 0},
+    "B": {"active": False, "snapshot": {}, "phs": 0},
+}
+
+# Pending events for 3rd poll iteration (ensures fresh data and 2s timestamp gap)
+# Format: {"A": {"snapshot": {...}, "polls_remaining": 3}, "B": None}
+pending_stop_charging = {
+    "A": None,
+    "B": None,
+}
+pending_session_stop = {
+    "A": None,
+    "B": None,
+}
+PENDING_EVENT_DELAY_POLLS = 2  # Send after 2 polls (~20 seconds)
 
 # errorObj field mapping (Priority 1 - checked first)
 # Maps errorObj field names to (vendorErrorCode, errorCode, info)
@@ -820,10 +825,6 @@ def handle_interrupt(signum=None, frame=None):
     
     if interrupt_counter >= FORCE_EXIT_INTERRUPTS:
         print(f"{time.ctime()} Force exit triggered. Shutting down...")
-        try:
-            close_websocket()
-        except:
-            pass
         # Clean exit for Docker environments
         sys.stdout.flush()
         sys.stderr.flush()
@@ -876,7 +877,7 @@ def LogVersion():
     while True:  # Run forever
         try:
             #DataTosend = {'Name': DeviceID, "Version": 'ador-intel-1-14-v6'}
-            DataTosend = {'Name': DeviceID, "Version": 'ador-samsung-1-19-v1'}
+            DataTosend = {'Name': DeviceID, "Version": 'ador-samsung-1-23-v1'}
             print(f"{time.ctime()} [Script->Server] Logging version to CMS")
             print(f"{time.ctime()} [Script->Server] GET {SERVER_URL}api/charger/LogVersion")
             print(f"{time.ctime()} [Script->Server] Params: {DataTosend}")
@@ -1036,30 +1037,41 @@ def GetGunStatus():
         print(f"An error occurred while retrieving gun status: {e}")
         return None
 
-def poll_for_alerts():
-    """Poll /state endpoint for session errors and send alerts to CMS
+def poll_loop():
+    """Unified polling loop — replaces WebSocket, alert polling, and LiveFeeds threads.
     
-    This function runs in a separate thread and polls the hardware /state
-    endpoint every ALERT_POLLING_INTERVAL seconds. When a new session error
-    is detected (curr_ses_error changes from 0 to non-zero), it formats
-    the error as an alert event and sends it to CMS via /api/charger/LogEvent.
+    Polls /state every ALERT_POLLING_INTERVAL seconds (10s) for:
+    - Session start/stop detection (curr_ses_active transitions)
+    - Alert detection (errorObj + session errors)
+    - LiveFeeds to CMS every POLLING_INTERVAL seconds (60s)
     """
-    global last_alert_state
+    global last_alert_state, last_session_state, cms_connected, pending_stop_charging, pending_session_stop
     
-    print(f"{time.ctime()} [Script] Alert polling thread started (interval: {ALERT_POLLING_INTERVAL}s)")
+    livefeed_counter = 0
+    LIVEFEED_EVERY_N = max(1, POLLING_INTERVAL // ALERT_POLLING_INTERVAL)  # 60/10 = 6
+    
+    print(f"{time.ctime()} [Script] Unified poll loop started")
+    print(f"    - /state poll interval: {ALERT_POLLING_INTERVAL}s")
+    print(f"    - LiveFeeds interval: {POLLING_INTERVAL}s (every {LIVEFEED_EVERY_N} polls)")
     
     while True:
         try:
             # Check CMS connectivity first
             if not check_cms_connectivity():
-                print(f"{time.ctime()} [Alert] CMS not connected - skipping alert poll")
-                time.sleep(ALERT_POLLING_INTERVAL)
+                print(f"{time.ctime()} [Poll] CMS not connected - skipping poll")
+                time.sleep(RetryTime)
                 continue
             
             # Poll hardware /state endpoint
-            response = session.get(f"{HARDWARE_BASE_URL}/state", timeout=10)
+            try:
+                response = session.get(f"{HARDWARE_BASE_URL}/state", timeout=10)
+            except Exception as hw_ex:
+                print(f"{time.ctime()} [Poll] Failed to reach hardware: {hw_ex}")
+                time.sleep(ALERT_POLLING_INTERVAL)
+                continue
+                
             if response.status_code != 200:
-                print(f"{time.ctime()} [Alert] Failed to poll /state: status {response.status_code}")
+                print(f"{time.ctime()} [Poll] Failed to poll /state: status {response.status_code}")
                 time.sleep(ALERT_POLLING_INTERVAL)
                 continue
             
@@ -1077,9 +1089,36 @@ def poll_for_alerts():
             
             with alert_lock:
                 for gun_label, outlet, gun_state in guns:
+                    # ==========================================
+                    # SEND PENDING EVENTS (after 3 poll iterations)
+                    # Ensures fresh data and 2-second timestamp gap
+                    # ==========================================
+                    
+                    # Process pending stop_charging (decrement counter, send when reaches 0)
+                    if pending_stop_charging[gun_label] is not None:
+                        pending_stop_charging[gun_label]["polls_remaining"] -= 1
+                        if pending_stop_charging[gun_label]["polls_remaining"] <= 0:
+                            prev_snapshot = pending_stop_charging[gun_label]["snapshot"]
+                            print(f"{time.ctime()} [Session] Charging STOP (queued, 2 polls) on Gun {gun_label}")
+                            send_session_event_to_cms("stop_charging", gun_state, prev_state=prev_snapshot)
+                            pending_stop_charging[gun_label] = None
+                    
+                    # Process pending session_stop (decrement counter, send when reaches 0)
+                    if pending_session_stop[gun_label] is not None:
+                        pending_session_stop[gun_label]["polls_remaining"] -= 1
+                        if pending_session_stop[gun_label]["polls_remaining"] <= 0:
+                            prev_snapshot = pending_session_stop[gun_label]["snapshot"]
+                            print(f"{time.ctime()} [Session] Session STOP (queued, 2 polls) on Gun {gun_label}")
+                            send_session_event_to_cms("session_stop", gun_state, prev_state=prev_snapshot, add_timestamp_offset=True)
+                            pending_session_stop[gun_label] = None
+                    
                     # Get controller ID and outlet type from state
                     controller_id = gun_state.get("id", DeviceID)
                     outlet_type = gun_state.get("outletType", "CCS")
+                    
+                    # ==========================================
+                    # ALERT DETECTION (existing logic preserved)
+                    # ==========================================
                     
                     # PRIORITY 1: Check errorObj fields first
                     error_obj = gun_state.get("errorObj", {})
@@ -1096,8 +1135,6 @@ def poll_for_alerts():
                     
                     # Send alerts for new errorObj errors
                     for field_name in new_errors:
-                        # Gun-specific errorObj filtering:
-                        # Fields ending in _1 only alert for Gun A, _2 only for Gun B
                         if field_name.endswith("_1") and gun_label != "A":
                             print(f"{time.ctime()} [Alert] SKIPPING {field_name} on Gun {gun_label} (gun-specific: _1 is for Gun A only)")
                             continue
@@ -1110,7 +1147,7 @@ def poll_for_alerts():
                             vendor_code, error_code, info = error_info
                             print(f"{time.ctime()} [Alert] NEW errorObj on Gun {gun_label}: {field_name} -> {error_code}:{info}")
                             send_alert_to_cms(outlet=outlet, vendor_code=vendor_code, error_code=error_code, 
-                                              info=info, controller_id=controller_id, outlet_type=outlet_type)
+                                              info=info, controller_id=controller_id, outlet_type=outlet_type, gun_state=gun_state)
                     
                     # Log cleared errorObj errors
                     for field_name in cleared_errors:
@@ -1120,7 +1157,6 @@ def poll_for_alerts():
                     last_alert_state[gun_label]["errorObj"] = current_errors
                     
                     # --- Process curr_ses_errors_list (all session errors) ---
-                    # Parse the comma-separated list of error codes
                     errors_list_str = gun_state.get("curr_ses_errors_list", "")
                     current_ses_errors = set()
                     if errors_list_str:
@@ -1129,16 +1165,11 @@ def poll_for_alerts():
                             if code_str and code_str.isdigit():
                                 current_ses_errors.add(int(code_str))
                     
-                    # Get previously sent session errors
                     previous_ses_errors = last_alert_state[gun_label]["ses_errors"]
-                    
-                    # Find NEW session errors (not seen before)
                     new_ses_errors = current_ses_errors - previous_ses_errors
                     cleared_ses_errors = previous_ses_errors - current_ses_errors
                     
-                    # Send alerts for each NEW session error
-                    # Skip certain error codes that should not generate alerts
-                    SKIP_SESSION_ERRORS = {10, 68, 70, 71, 72, 999, 997,998, 995, 994, 77}  # Errors to exclude from alerts
+                    SKIP_SESSION_ERRORS = {10, 68, 70, 71, 72, 999, 997, 998, 995, 994, 77}
                     
                     for error_code_int in new_ses_errors:
                         if error_code_int in SKIP_SESSION_ERRORS:
@@ -1152,28 +1183,96 @@ def poll_for_alerts():
                             vendor_code, error_code, info = (0, "OtherError", f"Unknown_{error_code_int}")
                         print(f"{time.ctime()} [Alert] NEW session error on Gun {gun_label}: {error_code_int} -> {error_code}:{info}")
                         send_alert_to_cms(outlet=outlet, vendor_code=vendor_code, error_code=error_code,
-                                          info=info, controller_id=controller_id, outlet_type=outlet_type)
+                                          info=info, controller_id=controller_id, outlet_type=outlet_type, gun_state=gun_state)
                     
-                    # Log cleared session errors
                     for error_code_int in cleared_ses_errors:
                         print(f"{time.ctime()} [Alert] Session error CLEARED on Gun {gun_label}: {error_code_int}")
                     
-                    # Update tracked session errors
                     last_alert_state[gun_label]["ses_errors"] = current_ses_errors
                     
-                    # Track if this gun has/had any errors
                     has_any_error = len(current_errors) > 0 or len(current_ses_errors) > 0
                     had_errors = last_alert_state[gun_label]["had_errors"]
                     
-                    # Check for ALL ERRORS RESTORED condition
-                    # Send "No error" alert (code 16) when transitioning from error state to no-error state
                     if had_errors and not has_any_error:
                         print(f"{time.ctime()} [Alert] ALL ERRORS RESTORED on Gun {gun_label} - sending No error alert")
                         send_alert_to_cms(outlet=outlet, vendor_code=16, error_code="NoError",
-                                          info="No error", controller_id=controller_id, outlet_type=outlet_type)
+                                          info="No error", controller_id=controller_id, outlet_type=outlet_type, gun_state=gun_state)
                     
-                    # Update had_errors flag
                     last_alert_state[gun_label]["had_errors"] = has_any_error
+                    
+                    # ==========================================
+                    # CHARGING PHASE DETECTION (phs transitions)
+                    # CHECK FIRST - before session detection to ensure correct event order
+                    # ==========================================
+                    curr_phs = gun_state.get("phs", 0)
+                    prev_phs = last_session_state[gun_label].get("phs", 0)
+                    
+                    # Also need curr_active for coordination with session detection
+                    curr_active = gun_state.get("curr_ses_active", False)
+                    prev_active = last_session_state[gun_label]["active"]
+                    
+                    # start_charging: phs transitions to 7
+                    if curr_phs == 7 and prev_phs != 7:
+                        # Entered Charging stage (current demand) → start_charging
+                        print(f"{time.ctime()} [Session] Charging START detected on Gun {gun_label} (phs: {prev_phs} → {curr_phs})")
+                        send_session_event_to_cms("start_charging", gun_state)
+                    
+                    # stop_charging: phs transitions from 7 to any other value
+                    # ALSO trigger stop_charging if session ends while phs was 7 (to ensure correct order)
+                    stop_charging_needed = (prev_phs == 7 and curr_phs != 7)
+                    session_ending_while_charging = (not curr_active and prev_active and prev_phs == 7)
+                    
+                    if stop_charging_needed or session_ending_while_charging:
+                        # Queue stop_charging for next poll iteration (ensures fresh data)
+                        prev_snapshot = last_session_state[gun_label]["snapshot"]
+                        if stop_charging_needed:
+                            print(f"{time.ctime()} [Session] Charging STOP detected on Gun {gun_label} (phs: {prev_phs} → {curr_phs}) - QUEUED for 2 polls")
+                        else:
+                            print(f"{time.ctime()} [Session] Charging STOP detected on Gun {gun_label} (session ending while charging) - QUEUED for 2 polls")
+                        pending_stop_charging[gun_label] = {
+                            "snapshot": prev_snapshot,
+                            "polls_remaining": PENDING_EVENT_DELAY_POLLS,
+                        }
+                    
+                    # Update phs tracking for next iteration
+                    last_session_state[gun_label]["phs"] = curr_phs
+                    
+                    # ==========================================
+                    # SESSION DETECTION (after phs detection)
+                    # ==========================================
+                    
+                    if curr_active and not prev_active:
+                        # Session just started
+                        print(f"{time.ctime()} [Session] Session START detected on Gun {gun_label}")
+                        print(f"    [Session] curr_ses_id={gun_state.get('curr_ses_id', '')}, user={gun_state.get('user', '')}")
+                        send_session_event_to_cms("session_start", gun_state)
+                    
+                    if not curr_active and prev_active:
+                        # Queue session_stop for next poll iteration (ensures 2s gap after stop_charging)
+                        prev_snapshot = last_session_state[gun_label]["snapshot"]
+                        print(f"{time.ctime()} [Session] Session STOP detected on Gun {gun_label} - QUEUED for 2 polls")
+                        print(f"    [Session] Using previous snapshot: curr_ses_id={prev_snapshot.get('curr_ses_id', '')}")
+                        pending_session_stop[gun_label] = {
+                            "snapshot": prev_snapshot,
+                            "polls_remaining": PENDING_EVENT_DELAY_POLLS,
+                        }
+                    
+                    # Always save current state as snapshot for next comparison
+                    last_session_state[gun_label]["active"] = curr_active
+                    if curr_active:
+                        # Only update snapshot when session is active (preserve last active state for stop)
+                        last_session_state[gun_label]["snapshot"] = dict(gun_state)
+            
+            # ==========================================
+            # LIVEFEEDS (every POLLING_INTERVAL seconds)
+            # ==========================================
+            
+            livefeed_counter += 1
+            if livefeed_counter >= LIVEFEED_EVERY_N:
+                livefeed_counter = 0
+                print(f"{time.ctime()} " + "="*80)
+                print(f"{time.ctime()} [Script->Server] LIVEFEEDS (every {POLLING_INTERVAL}s)")
+                send_livefeeds_and_handle_commands(state_data)
             
             # Clear memory
             state_data = None
@@ -1183,12 +1282,12 @@ def poll_for_alerts():
         except KeyboardInterrupt:
             handle_interrupt()
         except Exception as ex:
-            print(f"{time.ctime()} [Alert] Exception in poll_for_alerts: {ex}")
+            print(f"{time.ctime()} [Poll] Exception in poll_loop: {ex}")
         
         time.sleep(ALERT_POLLING_INTERVAL)
 
 
-def send_alert_to_cms(outlet, vendor_code, error_code, info, controller_id=None, outlet_type="CCS"):
+def send_alert_to_cms(outlet, vendor_code, error_code, info, controller_id=None, outlet_type="CCS", gun_state=None):
     """Send a formatted alert event to CMS via /api/charger/LogEvent
     
     Formats the alert in the same structure expected by the server.
@@ -1201,6 +1300,7 @@ def send_alert_to_cms(outlet, vendor_code, error_code, info, controller_id=None,
         info: Additional info string (e.g., "EmergencyPressed", "DoorOpen")
         controller_id: Individual controller ID (e.g., secc2300-XXXXX). Falls back to DeviceID if not provided.
         outlet_type: Type of outlet (CCS, CHAdeMO, etc.)
+        gun_state: Current gun state from /state endpoint (for hardware timestamp)
     """
     try:
         # Use controller ID if provided, otherwise fall back to DeviceID
@@ -1209,9 +1309,12 @@ def send_alert_to_cms(outlet, vendor_code, error_code, info, controller_id=None,
         # Format alert event in exact hardware WebSocket format
         # This matches the format the hardware sends via ws://events/stream
         error_msg = f"{info}"
+        # Use hardware timestamp from gun_state if available, fallback to system time
+        hardware_timestamp = gun_state.get("timestamp", int(time.time() * 1000)) if gun_state else int(time.time() * 1000)
+        
         alert_event = {
             "type": "alert",
-            "timestamp": int(time.time() * 1000),
+            "timestamp": hardware_timestamp,
             "chargerId": charger_id,
             "outlet": str(outlet),
             "outletType": outlet_type,
@@ -1242,6 +1345,17 @@ def send_alert_to_cms(outlet, vendor_code, error_code, info, controller_id=None,
         
         if response.status_code == 200:
             print(f"{time.ctime()} [Alert] Alert sent successfully")
+            
+            # Parse sessionID and send state data + state logs (same as on_message behavior)
+            try:
+                jResponse = json.loads(response.text)
+                sessionID = int(jResponse["Message"])
+                print(f"{time.ctime()} [Alert] SessionID={sessionID}, sending state data for Outlet={outlet}")
+                CallStateAPI(sessionID)
+                CallStateFull(sessionID, outlet, is_event_triggered=True)  # Event-triggered: 2,000 lines
+            except Exception as state_ex:
+                print(f"{time.ctime()} [Alert] Failed to send state data after alert: {state_ex}")
+            
         elif response.status_code == 500:
             # Server may not support alert event type
             print(f"{time.ctime()} [Alert] Server returned 500 - alert may not be supported")
@@ -1256,91 +1370,230 @@ def send_alert_to_cms(outlet, vendor_code, error_code, info, controller_id=None,
         print(f"{time.ctime()} [Alert] Exception sending alert to CMS: {ex}")
 
 
-def CallApi():
-    # INFINITE RETRY: Keep trying forever for connection
-    consecutive_failures = 0
-    total_attempts = 0
+def send_session_event_to_cms(event_type, gun_state, prev_state=None, add_timestamp_offset=False):
+    """Send a session_start or session_stop event to CMS via /api/charger/LogEvent
     
-    while True:  # Run forever
-        try:
-            # First check CMS connectivity before attempting to poll hardware
-            if not check_cms_connectivity():
-                print(f"{time.ctime()} [Script] CMS not reachable, retrying in {RetryTime} seconds")
-                time.sleep(RetryTime)  # Use shorter retry interval when disconnected
-                continue
+    Args:
+        event_type: "session_start" or "session_stop"
+        gun_state: Current gun state from /state endpoint
+        prev_state: Previous poll's state snapshot (needed for session_stop to get fields before they're cleared)
+        add_timestamp_offset: If True, add 2000ms (2 seconds) to timestamp for session_stop
+                              to ensure gap after stop_charging
+    """
+    try:
+        # Calculate timestamp offset for session_stop (2 seconds = 2000ms)
+        timestamp_offset = 2000 if (event_type == "session_stop" and add_timestamp_offset) else 0
+        
+        if event_type == "session_start":
+            # Build session_start event from current state
+            event = {
+                "type": "session_start",
+                "timestamp": gun_state.get("sessionStart", int(time.time() * 1000)),
+                "chargerId": gun_state.get("id", DeviceID),
+                "outlet": str(gun_state.get("outlet", "1")),
+                "outletType": gun_state.get("outletType", "CCS"),
+                "payload": {
+                    "user": gun_state.get("user", ""),
+                    "session": gun_state.get("curr_ses_id", "")
+                }
+            }
+        elif event_type == "session_stop":
+            # Build session_stop event using FRESH gun_state data (from current poll)
+            # This ensures we get the most complete data after 2-poll delay
+            src = gun_state  # Use fresh data instead of old snapshot
             
-            total_attempts += 1
-            headers = {'Content-Type': 'application/json'}
-            gun_status = GetGunStatus()
-            if gun_status is None:
-                consecutive_failures += 1
-                print(f"{time.ctime()} Gun status unavailable or CMS disconnected (failures: {consecutive_failures})")
-                time.sleep(RetryTime if not cms_connected else SleepTime)  # Shorter retry when CMS disconnected
-                continue
+            # Derive EVCCID from EVMAC if EVCCID is empty (remove dots from MAC address)
+            evmac = src.get("EVMAC", "")
+            evccid = src.get("EVCCID", "")
+            if not evccid and evmac:
+                evccid = evmac.replace(".", "").replace(":", "").lower()
             
-            # Log polling attempt
-            print(f"{time.ctime()} " + "="*80)
-            print(f"{time.ctime()} " + "="*80)
-            print(f"{time.ctime()} [Script->Server] POLLING ATTEMPT #{total_attempts}")
-            print(f"{time.ctime()} [Script->Server] POST {SERVER_URL}api/charger/LiveFeeds")
-            print(f"{time.ctime()} [Script->Server] Payload: {gun_status}")
+            event = {
+                "type": "session_stop",
+                "timestamp": src.get("timestamp", int(time.time() * 1000)) + timestamp_offset,
+                "chargerId": src.get("id", DeviceID),
+                "outlet": str(src.get("outlet", "1")),
+                "outletType": src.get("outletType", "CCS"),
+                "payload": {
+                    "unexpected": not src.get("curr_ses_success", False),
+                    "error": {
+                        "code": src.get("curr_ses_error", 0),
+                        "msg": src.get("curr_ses_errMsg", ""),
+                        "list": src.get("curr_ses_errors_list", "")
+                    },
+                    "source": src.get("curr_ses_endBy", ""),
+                    "start": src.get("sessionStart", 0),
+                    "duration": src.get("curr_ses_secs", 0),
+                    "energy": src.get("curr_ses_Wh", 0),
+                    "user": src.get("user", ""),
+                    "session": src.get("curr_ses_id", ""),
+                    "stopReason": src.get("stopReason", ""),
+                    "EVCCID": evccid,
+                    "EVMAC": evmac
+                }
+            }
+        elif event_type == "start_charging":
+            # Build start_charging event - sent when phs transitions to 7 (Charging/current demand)
+            # Derive EVCCID from EVMAC if EVCCID is empty (remove dots/colons from MAC address)
+            evmac = gun_state.get("EVMAC", "")
+            evccid = gun_state.get("EVCCID", "")
+            if not evccid and evmac:
+                evccid = evmac.replace(".", "").replace(":", "").lower()
             
-            # CRITICAL FIX: Use session for connection pooling and add timeout
-            response = session.post(
-                SERVER_URL + "/api/charger/LiveFeeds", data=gun_status, headers=headers, timeout=30)
+            event = {
+                "type": "start_charging",
+                "timestamp": gun_state.get("timestamp", int(time.time() * 1000)),
+                "chargerId": gun_state.get("id", DeviceID),
+                "outlet": str(gun_state.get("outlet", "1")),
+                "outletType": gun_state.get("outletType", "CCS"),
+                "payload": {
+                    "EVCCID": evccid,
+                    "EVMAC": evmac,
+                    "user": gun_state.get("user", ""),
+                    "session": gun_state.get("curr_ses_id", "")
+                }
+            }
+        elif event_type == "stop_charging":
+            # Build stop_charging event - sent when phs transitions from 7 to another value
+            # Use previous snapshot for session data if available
+            src = prev_state if prev_state else gun_state
+            
+            # Derive EVCCID from EVMAC if EVCCID is empty (remove dots/colons from MAC address)
+            evmac = src.get("EVMAC", "")
+            evccid = src.get("EVCCID", "")
+            if not evccid and evmac:
+                evccid = evmac.replace(".", "").replace(":", "").lower()
+            
+            event = {
+                "type": "stop_charging",
+                "timestamp": src.get("timestamp", int(time.time() * 1000)),
+                "chargerId": src.get("id", DeviceID),
+                "outlet": str(src.get("outlet", "1")),
+                "outletType": src.get("outletType", "CCS"),
+                "payload": {
+                    "source": src.get("curr_ses_endBy", ""),
+                    "user": src.get("user", ""),
+                    "session": src.get("curr_ses_id", ""),
+                    "stopReason": src.get("stopReason", ""),
+                    "EVCCID": evccid,
+                    "EVMAC": evmac
+                }
+            }
+        else:
+            print(f"{time.ctime()} [Session] Unknown event type: {event_type}")
+            return
+        
+        event_json = json.dumps(event)
+        EventData = {'id': DeviceID, 'ev': event_json}
+        
+        print(f"{time.ctime()} [Session->CMS] Sending {event_type} to CMS")
+        print(f"    [Session->CMS] POST {SERVER_URL}api/charger/LogEvent")
+        print(f"    [Session->CMS] Payload: {event_json}")
+        
+        response = session.post(
+            SERVER_URL + "/api/charger/LogEvent",
+            params=EventData,
+            timeout=30
+        )
+        
+        print(f"{time.ctime()} [CMS->Session] Response: Status={response.status_code}")
+        print(f"    [CMS->Session] Body: {response.text}")
+        
+        if response.status_code == 200:
+            print(f"{time.ctime()} [Session] {event_type} sent successfully")
+            
+            # Parse sessionID and send state data + state logs
+            try:
+                jResponse = json.loads(response.text)
+                sessionID = int(jResponse["Message"])
+                outlet = event.get("outlet", "1")
+                print(f"{time.ctime()} [Session] SessionID={sessionID}, sending state data for Outlet={outlet}")
+                CallStateAPI(sessionID)
+                CallStateFull(sessionID, outlet, is_event_triggered=True)
+            except Exception as state_ex:
+                print(f"{time.ctime()} [Session] Failed to send state data after {event_type}: {state_ex}")
+            
+        elif response.status_code == 500:
+            print(f"{time.ctime()} [Session] Server returned 500 for {event_type}")
+        else:
+            print(f"{time.ctime()} [Session] Unexpected response for {event_type}: {response.status_code}")
+        
+        # Clear memory
+        response = None
+        gc.collect()
+        
+    except Exception as ex:
+        print(f"{time.ctime()} [Session] Exception sending {event_type} to CMS: {ex}")
 
-            if response.status_code != 200:
-                consecutive_failures += 1
-                with cms_lock:
-                    cms_connected = False
-                print(f"{time.ctime()} [Server->Script] ERROR: Status={response.status_code} (failures: {consecutive_failures})")
-                print(f"{time.ctime()} [Server->Script] Body: {response.text[:200]}..." if len(response.text) > 200 else f"{time.ctime()} [Server->Script] Body: {response.text}")
-            else:
-                # Reset failure counter on success
-                with cms_lock:
-                    cms_connected = True
-                if consecutive_failures > 0:
-                    print(f"{time.ctime()} [Server->Script] Connection restored after {consecutive_failures} failures")
-                consecutive_failures = 0
-                print(f"{time.ctime()} [Server->Script] LiveFeeds OK (200)")
-                print(f"{time.ctime()} [Server->Script] Body: {response.text[:200]}..." if len(response.text) > 200 else f"{time.ctime()} [Server->Script] Body: {response.text}")
 
-            if response.status_code == 200 and len(response.text) > 5:
-                # CRITICAL FIX: Add response size check to prevent OOM
-                if len(response.text) > MAX_RESPONSE_SIZE:
-                    print(f"{time.ctime()} Response too large, skipping: {len(response.text)} bytes")
-                else:
-                    print(f"{time.ctime()} [Server->Script] COMMAND RECEIVED:")
-                    print(f"    [Server->Script] Raw: {response.text[:200]}..." if len(response.text) > 200 else f"    [Server->Script] Raw: {response.text}")
-                    ReceivedData = json.loads(json.loads(response.text))
-                    print(f"    [Script] Parsed: ExecutionID={ReceivedData.get('ExecutionID', 'N/A')}, API={ReceivedData.get('API', 'N/A')}, ApiTypeID={ReceivedData.get('ApiTypeID', 'N/A')}")
-                    ExecuteRequestedAPI(ReceivedData)
-                    
-                    # Clear memory after command execution
-                    ReceivedData = None
-                    gc.collect()
-                    print(f"    [Script] Memory cleared after command execution")
-                    
-            # Clear memory after each polling cycle
-            response = None
-            gun_status = None
-            gc.collect()
-            
-            # Use polling interval when connected, shorter retry time when not
-            sleep_interval = POLLING_INTERVAL if cms_connected else RetryTime
-            time.sleep(sleep_interval)
-            
-        except KeyboardInterrupt:
-            handle_interrupt()
-            time.sleep(SleepTime)
-        except Exception as ex:
-            consecutive_failures += 1
+def send_livefeeds_and_handle_commands(state_data):
+    """Send LiveFeeds gun status to CMS and handle any commands in the response.
+    
+    Extracted from the old CallApi function. Called every 60s from poll_loop.
+    """
+    global cms_connected
+    try:
+        # Build gun status from already-fetched state_data
+        if isinstance(state_data, list):
+            gun_a = state_data[0] if len(state_data) > 0 else {}
+            gun_b = state_data[1] if len(state_data) > 1 else {}
+        else:
+            gun_a = state_data
+            gun_b = {}
+        
+        data = {
+            "Name": DeviceID,
+            "Busy_A": gun_a.get("busy", False),
+            "Evsestat_A": gun_a.get("evsestat", -1),
+            "Pilot_A": gun_a.get("pilot", -1),
+            "ErrorCode_A": gun_a.get("curr_ses_error", 0),
+            "Busy_B": gun_b.get("busy", False),
+            "Evsestat_B": gun_b.get("evsestat", -1),
+            "Pilot_B": gun_b.get("pilot", -1),
+            "ErrorCode_B": gun_b.get("curr_ses_error", 0),
+        }
+        gun_status = json.dumps(data)
+        
+        headers = {'Content-Type': 'application/json'}
+        print(f"{time.ctime()} [Script->Server] POST {SERVER_URL}api/charger/LiveFeeds")
+        print(f"{time.ctime()} [Script->Server] Payload: {gun_status}")
+        
+        response = session.post(
+            SERVER_URL + "/api/charger/LiveFeeds", data=gun_status, headers=headers, timeout=30)
+
+        if response.status_code != 200:
             with cms_lock:
                 cms_connected = False
-            print(f"{time.ctime()} Exception at CallApi (failures: {consecutive_failures}) => {ex}")
-            print(f"{time.ctime()} Retrying in {RetryTime} seconds due to exception")
-            time.sleep(RetryTime)  # Use shorter retry on exception
-            # Keep trying forever - no limit
+            print(f"{time.ctime()} [Server->Script] ERROR: Status={response.status_code}")
+            print(f"{time.ctime()} [Server->Script] Body: {response.text[:200]}..." if len(response.text) > 200 else f"{time.ctime()} [Server->Script] Body: {response.text}")
+        else:
+            with cms_lock:
+                cms_connected = True
+            print(f"{time.ctime()} [Server->Script] LiveFeeds OK (200)")
+            print(f"{time.ctime()} [Server->Script] Body: {response.text[:200]}..." if len(response.text) > 200 else f"{time.ctime()} [Server->Script] Body: {response.text}")
+
+        if response.status_code == 200 and len(response.text) > 5:
+            if len(response.text) > MAX_RESPONSE_SIZE:
+                print(f"{time.ctime()} Response too large, skipping: {len(response.text)} bytes")
+            else:
+                print(f"{time.ctime()} [Server->Script] COMMAND RECEIVED:")
+                print(f"    [Server->Script] Raw: {response.text[:200]}..." if len(response.text) > 200 else f"    [Server->Script] Raw: {response.text}")
+                ReceivedData = json.loads(json.loads(response.text))
+                print(f"    [Script] Parsed: ExecutionID={ReceivedData.get('ExecutionID', 'N/A')}, API={ReceivedData.get('API', 'N/A')}, ApiTypeID={ReceivedData.get('ApiTypeID', 'N/A')}")
+                ExecuteRequestedAPI(ReceivedData)
+                
+                ReceivedData = None
+                gc.collect()
+                print(f"    [Script] Memory cleared after command execution")
+                
+        response = None
+        gun_status = None
+        gc.collect()
+        
+    except Exception as ex:
+        with cms_lock:
+            cms_connected = False
+        print(f"{time.ctime()} [LiveFeeds] Exception: {ex}")
 # endregion
 
 # region Helper
@@ -1354,211 +1607,7 @@ def validateJSON(jsonData):
     return True
 # endregion
 
-# region WebSocketListener (v4 Enhanced)
-
-def close_websocket():
-    """Properly close the current websocket connection
-    Docker/Yocto safe implementation with enhanced cleanup
-
-    Optimized: Blocking operations moved outside lock to prevent thread blocking
-    """
-    global current_ws, ws_connected, ws_connecting
-
-    # Get reference and mark disconnected under lock
-    ws_to_close = None
-    with ws_lock:
-        if current_ws:
-            ws_to_close = current_ws
-            # Mark as disconnected immediately
-            ws_connected = False
-            ws_connecting = False
-
-    # Perform blocking operations OUTSIDE the lock
-    if ws_to_close:
-        try:
-            print(f"{time.ctime()} [Script] Closing existing WebSocket connection...")
-            sys.stdout.flush()  # Ensure output in Docker
-
-            # Try to close gracefully first
-            if hasattr(ws_to_close, 'keep_running'):
-                ws_to_close.keep_running = False
-
-            # Give it a moment to close gracefully (OUTSIDE lock)
-            time.sleep(0.2)  # Reduced from 0.5s
-
-            # Now force close if still open
-            ws_to_close.close()
-            print(f"{time.ctime()} [Script] WebSocket closed successfully")
-
-        except Exception as e:
-            print(f"{time.ctime()} Error closing websocket: {e}")
-
-        finally:
-            # Clear the reference under lock
-            with ws_lock:
-                if current_ws == ws_to_close:
-                    current_ws = None
-                    ws_connected = False
-                    ws_connecting = False
-
-            # Force garbage collection (OUTSIDE lock)
-            try:
-                gc.collect()
-                print(f"{time.ctime()} [Script] WebSocket memory cleared")
-            except:
-                pass  # GC might not always work in minimal environments
-
-def on_message(ws, message):
-    # Define current_time at the start to ensure it's available throughout the function
-    current_time = time.time()
-    
-    try:
-        print(f"{time.ctime()} " + "="*80)
-        print(f"{time.ctime()} [Hardware->Script] WEBSOCKET EVENT RECEIVED:")
-        print(f"    [Hardware->Script] Event: {message[:200]}..." if len(message) > 200 else f"    [Hardware->Script] Event: {message}")
-        
-        # Ensure DeviceID is available
-        if 'DeviceID' not in globals() or not DeviceID:
-            print(f"{time.ctime()} [Script] ERROR: DeviceID not initialized, cannot process event")
-            return
-        
-        # Skip alert events from WebSocket - alerts are now handled via /state polling
-        try:
-            event_data = json.loads(message)
-            if event_data.get('type') == 'alert':
-                print(f"{time.ctime()} [Script] Skipping WebSocket alert event - alerts handled via /state polling")
-                return
-        except json.JSONDecodeError:
-            pass  # Not JSON, continue processing
-        
-        # Check CMS connectivity before processing WebSocket events
-        if not check_cms_connectivity():
-            # Changed by Kushagra - 16th August 2025
-            # Don't store or process events when CMS is down
-            print(f"{time.ctime()} [Script] CMS not connected - discarding event")
-            return
-        
-        EventData = {'id': DeviceID, 'ev': message}
-        print(f"{time.ctime()} [Script->Server] Forwarding WebSocket event")
-        print(f"    [Script->Server] POST {SERVER_URL}api/charger/LogEvent")
-        print(f"    [Script->Server] Params: id={DeviceID}, ev={message[:100]}..." if len(message) > 100 else f"    [Script->Server] Params: id={DeviceID}, ev={message}")
-        
-        # Simple retry logic for 500 errors - no exponential backoff
-        max_retries = 3
-        retry_count = 0
-        
-        while retry_count < max_retries:
-            try:
-                # CRITICAL FIX: Use session for connection pooling and add timeout
-                response = session.post(
-                    SERVER_URL + "/api/charger/LogEvent", 
-                    params=EventData, 
-                    timeout=30
-                )
-                
-                print(f"{time.ctime()} [Server->Script] LogEvent Response: Status={response.status_code}")
-                print(f"    [Server->Script] Body: {response.text}")
-                
-                if response.status_code == 200:
-                    # Success - event processed
-                    
-                    jResponse = json.loads(response.text)
-                    sessionID = int(jResponse["Message"])
-                    print(f"{time.ctime()} [Server->Script] Event logged, SessionID={sessionID}")
-                    
-                    # Update CMS connectivity status on successful response
-                    with cms_lock:
-                        cms_connected = True
-
-                    data = json.loads(message)
-                    outletno = data.get('outlet', '')
-                    
-                    # Only process state if outlet is specified
-                    if outletno:
-                        print(f"{time.ctime()} [Script] Processing state data for SessionID={sessionID}, Outlet={outletno}")
-                        CallStateAPI(sessionID)
-                        CallStateFull(sessionID, outletno, is_event_triggered=True)  # Event-triggered
-                    else:
-                        print(f"{time.ctime()} [Script] No outlet specified, skipping state processing")
-                    
-                    # Clear memory after processing
-                    data = None
-                    EventData = None
-                    response = None
-                    message = None
-                    gc.collect()
-                    print(f"    [Script] Memory cleared after LogEvent processing")
-                    break  # Success, exit retry loop
-                    
-                elif response.status_code == 500:
-                    # Internal server error - server is reachable but likely doesn't support this event type
-                    # Don't retry since the server consistently rejects this event type
-                    # Don't mark CMS as disconnected since we got a response
-                    
-                    # Log the actual request that caused 500 error for debugging
-                    event_type = json.loads(message).get('type', 'unknown') if message else 'unknown'
-                    print(f"    [Script] DEBUG: 500 error for event - DeviceID={DeviceID}, Event Type={event_type}")
-                    print(f"    [Script] Server doesn't support event type '{event_type}', discarding without retry")
-                    print(f"    [Script] Server is reachable (got 500 response), not a connectivity issue")
-                    # No retry for 500 errors - server likely doesn't support this event type
-                    print(f"    [Script] Event discarded (server doesn't process '{event_type}' events)")
-                    break
-                else:
-                    # Other error - don't retry
-                    print(f"{time.ctime()} [Server->Script] ERROR: LogEvent failed with status {response.status_code}")
-                    break
-                    
-            except requests.exceptions.Timeout:
-                retry_count += 1
-                if retry_count < max_retries:
-                    print(f"{time.ctime()} [Script] Request timeout, retrying in 5 seconds (attempt {retry_count}/{max_retries})")
-                    time.sleep(5)  # Fixed 5 second delay
-                else:
-                    print(f"{time.ctime()} [Script] Max retries reached after timeout")
-                    # Changed by Kushagra - 16th August 2025  
-                    # No event storage - discarding event
-                    print(f"    [Script] Event discarded after timeout")
-                    break
-                    
-            except Exception as e:
-                print(f"{time.ctime()} [Script] Error in retry loop: {e}")
-                break
-                
-    except Exception as ex:
-        # Mark CMS as potentially disconnected on exception
-        with cms_lock:
-            cms_connected = False
-        print(f"{time.ctime()} Exception at on_message => {ex}")
-
-
-def on_error(ws, error):
-    global ws_connected, ws_connecting
-    print(f"{time.ctime()} [Hardware->Script] WebSocket ERROR: {error}")
-
-    with ws_lock:
-        ws_connected = False
-        ws_connecting = False
-        # DON'T increment ws_reconnect_attempts here
-        # Only increment on actual connection failure in main_loop
-
-    # Don't call restart_main_loop here - let run_forever exit naturally
-    # This prevents duplicate reconnection attempts
-
-
-def on_close(ws, close_status_code, close_msg):
-    global ws_connected, ws_connecting
-    print(f"{time.ctime()} [Hardware->Script] WebSocket CLOSED: code={close_status_code}, msg={close_msg}")
-    
-    # CRITICAL FIX: Ensure websocket is marked as closed
-    with ws_lock:
-        global current_ws
-        ws_connected = False
-        ws_connecting = False
-        if current_ws == ws:
-            current_ws = None
-    
-    # Don't call restart_main_loop here - let run_forever exit naturally
-    # This prevents duplicate reconnection attempts
+# WebSocket functions removed — using polling-only architecture
 
 
 def CallStateAPI(sessionID):
@@ -2233,212 +2282,20 @@ def ExecuteRequestedAPI(RecivedData):
         print("-" * 80)
 # endregion
 
-# CRITICAL FIX: Thread lifecycle management to make threads restartable
-def start_api_thread():
-    global api_thread
-    with thread_lock:
-        if api_thread is None or not api_thread.is_alive():
-            api_thread = threading.Thread(target=CallApi, args=())
-            api_thread.daemon = True  # Make it a daemon thread for proper cleanup
-            api_thread.start()
-            print(f"{time.ctime()} [Script] Started API polling thread")
-
-# Alert polling thread for detecting session errors from /state
-alert_thread = None
-def start_alert_thread():
-    global alert_thread
-    with thread_lock:
-        if alert_thread is None or not alert_thread.is_alive():
-            alert_thread = threading.Thread(target=poll_for_alerts, args=())
-            alert_thread.daemon = True  # Make it a daemon thread for proper cleanup
-            alert_thread.start()
-            print(f"{time.ctime()} [Script] Started alert polling thread")
-
-def calculate_reconnect_delay():
-    """Calculate reconnect delay with capped exponential backoff
-
-    User configured: Max 60s delay, capped at attempt #10
-    Backoff sequence: 5s → 10s → 20s → 40s → 60s (caps at attempt #5)
-    """
-    global ws_reconnect_delay, ws_reconnect_attempts, ws_max_reconnect_attempts
-
-    # Cap attempts to prevent excessive backoff
-    capped_attempts = min(ws_reconnect_attempts, ws_max_reconnect_attempts)
-
-    # Exponential backoff: delay = min(initial * 2^attempts, max_delay)
-    delay = min(ws_reconnect_delay * (2 ** capped_attempts), ws_max_reconnect_delay)
-
-    print(f"{time.ctime()} [Script] Reconnect attempt #{ws_reconnect_attempts + 1} (capped at #{capped_attempts + 1}), waiting {delay} seconds...")
-    return delay
-
-def should_reconnect_websocket():
-    """Check if we should attempt WebSocket reconnection"""
-    global last_ws_attempt, ws_connecting, ws_connected
-    
-    current_time = time.time()
-    
-    with ws_lock:
-        # Don't reconnect if already connected or connecting
-        if ws_connected or ws_connecting:
-            return False
-        
-        # Enforce cooldown period between attempts
-        if current_time - last_ws_attempt < WS_COOLDOWN_PERIOD:
-            return False
-        
-        return True
-
 def main_loop():
-    # INFINITE RETRY: Keep trying forever - no retry limit
-    global current_ws, ws_connecting, ws_connected, last_ws_attempt, ws_reconnect_attempts
+    """Main entry point — setup then run unified poll loop forever."""
+    print(f"{time.ctime()} [Script] Starting initial setup...")
     
-    # Initial setup - only done once
-    setup_done = False
+    # Keep trying to get device ID forever
+    GetDeviceID()
     
-    while True:  # Run forever
-        try:
-            # Do initial setup only once
-            if not setup_done:
-                print(f"{time.ctime()} [Script] Starting initial setup...")
-                
-                # Keep trying to get device ID forever
-                GetDeviceID()
-                
-                # CRITICAL FIX: Proper thread lifecycle management
-                start_api_thread()
-                
-                # Start alert polling thread (polls /state for session errors)
-                start_alert_thread()
-                
-                # Keep trying to log version forever
-                LogVersion()
-                
-                websocket.enableTrace(False)
-                setup_done = True
-                print(f"{time.ctime()} [Script] Initial setup completed")
-            
-            # Check if we should attempt reconnection
-            if not should_reconnect_websocket():
-                time.sleep(1)  # Short sleep to prevent CPU spinning
-                continue
-
-            # NEW: Check hardware reachability before applying backoff delay
-            if not check_hardware_connectivity():
-                print(f"{time.ctime()} [Script] Hardware unreachable, skipping WebSocket reconnection attempt")
-                # Don't increment counter - hardware is just offline
-                time.sleep(10)  # Wait 10s before next check (not exponential backoff)
-                continue
-
-            # Calculate delay with exponential backoff (only if hardware is reachable)
-            if ws_reconnect_attempts > 0:
-                delay = calculate_reconnect_delay()
-                time.sleep(delay)
-            
-            # CRITICAL FIX: Ensure any existing websocket is closed
-            if current_ws is not None:
-                print(f"{time.ctime()} [Script] Cleaning up existing WebSocket before reconnection...")
-                close_websocket()
-                # Removed time.sleep(1) - close_websocket already has 0.2s delay
-            
-            # CRITICAL FIX: Store websocket instance globally with proper locking
-            with ws_lock:
-                # Double-check within lock
-                if ws_connecting or ws_connected:
-                    print(f"{time.ctime()} [Script] WebSocket connection already in progress, skipping...")
-                    continue
-                
-                # Mark as connecting
-                ws_connecting = True
-                last_ws_attempt = time.time()
-                
-                # Create WebSocket instance
-                print(f"{time.ctime()} [Script] Creating new WebSocket instance...")
-                
-                # Define on_open handler before creating WebSocket
-                def on_open(ws):
-                    global ws_connected, ws_connecting, ws_reconnect_attempts
-                    with ws_lock:
-                        ws_connected = True
-                        ws_connecting = False
-                        ws_reconnect_attempts = 0  # Reset backoff on successful connection
-                    print(f"{time.ctime()} [Hardware->Script] WebSocket CONNECTED successfully")
-                    print(f"{time.ctime()} [Script] Connection established, backoff counter reset")
-                
-                current_ws = websocket.WebSocketApp(
-                    WEBSOCKET_URL,
-                    on_open=on_open,  # Set on_open directly in constructor
-                    on_message=on_message,
-                    on_close=on_close,
-                    on_error=on_error
-                )
-                ws = current_ws
-                print(f"{time.ctime()} [Script] WebSocket instance created")
-            
-            print(f"{time.ctime()} [Script->Hardware] Connecting WebSocket to {WEBSOCKET_URL}")
-            sys.stdout.flush()  # Ensure output in Docker
-            
-            # CRITICAL FIX: Remove auto-reconnect to prevent duplicate connection attempts
-            # run_forever will return when connection closes, then we handle reconnection manually
-            try:
-                ws.run_forever()  # No reconnect parameter - handle manually
-            except Exception as e:
-                print(f"{time.ctime()} [Script] WebSocket run_forever error: {e}")
-            
-            # If we reach here, websocket connection ended
-            with ws_lock:
-                ws_connected = False
-                ws_connecting = False
-                # Increment counter only if connection never succeeded
-                # (If on_open was never called, ws_reconnect_attempts wasn't reset)
-                if ws_reconnect_attempts > 0 or not ws_connected:
-                    # Connection attempt failed
-                    ws_reconnect_attempts += 1
-                    print(f"{time.ctime()} [Script] Connection attempt #{ws_reconnect_attempts} failed")
-
-            print(f"{time.ctime()} [Hardware->Script] WebSocket connection ended")
-
-            # CRITICAL FIX: Ensure websocket is closed and cleaned up
-            close_websocket()
-
-            # Small delay before allowing reconnection (reduced from 2s to 1s)
-            time.sleep(WS_COOLDOWN_PERIOD)  # WS_COOLDOWN_PERIOD now = 1
-
-        except KeyboardInterrupt:
-            handle_interrupt()
-            close_websocket()
-            time.sleep(5)
-        except Exception as ex:
-            print(f"{time.ctime()} Exception at main_loop => {ex}")
-
-            # Determine if this is a connection failure or other exception
-            is_connection_error = isinstance(ex, (
-                ConnectionError,
-                OSError,
-                TimeoutError,
-                getattr(__builtins__, 'ConnectionRefusedError', Exception),
-                getattr(__builtins__, 'ConnectionResetError', Exception),
-            ))
-
-            with ws_lock:
-                ws_connected = False
-                ws_connecting = False
-                # Only increment counter for connection-related exceptions
-                if is_connection_error:
-                    ws_reconnect_attempts += 1
-                    print(f"{time.ctime()} [Script] Connection exception - attempt #{ws_reconnect_attempts}")
-                else:
-                    print(f"{time.ctime()} [Script] Non-connection exception - not incrementing counter")
-
-            # CRITICAL FIX: Ensure websocket is closed on exception
-            close_websocket()
-
-            # Use backoff delay only for connection errors
-            if is_connection_error:
-                delay = calculate_reconnect_delay()
-                time.sleep(delay)
-            else:
-                # For other exceptions, use fixed short delay
-                time.sleep(5)
+    # Keep trying to log version forever
+    LogVersion()
+    
+    print(f"{time.ctime()} [Script] Initial setup completed")
+    
+    # Run unified poll loop (blocks forever)
+    poll_loop()
 
 
 if __name__ == "__main__":
@@ -2454,12 +2311,12 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Warning: Could not set signal handlers: {e}")
     
-    print(f"{time.ctime()} [Script] CMS NOC Integration v7 Starting - Dynamic Line Reduction & Adaptive Error Handling")
+    print(f"{time.ctime()} [Script] CMS NOC Integration v8 Starting - Polling-Only Architecture")
     print(f"Configuration:")
     print(f"  - Hardware URL: {HARDWARE_BASE_URL}")
-    print(f"  - WebSocket URL: {WEBSOCKET_URL}")
     print(f"  - CMS Server URL: {SERVER_URL}")
-    print(f"  - Polling Interval: {POLLING_INTERVAL} seconds")
+    print(f"  - Poll Interval (state/alerts/sessions): {ALERT_POLLING_INTERVAL} seconds")
+    print(f"  - LiveFeeds Interval: {POLLING_INTERVAL} seconds")
     print(f"  - CMS Check Interval: {CMS_CHECK_INTERVAL} seconds")
     print(f"  - Retry Interval (on failure): {RetryTime} seconds")
     print(f"  - Max Response Size: {MAX_RESPONSE_SIZE / (1024*1024)}MB")
@@ -2472,12 +2329,12 @@ if __name__ == "__main__":
     print(f"  - Recovery: Increase limit after {SUCCESS_COUNT_TO_RESET} consecutive successes")
     print(f"  - Large File Timeout: {LARGE_FILE_TIMEOUT} seconds (for 100k+ lines)")
     print(f"  - Retry Mode: INFINITE (will never give up)")
-    print(f"  - Adaptive Line Reduction: v7 ENABLED (auto-adjust on timeout/SSL/connection errors)")
+    print(f"  - Adaptive Line Reduction: v8 ENABLED (auto-adjust on timeout/SSL/connection errors)")
+    print(f"  - Architecture: POLLING-ONLY (no WebSocket)")
+    print(f"  - Session Detection: ENABLED (polls /state every {ALERT_POLLING_INTERVAL}s for curr_ses_active transitions)")
     print(f"  - Alert Polling: ENABLED (polls /state every {ALERT_POLLING_INTERVAL}s)")
     print(f"  - Alert Priority 1: {len(ERROR_OBJ_MAPPING)} errorObj fields (powerLossErr, eStopErr, etc.)")
     print(f"  - Alert Priority 2: {len(SESSION_ERROR_CODES)} session error codes (fallback)")
-    print(f"  - WebSocket Management: v7 ENHANCED (exponential backoff, state tracking, improved error handling)")
-    print(f"  - WebSocket Reconnect: Initial {ws_reconnect_delay}s, Max {ws_max_reconnect_delay}s, Cooldown {WS_COOLDOWN_PERIOD}s")
     print(f"  - Encoding: UTF-8 (cross-platform compatible)")
     print(f"  - Memory Management: Aggressive clearing after each server transmission")
     print(f"  - Environment: {'Docker/Container' if is_docker else 'Native'}")

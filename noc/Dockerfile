@@ -25,7 +25,7 @@ COPY --from=builder /root/.local /root/.local
 ENV PATH=/root/.local/bin:$PATH
 
 # Copy application
-COPY cms_script.py .
+COPY CMS_Script.py .
 
 # Run the application
-CMD ["python", "-u", "cms_script.py"]
+CMD ["python", "-u", "CMS_Script.py"]

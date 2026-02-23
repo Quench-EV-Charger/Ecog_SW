@@ -2285,6 +2285,10 @@ const Setting = React.memo(() => {
             return { options: [3], disabled: true, defaultValue: 3 };
           } else if (dlbMode === 'tripleCombo') {
             return { options: [4], disabled: true, defaultValue: 4 };
+          } else if (dlbMode === 'quadrupleCombo') {
+            return { options: [5], disabled: true, defaultValue: 5 };
+          } else if (dlbMode === 'quintupleCombo') {
+            return { options: [6], disabled: true, defaultValue: 6 };
           }
           return { options: [], disabled: false, defaultValue: null };
         };
@@ -2661,7 +2665,9 @@ const Setting = React.memo(() => {
       return [
         { value: 'singleCombo', label: 'singleCombo' },
         { value: 'dualCombo', label: 'dualCombo' },
-        { value: 'tripleCombo', label: 'tripleCombo' }
+        { value: 'tripleCombo', label: 'tripleCombo' },
+        { value: 'quadrupleCombo', label: 'quadrupleCombo' },
+        { value: 'quintupleCombo', label: 'quintupleCombo' }
       ];
     }, [isSingleModuleMode]);
 
@@ -2785,6 +2791,10 @@ const Setting = React.memo(() => {
           autoModules = 3;
         } else if (newValue === 'tripleCombo') {
           autoModules = 4;
+        } else if (newValue === 'quadrupleCombo') {
+          autoModules = 5;
+        } else if (newValue === 'quintupleCombo') {
+          autoModules = 6;
         } else {
           autoModules = 2
         }
@@ -2935,6 +2945,14 @@ const Setting = React.memo(() => {
       } else if (dlbModeActual === 'tripleCombo') {
         // Set to 4 and disable
         defaultValue = 4;
+        isDisabled = true;
+      } else if (dlbModeActual === 'quadrupleCombo') {
+        // Set to 5 and disable
+        defaultValue = 5;
+        isDisabled = true;
+      } else if (dlbModeActual === 'quintupleCombo') {
+        // Set to 6 and disable
+        defaultValue = 6;
         isDisabled = true;
       }
 

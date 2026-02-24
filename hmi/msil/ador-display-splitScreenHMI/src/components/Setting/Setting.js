@@ -1834,6 +1834,10 @@ const Setting = React.memo(({ onTabChange }) => {
           return { options: [3], disabled: true, defaultValue: 3 };
         } else if (dlbMode === 'tripleCombo') {
           return { options: [4], disabled: true, defaultValue: 4 };
+        } else if (dlbMode === 'quadrupleCombo') {
+          return { options: [5], disabled: true, defaultValue: 5 };
+        } else if (dlbMode === 'quintupleCombo') {
+          return { options: [6], disabled: true, defaultValue: 6 };
         }
         return { options: [], disabled: false, defaultValue: null };
       };
@@ -2113,7 +2117,9 @@ const Setting = React.memo(({ onTabChange }) => {
     const dlbOptions = React.useMemo(() => [
       { value: 'singleCombo', label: 'singleCombo' },
       { value: 'dualCombo', label: 'dualCombo' },
-      { value: 'tripleCombo', label: 'tripleCombo' }
+      { value: 'tripleCombo', label: 'tripleCombo' },
+      { value: 'quadrupleCombo', label: 'quadrupleCombo' },
+      { value: 'quintupleCombo', label: 'quintupleCombo' }
     ], []);
 
     // Converter Type options - fixed list for userconfig ccs.intcc.conv
@@ -2285,6 +2291,10 @@ const Setting = React.memo(({ onTabChange }) => {
         autoModules = 3;
       } else if (newValue === 'tripleCombo') {
         autoModules = 4;
+      } else if (newValue === 'quadrupleCombo') {
+        autoModules = 5;
+      } else if (newValue === 'quintupleCombo') {
+        autoModules = 6;
       }
 
       // If we need to auto-set modules, use debounced update
@@ -2336,6 +2346,14 @@ const Setting = React.memo(({ onTabChange }) => {
         // Set to 4 and disable
         defaultValue = 4;
         isDisabled = true;
+      } else if (dlbComboValue === 'quadrupleCombo') {
+        // Set to 5 and disable
+        defaultValue = 5;
+        isDisabled = true;
+      } else if (dlbComboValue === 'quintupleCombo') {
+        // Set to 6 and disable
+        defaultValue = 6;
+        isDisabled = true;
       }
 
       return { isDisabled, defaultValue, options };
@@ -2361,6 +2379,10 @@ const Setting = React.memo(({ onTabChange }) => {
         newValue = 3;
       } else if (dlbComboValue === 'tripleCombo' && value !== 4) {
         newValue = 4;
+      } else if (dlbComboValue === 'quadrupleCombo' && value !== 5) {
+        newValue = 5;
+      } else if (dlbComboValue === 'quintupleCombo' && value !== 6) {
+        newValue = 6;
       }
 
       if (newValue !== null && newValue !== pendingUpdate) {
@@ -2483,7 +2505,7 @@ const Setting = React.memo(({ onTabChange }) => {
       if (keyLower.includes('timeout')) {
         min = 1; max = 300; unit = "s";
       } else if (keyLower.includes('current')) {
-        min = 0; max = 250; unit = "A";
+        min = 0; max = 500; unit = "A";
       } else if (keyLower.includes('voltage')) {
         min = 0; max = 500; unit = "V";
       } else if (keyLower.includes('temperature')) {

@@ -3197,7 +3197,7 @@ const Setting = React.memo(() => {
       if (keyLower.includes('timeout')) {
         min = 1; max = 300; unit = "s";
       } else if (keyLower.includes('current')) {
-        min = 0; max = 250; unit = "A";
+        min = 0; max = 500; unit = "A";
       } else if (keyLower.includes('voltage')) {
         min = 0; max = 500; unit = "V";
       } else if (keyLower.includes('temperature')) {

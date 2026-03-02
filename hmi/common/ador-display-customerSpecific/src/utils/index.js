@@ -66,7 +66,7 @@ export const timestampToTime = (timestamp, toTimezone) => {
   // Create the Moment.js object with the timestamp (assumed to be in UTC) and convert to the target timezone
   const date = moment(timestamp).tz(toTimezone);
   // Log the date object to check its validity
-  if (!moment.isMoment(date) || !date.isValid()){
+  if (!moment.isMoment(date) || !date.isValid()) {
     return 'Invalid Date';
   }
   const hours = date.format('HH');
@@ -198,7 +198,7 @@ export const isSomeActive = (chargerState) => {
 export const isHandshaking = (state) => {
   if (!state || !state.pilot) return false;
 
-  const { pilot, phs, needsUnplug ,sessionPending} = state;
+  const { pilot, phs, needsUnplug, sessionPending } = state;
   return pilot > 0 && pilot !== 7 && phs >= 3 && phs < 7 && !needsUnplug && !sessionPending;
 };
 
@@ -253,7 +253,7 @@ export const stopCharging = async (API, user, outlet) => {
     let requestOptions = {
       method: "POST",
       headers: myHeaders,
-      body: JSON.stringify({ user, adminCommand: true , stopReason:"App"}),
+      body: JSON.stringify({ user, adminCommand: true, stopReason: "App" }),
     };
     const response = await fetch(endpoint, requestOptions);
     await unplug(API, outlet);
@@ -269,14 +269,14 @@ export const buildConfig = async () => {
   const socketUrl = `ws://${window.location.host}`;
   if (!config.API) config = { ...config, API };
   if (!config.socketUrl) config = { ...config, socketUrl };
-  
+
   // Fetch HMI config from backend to get latest values like stopAuth
   try {
     const hmiConfigResponse = await fetch('http://10.20.27.50:3001/hmi/config');
     if (hmiConfigResponse.ok) {
       const hmiConfig = await hmiConfigResponse.json();
       console.log("[buildConfig] Backend HMI config:", hmiConfig);
-      
+
       // Merge backend HMI config with local config
       // Backend values take precedence for certain keys
       if (hmiConfig) {
@@ -302,7 +302,7 @@ export const buildConfig = async () => {
     if (ocppConfigResponse.ok) {
       const ocppConfig = await ocppConfigResponse.json();
       console.log("[buildConfig] OCPP config:", ocppConfig);
-      
+
       // Merge OCPP config, especially the standard object with ConnectionTimeOut
       if (ocppConfig) {
         config = {
@@ -315,7 +315,7 @@ export const buildConfig = async () => {
   } catch (error) {
     console.warn("[buildConfig] Failed to fetch OCPP config:", error);
   }
-  
+
   return config;
 };
 
@@ -352,8 +352,8 @@ export const getTheOneAuthenticated = (prevChargerState, chargerState) => {
 };
 
 export const getallCapsIdTag = async (API) => {
-  if (!API) return false; 
-  
+  if (!API) return false;
+
   const endpoint = `${API}/ocpp-client/config`;
   const errorLog = "getting /ocpp-client/config failed";
 
@@ -363,15 +363,15 @@ export const getallCapsIdTag = async (API) => {
       return true
     else
       return false;
-  }catch (error) {
+  } catch (error) {
     console.error("Error fetching allCapsIdTags:", error);
     return false;
   }
 }
 
 export const getEmulatedMetering = async (API) => {
-  if (!API) return false; 
-  
+  if (!API) return false;
+
   const endpoint = `${API}/ocpp-client/config`;
   const errorLog = "getting /ocpp-client/config failed";
 
@@ -381,7 +381,7 @@ export const getEmulatedMetering = async (API) => {
       return true
     else
       return false;
-  }catch (error) {
+  } catch (error) {
     console.error("Error fetching emulatedMetering from OCPP config:", error);
     return false;
   }
@@ -600,13 +600,13 @@ export const reservedDetails = async (API, outletId) => {
     }
 
     // Extract fields from the response
-    const { expiryDate, idTag } = reservation;
+    const { expiryDate, reservationId } = reservation;
     const formattedTime = new Date(expiryDate).toLocaleTimeString();
 
     // Build result for the HMI
     return {
-      message: `Reserved For: ${idTag} Ends at: ${formattedTime}`,
-      vehicleId: idTag,
+      message: `Reserved For: ${reservationId} Ends at: ${formattedTime}`,
+      vehicleId: reservationId,
       expiryDate: formattedTime,
     };
   } catch (error) {
@@ -774,23 +774,23 @@ export const isErrorStillValid = (
     chargerState && Array.isArray(chargerState) && chargerState[0];
   // errorCode is power_module_comm and still valid (different than io_src and events)
   if (errorCode === "power_module_comm") {
-    if(outletState?.modbus_selec_online){
-      if (outletState?.phs > 2){
+    if (outletState?.modbus_selec_online) {
+      if (outletState?.phs > 2) {
         return outletState?.can1_RX_time?.conv_timeout;
       }
-      else{
+      else {
         return false;
       }
     }
-    else{
+    else {
       return outletState?.can1_RX_time?.conv_timeout;
-    }   
+    }
   } else if (isErrorCodeFromSafetyTrippedIO) {
     return (
       outletState &&
       (
         outletState?.errorObj?.powerLossErr ||
-        outletState?.errorObj?.doorOpenErr ||  
+        outletState?.errorObj?.doorOpenErr ||
         outletState?.errorObj?.outletTemperatureErr ||
         outletState?.errorObj?.cabinetTemperatureErr ||
         outletState?.errorObj?.powerModuleCommErr_1 ||
@@ -802,9 +802,9 @@ export const isErrorStillValid = (
     const errorObjCode =
       errorEventObj && JSON.parse(errorEventObj?.data)?.payload?.code;
 
-    const isSupplyVoltageErr= outletState?.errorObj?.overVoltageErr ||
+    const isSupplyVoltageErr = outletState?.errorObj?.overVoltageErr ||
       outletState?.errorObj?.underVoltageErr ||
-      outletState?.errorObj?.powerLossErr; 
+      outletState?.errorObj?.powerLossErr;
     return (
       isSupplyVoltageErr &&
       config?.errorCodes &&

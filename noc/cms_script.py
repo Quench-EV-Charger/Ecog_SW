@@ -446,13 +446,21 @@ STATISTICS:
 - Functions added: 9 total utility functions (5 in v3, 2 in v4, 2 in v7)
 - Configurable parameters: 21+ settings (15 in v3, 3 in v4, 3 in v7)
 - Error handling: 15x more robust with adaptive line reduction
+- Code growth: 337 lines (v1) → 1332 lines (v3) → 1630+ lines (v4) → 1760+ lines (v7)
+- Functions added: 9 total utility functions (5 in v3, 2 in v4, 2 in v7)
+- Configurable parameters: 21+ settings (15 in v3, 3 in v4, 3 in v7)
+- Error handling: 15x more robust with adaptive line reduction
 - Memory safety: 5+ optimization techniques preserved
 - WebSocket stability: 6 critical fixes implemented
+- Dynamic adaptation: 2 independent tracking systems (state + OCPP)
 - Dynamic adaptation: 2 independent tracking systems (state + OCPP)
 
 FINAL NOTE:
 The script evolved from a basic integration tool to a production-ready,
+The script evolved from a basic integration tool to a production-ready,
 enterprise-grade solution with comprehensive error handling, memory management,
+adaptive network response, and operational resilience suitable for 24/7 deployment
+in challenging network conditions.
 adaptive network response, and operational resilience suitable for 24/7 deployment
 in challenging network conditions.
 
@@ -605,6 +613,7 @@ MAX_RESPONSE_SIZE = 70 * 1024 * 1024  # 70MB limit
 # Maximum number of lines to read from state logs
 # Default: 100,000 lines - Reduce for faster processing or limited memory
 MAX_STATE_LOG_LINES = 100000  # Maximum lines for full state logs (command-triggered)
+MAX_STATE_LOG_LINES = 100000  # Maximum lines for full state logs (command-triggered)
 
 # Maximum lines for event-triggered state logs (WebSocket events)
 # Default: 500 lines - Reduced to prevent timeouts in production
@@ -612,9 +621,11 @@ MAX_STATE_LOG_LINES = 100000  # Maximum lines for full state logs (command-trigg
 # Higher values = more detailed logs but increased data consumption
 # Recommended range: 500-2000 lines
 MAX_EVENT_STATE_LOG_LINES = 2000  # User-configurable: lines sent per WebSocket event (reduced for production)
+MAX_EVENT_STATE_LOG_LINES = 2000  # User-configurable: lines sent per WebSocket event (reduced for production)
 
 # Maximum number of OCPP log lines to keep in memory
 # Default: 60,000 lines - Only the last N lines are sent to server
+MAX_OCPP_LOG_LINES = 100000  # Maximum lines kept for OCPP logs
 MAX_OCPP_LOG_LINES = 100000  # Maximum lines kept for OCPP logs
 
 # Timeout for all CMS API calls (in seconds)
@@ -679,6 +690,7 @@ CMS_RETRY_INTERVAL = 10  # Retry every 10 seconds when disconnected
 # Interrupt handling for graceful shutdown
 interrupt_counter = 0
 last_interrupt_time = 0
+FORCE_EXIT_INTERRUPTS = 30  # Number of interrupts to force exit
 FORCE_EXIT_INTERRUPTS = 30  # Number of interrupts to force exit
 INTERRUPT_WINDOW = 5  # Time window in seconds for multiple interrupts
 
@@ -1677,10 +1689,43 @@ def reset_line_limit_on_success(limit_type="state"):
                 print(f"    [Script] Increasing OCPP log limit after {ocpp_log_success_count} successes: {old_limit:,} → {current_ocpp_log_lines:,} lines")
                 ocpp_log_success_count = 0
 
+def reduce_line_limit(current_limit, limit_type="state"):
+    """Reduce line limit by step, with minimum floor"""
+    new_limit = max(current_limit - LINE_REDUCTION_STEP, MIN_LOG_LINES)
+    if new_limit < current_limit:
+        print(f"    [Script] Reducing {limit_type} log limit: {current_limit:,} → {new_limit:,} lines")
+    else:
+        print(f"    [Script] {limit_type} log limit at minimum: {MIN_LOG_LINES:,} lines")
+    return new_limit
+
+def reset_line_limit_on_success(limit_type="state"):
+    """Optionally increase limit after consecutive successes"""
+    global current_state_log_lines, current_ocpp_log_lines
+    global state_log_success_count, ocpp_log_success_count
+
+    if limit_type == "state":
+        state_log_success_count += 1
+        if state_log_success_count >= SUCCESS_COUNT_TO_RESET:
+            if current_state_log_lines < MAX_STATE_LOG_LINES:
+                old_limit = current_state_log_lines
+                current_state_log_lines = min(current_state_log_lines + LINE_REDUCTION_STEP, MAX_STATE_LOG_LINES)
+                print(f"    [Script] Increasing state log limit after {state_log_success_count} successes: {old_limit:,} → {current_state_log_lines:,} lines")
+                state_log_success_count = 0
+    else:
+        ocpp_log_success_count += 1
+        if ocpp_log_success_count >= SUCCESS_COUNT_TO_RESET:
+            if current_ocpp_log_lines < MAX_OCPP_LOG_LINES:
+                old_limit = current_ocpp_log_lines
+                current_ocpp_log_lines = min(current_ocpp_log_lines + LINE_REDUCTION_STEP, MAX_OCPP_LOG_LINES)
+                print(f"    [Script] Increasing OCPP log limit after {ocpp_log_success_count} successes: {old_limit:,} → {current_ocpp_log_lines:,} lines")
+                ocpp_log_success_count = 0
+
 def CallStateFull(sessionID, outletno, is_event_triggered=True):
+    """Memory-optimized version using deque to keep only last N lines
     """Memory-optimized version using deque to keep only last N lines
     WITH ENCODING FIXES for cross-platform compatibility
     ENHANCED TIMEOUT for large files (100k+ lines)
+
 
     Args:
         sessionID: The session ID from CMS
@@ -1688,7 +1733,10 @@ def CallStateFull(sessionID, outletno, is_event_triggered=True):
         is_event_triggered: True if called from WebSocket event, False if from command
     """
     global DataTosend, current_state_log_lines, state_log_success_count
+    global DataTosend, current_state_log_lines, state_log_success_count
     import gc
+    from collections import deque
+
     from collections import deque
 
     # Skip if CMS is not connected
@@ -1699,8 +1747,13 @@ def CallStateFull(sessionID, outletno, is_event_triggered=True):
     # Determine max lines based on trigger type
     if is_event_triggered:
         max_lines = MAX_EVENT_STATE_LOG_LINES  # 1000 lines for events (unchanged)
+        max_lines = MAX_EVENT_STATE_LOG_LINES  # 1000 lines for events (unchanged)
         print(f"{time.ctime()} [Script] Event-triggered state log - limiting to {max_lines:,} lines")
     else:
+        max_lines = current_state_log_lines  # USE DYNAMIC LIMIT for commands
+        print(f"{time.ctime()} [Script] Command-triggered state log - using current limit of {max_lines:,} lines (max: {MAX_STATE_LOG_LINES:,})")
+
+    try:
         max_lines = current_state_log_lines  # USE DYNAMIC LIMIT for commands
         print(f"{time.ctime()} [Script] Command-triggered state log - using current limit of {max_lines:,} lines (max: {MAX_STATE_LOG_LINES:,})")
 
@@ -1716,6 +1769,44 @@ def CallStateFull(sessionID, outletno, is_event_triggered=True):
             if content_length and int(content_length) > MAX_RESPONSE_SIZE:
                 print(f"    [Script] Large state log detected ({int(content_length)//(1024*1024)}MB), using memory-safe streaming")
             
+            # CRITICAL FIX: Use deque to keep only last N lines in memory
+            # This avoids loading entire log file into memory
+
+            # Create a deque that will automatically keep only the last max_lines
+            lines_buffer = deque(maxlen=max_lines)
+            line_count = 0
+
+            print(f"{time.ctime()} [Script] Streaming state log from hardware (keeping last {max_lines:,} lines)...")
+
+            # Stream response line by line, keeping only last N lines in memory
+            try:
+                for line in response.iter_lines(decode_unicode=True):
+                    if line:
+                        # Ensure line is string, not bytes
+                        if isinstance(line, bytes):
+                            line = line.decode('utf-8', errors='replace')
+
+                        # Add to deque - automatically drops oldest when full
+                        lines_buffer.append(line)
+                        line_count += 1
+
+                        # Periodic garbage collection during streaming
+                        if line_count % 10000 == 0:
+                            gc.collect()
+
+            except UnicodeDecodeError as e:
+                print(f"Warning: Unicode decode error, continuing with replacement: {e}")
+                # Continue processing with error replacement
+
+            print(f"    [Script] State log: processed {line_count:,} total lines from hardware")
+
+            # Convert deque to list for sending
+            lines = list(lines_buffer)
+
+            if line_count > max_lines:
+                print(f"    [Script] Kept last {len(lines):,} lines from {line_count:,} total lines")
+            else:
+                print(f"    [Script] Using all {len(lines):,} lines (less than limit of {max_lines:,})")
             # CRITICAL FIX: Use deque to keep only last N lines in memory
             # This avoids loading entire log file into memory
 
@@ -1790,9 +1881,12 @@ def CallStateFull(sessionID, outletno, is_event_triggered=True):
                 response = session.post(
                     url,
                     json=payload,
+                    url,
+                    json=payload,
                     timeout=timeout_val,
                     stream=False  # Don't stream response
                 )
+
 
                 print(f"{time.ctime()} [Server->Script] ExpertPostFullStateData Response: Status={response.status_code}")
                 print(f"    [Server->Script] Response: {response.text[:100]}..." if len(response.text) > 100 else f"    [Server->Script] Response: {response.text}")
@@ -1802,7 +1896,14 @@ def CallStateFull(sessionID, outletno, is_event_triggered=True):
                 if not is_event_triggered:
                     reset_line_limit_on_success("state")
 
+
+                # SUCCESS: Reset failure counter and potentially increase limit
+                if not is_event_triggered:
+                    reset_line_limit_on_success("state")
+
             except requests.exceptions.Timeout:
+                state_log_success_count = 0  # Reset success counter on failure
+
                 state_log_success_count = 0  # Reset success counter on failure
 
                 print(f"{time.ctime()} [Script] ERROR: Request timed out after {timeout_val} seconds")
@@ -1813,13 +1914,41 @@ def CallStateFull(sessionID, outletno, is_event_triggered=True):
                     current_state_log_lines = reduce_line_limit(current_state_log_lines, "state")
                     print(f"    [Script] Next attempt will use {current_state_log_lines:,} lines")
 
+
+                # Reduce limit for next attempt (only for command-triggered)
+                if not is_event_triggered:
+                    current_state_log_lines = reduce_line_limit(current_state_log_lines, "state")
+                    print(f"    [Script] Next attempt will use {current_state_log_lines:,} lines")
+
                 raise
+
 
             except requests.exceptions.ConnectionError as e:
                 state_log_success_count = 0  # Reset success counter on failure
 
+                state_log_success_count = 0  # Reset success counter on failure
+
                 print(f"{time.ctime()} [Script] ERROR: Connection failed while sending large file")
                 print(f"    [Script] Error: {e}")
+
+                # Reduce limit for next attempt (only for command-triggered)
+                if not is_event_triggered:
+                    current_state_log_lines = reduce_line_limit(current_state_log_lines, "state")
+                    print(f"    [Script] Next attempt will use {current_state_log_lines:,} lines")
+
+                raise
+
+            except requests.exceptions.SSLError as e:
+                state_log_success_count = 0  # Reset success counter on failure
+
+                print(f"{time.ctime()} [Script] ERROR: SSL error while sending large file")
+                print(f"    [Script] Error: {e}")
+
+                # Reduce limit for next attempt (only for command-triggered)
+                if not is_event_triggered:
+                    current_state_log_lines = reduce_line_limit(current_state_log_lines, "state")
+                    print(f"    [Script] Next attempt will use {current_state_log_lines:,} lines")
+
 
                 # Reduce limit for next attempt (only for command-triggered)
                 if not is_event_triggered:
@@ -1865,6 +1994,7 @@ def CallStateFull(sessionID, outletno, is_event_triggered=True):
             except:
                 pass
 
+
         # Final garbage collection to ensure memory is freed
         gc.collect()
 
@@ -1873,12 +2003,14 @@ def CallStateFull(sessionID, outletno, is_event_triggered=True):
 
 def ExecuteRequestedAPI(RecivedData):
     global current_ocpp_log_lines, ocpp_log_success_count, current_state_log_lines, state_log_success_count
+    global current_ocpp_log_lines, ocpp_log_success_count, current_state_log_lines, state_log_success_count
     print(f"{time.ctime()} [CMD] EXECUTING COMMAND from CMS:")
     print(f"    ExecutionID: {RecivedData.get('ExecutionID', 'N/A')}")
     print(f"    API Endpoint: {RecivedData.get('API', 'N/A')}")
     print(f"    API Type: {RecivedData.get('ApiTypeID', 'N/A')} (1=GET, 2=PUT, 3=POST, 4=DELETE)")
     print(f"    IsTextFile: {RecivedData.get('IsTextFile', False)}")
     print(f"    IsInputRequired: {RecivedData.get('IsInputRequired', False)}")
+
 
     Apiresponse = None
     if RecivedData["ExecutionID"] >= 1:
@@ -1890,6 +2022,7 @@ def ExecuteRequestedAPI(RecivedData):
             url = f'{HARDWARE_BASE_URL}/'+RecivedData["API"]
             # Initialize variables to prevent undefined reference
             lines_processed = 0
+            last_60000 = deque(maxlen=current_ocpp_log_lines)  # Use dynamic limit instead of MAX_OCPP_LOG_LINES
             last_60000 = deque(maxlen=current_ocpp_log_lines)  # Use dynamic limit instead of MAX_OCPP_LOG_LINES
             last_60000_list = []
             
@@ -1904,6 +2037,7 @@ def ExecuteRequestedAPI(RecivedData):
                 
                 # Process line by line instead of loading all into memory
                 lines_processed = 0
+                last_60000 = deque(maxlen=current_ocpp_log_lines)  # Only keep last N lines as configured (dynamic)
                 last_60000 = deque(maxlen=current_ocpp_log_lines)  # Only keep last N lines as configured (dynamic)
                 
                 try:
@@ -2003,6 +2137,44 @@ def ExecuteRequestedAPI(RecivedData):
                 except:
                     pass  # Best effort
 
+
+            try:
+                LogExecutionStatus = session.post(
+                    SERVER_URL + "/api/charger/UpdateExecutionStatus",
+                    params={'ExecutionID': RecivedData["ExecutionID"]},
+                    json=ExecutionResponse,
+                    timeout=timeout_val
+                )
+
+                print(f"{time.ctime()} [OK] COMMAND RESPONSE SENT to CMS: Status={LogExecutionStatus.status_code}")
+                print(f"    [Script] OCPP log sent: processed {lines_processed:,} lines, kept and sent last {lines_sent:,} lines, ~{len(ExecutionResponse)//1024}KB sent to server")
+
+                # SUCCESS: Reset failure counter and potentially increase limit
+                reset_line_limit_on_success("ocpp")
+
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError, requests.exceptions.SSLError) as e:
+                ocpp_log_success_count = 0  # Reset success counter
+
+                print(f"{time.ctime()} [Script] ERROR: Failed to send OCPP logs - {type(e).__name__}")
+                print(f"    [Script] Error: {e}")
+                print(f"    [Script] File: {lines_sent:,} lines, ~{len(ExecutionResponse)//1024}KB")
+
+                # Reduce limit for next attempt
+                current_ocpp_log_lines = reduce_line_limit(current_ocpp_log_lines, "OCPP")
+                print(f"    [Script] Next OCPP log request will use {current_ocpp_log_lines:,} lines")
+
+                # Still try to update execution status with error message
+                try:
+                    error_response = json.dumps(f"Failed to send logs: {type(e).__name__}")
+                    session.post(
+                        SERVER_URL + "/api/charger/UpdateExecutionStatus",
+                        params={'ExecutionID': RecivedData["ExecutionID"]},
+                        json=error_response,
+                        timeout=30
+                    )
+                except:
+                    pass  # Best effort
+
             # Clear response and force garbage collection
             ExecutionResponse = None
             gc.collect()
@@ -2045,9 +2217,15 @@ def ExecuteRequestedAPI(RecivedData):
                     if line_count > current_state_log_lines:
                         print(f"    [Script] Limiting state log to last {current_state_log_lines:,} lines (was {line_count:,} lines)")
                         # Split into lines and take only the LAST configured limit lines
+                    # Apply current_state_log_lines limit for command-triggered state logs (dynamic)
+                    if line_count > current_state_log_lines:
+                        print(f"    [Script] Limiting state log to last {current_state_log_lines:,} lines (was {line_count:,} lines)")
+                        # Split into lines and take only the LAST configured limit lines
                         lines = APIResult.split('\n')
                         APIResult = '\n'.join(lines[-current_state_log_lines:])
+                        APIResult = '\n'.join(lines[-current_state_log_lines:])
                         # Update counts after limiting
+                        line_count = current_state_log_lines
                         line_count = current_state_log_lines
                         data_size_kb = len(APIResult) // 1024
                         print(f"    [Script] State log limited to {line_count:,} lines, ~{data_size_kb}KB")
@@ -2087,11 +2265,18 @@ def ExecuteRequestedAPI(RecivedData):
                         if line_count > current_state_log_lines:
                             print(f"    [Script] Limiting state log to last {current_state_log_lines:,} lines (was {line_count:,} lines)")
                             # Split into lines and take only the LAST configured limit lines
+                        # Apply current_state_log_lines limit for command-triggered state logs (dynamic)
+                        if line_count > current_state_log_lines:
+                            print(f"    [Script] Limiting state log to last {current_state_log_lines:,} lines (was {line_count:,} lines)")
+                            # Split into lines and take only the LAST configured limit lines
                             lines = APIResult.split('\n')
+                            APIResult = '\n'.join(lines[-current_state_log_lines:])
                             APIResult = '\n'.join(lines[-current_state_log_lines:])
                             # Update counts after limiting
                             line_count = current_state_log_lines
+                            line_count = current_state_log_lines
                             data_size_kb = len(APIResult) // 1024
+                            print(f"    [Script] State log limited to last {line_count:,} lines, ~{data_size_kb}KB")
                             print(f"    [Script] State log limited to last {line_count:,} lines, ~{data_size_kb}KB")
             else:
                 datanew =RecivedData["Data"]
@@ -2134,11 +2319,18 @@ def ExecuteRequestedAPI(RecivedData):
                             if line_count > current_state_log_lines:
                                 print(f"    [Script] Limiting state log to last {current_state_log_lines:,} lines (was {line_count:,} lines)")
                                 # Split into lines and take only the LAST configured limit lines
+                            # Apply current_state_log_lines limit for command-triggered state logs (dynamic)
+                            if line_count > current_state_log_lines:
+                                print(f"    [Script] Limiting state log to last {current_state_log_lines:,} lines (was {line_count:,} lines)")
+                                # Split into lines and take only the LAST configured limit lines
                                 lines = APIResult.split('\n')
+                                APIResult = '\n'.join(lines[-current_state_log_lines:])
                                 APIResult = '\n'.join(lines[-current_state_log_lines:])
                                 # Update counts after limiting
                                 line_count = current_state_log_lines
+                                line_count = current_state_log_lines
                                 data_size_kb = len(APIResult) // 1024
+                                print(f"    [Script] State log limited to last {line_count:,} lines, ~{data_size_kb}KB")
                                 print(f"    [Script] State log limited to last {line_count:,} lines, ~{data_size_kb}KB")
                 else:                
                     headers = {
@@ -2177,17 +2369,106 @@ def ExecuteRequestedAPI(RecivedData):
                             if line_count > current_state_log_lines:
                                 print(f"    [Script] Limiting state log to last {current_state_log_lines:,} lines (was {line_count:,} lines)")
                                 # Split into lines and take only the LAST configured limit lines
+                            # Apply current_state_log_lines limit for command-triggered state logs (dynamic)
+                            if line_count > current_state_log_lines:
+                                print(f"    [Script] Limiting state log to last {current_state_log_lines:,} lines (was {line_count:,} lines)")
+                                # Split into lines and take only the LAST configured limit lines
                                 lines = APIResult.split('\n')
+                                APIResult = '\n'.join(lines[-current_state_log_lines:])
                                 APIResult = '\n'.join(lines[-current_state_log_lines:])
                                 # Update counts after limiting
                                 line_count = current_state_log_lines
+                                line_count = current_state_log_lines
                                 data_size_kb = len(APIResult) // 1024
+                                print(f"    [Script] State log limited to last {line_count:,} lines, ~{data_size_kb}KB")
                                 print(f"    [Script] State log limited to last {line_count:,} lines, ~{data_size_kb}KB")
         
 
         print(f"{time.ctime()} [<--] HARDWARE RESPONSE: {APIResult[:200]}..." if len(APIResult) > 200 else f"{time.ctime()} [<--] HARDWARE RESPONSE: {APIResult}")
         
         JSONStatus = validateJSON(APIResult)
+
+        try:
+            if not JSONStatus:
+                ExecutionResponse = json.dumps(APIResult)
+                # Calculate size for logging and timeout decision
+                response_size_kb = len(ExecutionResponse) // 1024
+                response_size_mb = response_size_kb // 1024
+
+                # Use consistent timeout for all transfers
+                # Changed by Kushagra - 16th August 2025: Simplified timeout logic
+                timeout_val = LARGE_FILE_TIMEOUT  # Use configured timeout (default 300s)
+                print(f"    [Script] Response size: ~{response_size_mb}MB, using {timeout_val}s timeout")
+                LogExecutionStatus = session.post(SERVER_URL + "/api/charger/UpdateExecutionStatus", params={
+                    'ExecutionID': RecivedData["ExecutionID"]}, json=ExecutionResponse, timeout=timeout_val)
+            else:
+                response_size_kb = len(APIResult) // 1024
+                response_size_mb = response_size_kb // 1024
+
+                # Use consistent timeout for all transfers
+                # Changed by Kushagra - 16th August 2025: Simplified timeout logic
+                timeout_val = LARGE_FILE_TIMEOUT  # Use configured timeout (default 300s)
+                print(f"    [Script] API result size: ~{response_size_mb}MB, using {timeout_val}s timeout")
+                LogExecutionStatus = session.post(SERVER_URL+"/api/charger/UpdateExecutionStatus", params={
+                    'ExecutionID': RecivedData["ExecutionID"]}, json=APIResult, timeout=timeout_val)
+
+            print(f"{time.ctime()} [Server->Script] UpdateExecutionStatus: Status={LogExecutionStatus.status_code}")
+            print(f"    [Server->Script] Response: {LogExecutionStatus.text[:100]}..." if len(LogExecutionStatus.text) > 100 else f"    [Server->Script] Response: {LogExecutionStatus.text}")
+
+            # Add logging for state logs sent through command execution
+            if is_state_log and 'APIResult' in locals():
+                line_count = APIResult.count('\n') + 1 if APIResult else 0
+                print(f"    [Script] State log sent via command: {line_count:,} lines, ~{response_size_kb}KB sent to server")
+
+                # SUCCESS: Reset failure counter and potentially increase limit for state logs
+                reset_line_limit_on_success("state")
+
+        except requests.exceptions.Timeout:
+            print(f"{time.ctime()} [Script] ERROR: Request timed out after {timeout_val} seconds")
+            if is_state_log:
+                line_count = APIResult.count('\n') + 1 if APIResult else 0
+                print(f"    [Script] State log was too large ({line_count:,} lines, ~{response_size_mb}MB)")
+
+                # Reduce limit for next attempt
+                state_log_success_count = 0  # Reset success counter on failure
+                current_state_log_lines = reduce_line_limit(current_state_log_lines, "state")
+                print(f"    [Script] Next state log attempt will use {current_state_log_lines:,} lines")
+
+            # Try to update execution status with error message
+            try:
+                error_response = json.dumps(f"Timeout after {timeout_val}s - file too large")
+                session.post(
+                    SERVER_URL + "/api/charger/UpdateExecutionStatus",
+                    params={'ExecutionID': RecivedData["ExecutionID"]},
+                    json=error_response,
+                    timeout=30
+                )
+            except:
+                pass  # Ignore errors when reporting the timeout
+
+        except requests.exceptions.ConnectionError as e:
+            print(f"{time.ctime()} [Script] ERROR: Connection failed while sending response")
+            print(f"    [Script] Error: {e}")
+            if is_state_log:
+                line_count = APIResult.count('\n') + 1 if APIResult else 0
+                print(f"    [Script] State log: {line_count:,} lines, ~{response_size_mb}MB")
+
+                # Reduce limit for next attempt
+                state_log_success_count = 0  # Reset success counter on failure
+                current_state_log_lines = reduce_line_limit(current_state_log_lines, "state")
+                print(f"    [Script] Next state log attempt will use {current_state_log_lines:,} lines")
+
+        except requests.exceptions.SSLError as e:
+            print(f"{time.ctime()} [Script] ERROR: SSL error while sending response")
+            print(f"    [Script] Error: {e}")
+            if is_state_log:
+                line_count = APIResult.count('\n') + 1 if APIResult else 0
+                print(f"    [Script] State log: {line_count:,} lines, ~{response_size_mb}MB")
+
+                # Reduce limit for next attempt
+                state_log_success_count = 0  # Reset success counter on failure
+                current_state_log_lines = reduce_line_limit(current_state_log_lines, "state")
+                print(f"    [Script] Next state log attempt will use {current_state_log_lines:,} lines")
 
         try:
             if not JSONStatus:
@@ -2324,6 +2605,9 @@ if __name__ == "__main__":
     print(f"  - Max State Log Lines (events): {MAX_EVENT_STATE_LOG_LINES:,}")
     print(f"  - Max OCPP Log Lines (kept): {MAX_OCPP_LOG_LINES:,}")
     print(f"  - Max OCPP Log Lines (process): {MAX_OCPP_PROCESS_LINES:,}")
+    print(f"  - Dynamic State Log Lines (current): {current_state_log_lines:,} (min: {MIN_LOG_LINES:,}, step: {LINE_REDUCTION_STEP:,})")
+    print(f"  - Dynamic OCPP Log Lines (current): {current_ocpp_log_lines:,} (min: {MIN_LOG_LINES:,}, step: {LINE_REDUCTION_STEP:,})")
+    print(f"  - Recovery: Increase limit after {SUCCESS_COUNT_TO_RESET} consecutive successes")
     print(f"  - Dynamic State Log Lines (current): {current_state_log_lines:,} (min: {MIN_LOG_LINES:,}, step: {LINE_REDUCTION_STEP:,})")
     print(f"  - Dynamic OCPP Log Lines (current): {current_ocpp_log_lines:,} (min: {MIN_LOG_LINES:,}, step: {LINE_REDUCTION_STEP:,})")
     print(f"  - Recovery: Increase limit after {SUCCESS_COUNT_TO_RESET} consecutive successes")

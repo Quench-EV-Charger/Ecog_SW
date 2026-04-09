@@ -1,4 +1,4 @@
-﻿/* eslint eqeqeq: "off"*/
+/* eslint eqeqeq: "off"*/
 import React, { Component } from "react";
 import mqtt from "mqtt";
 import { withTranslation } from "react-i18next";
@@ -851,10 +851,10 @@ class ContextProvider extends Component {
           });
           pingSuccess = true;
           resolvedBy = url;
-          console.log(`[NetworkCheck] Level 2: ${url} — ✅ reachable`);
+          console.log(`[NetworkCheck] Level 2: ${url} —  reachable`);
           break; // One success is enough
         } catch (error) {
-          console.log(`[NetworkCheck] Level 2: ${url} — ❌ failed (${error?.message})`);
+          console.log(`[NetworkCheck] Level 2: ${url} —  failed (${error?.message})`);
           continue;
         }
       }
@@ -868,19 +868,19 @@ class ContextProvider extends Component {
       // Immediate recovery on success
       networkAccess = true;
       this.setState({ networkAccess, networkFailCount: 0 });
-      console.log(`[NetworkCheck] ✅ Online — resolved by: ${resolvedBy}`);
+      console.log(`[NetworkCheck]  Online — resolved by: ${resolvedBy}`);
     } else {
       const newFailCount = this.state.networkFailCount + 1;
       if (newFailCount >= 3) {
         // 3 consecutive failures — mark as offline
         networkAccess = false;
         this.setState({ networkAccess, networkFailCount: newFailCount });
-        console.log(`[NetworkCheck] ❌ ${newFailCount} consecutive failures — marking offline`);
+        console.log(`[NetworkCheck]  ${newFailCount} consecutive failures — marking offline`);
       } else {
         // Not enough failures yet — keep current state
         networkAccess = this.state.networkAccess;
         this.setState({ networkFailCount: newFailCount });
-        console.log(`[NetworkCheck] ⏳ Failure ${newFailCount}/3 — holding current state (${networkAccess})`);
+        console.log(`[NetworkCheck]  Failure ${newFailCount}/3 — holding current state (${networkAccess})`);
       }
     }
 
@@ -1457,14 +1457,14 @@ class ContextProvider extends Component {
         console.log(`[SessionSummaryPopup] Available connectorIDs in backend:`, backendSessions.map(s => s.connectorID).slice(0, 10));
 
         if (connectorSessions.length === 0) {
-          console.warn(`[SessionSummaryPopup] ❌ No sessions found for outlet ${outletNumber}`);
+          console.warn(`[SessionSummaryPopup] No sessions found for outlet ${outletNumber}`);
           continue;
         }
 
         // Take the LAST (most recent) session for this outlet
         const session = connectorSessions[connectorSessions.length - 1];
 
-        console.log(`[SessionSummaryPopup] ✅ Using LAST session for outlet ${outletNumber}:`, session);
+        console.log(`[SessionSummaryPopup] Using LAST session for outlet ${outletNumber}:`, session);
 
         const { GunLetters } = require("../constants/constants");
 
@@ -1525,7 +1525,7 @@ class ContextProvider extends Component {
       return;
     }
 
-    // ✅ Mark this session as displayed
+    //  Mark this session as displayed
     this.displayedSessionHash = currentSessionHash;
 
     console.log("[SessionSummaryPopup] Showing popup for 45 seconds:", popupData);
@@ -1544,7 +1544,7 @@ class ContextProvider extends Component {
     this.sessionSummaryTimer = setTimeout(() => {
       console.log("[SessionSummaryPopup] 45 seconds elapsed, hiding popup (but keeping processing flag true to prevent re-render)");
       this.hideSessionSummaryPopup();
-      // ✅ DO NOT reset the flag here - let it stay true
+      //  DO NOT reset the flag here - let it stay true
       // It will only reset when the error actually clears in handleSessionSummaryPopupLogic
     }, 45000); // 45 seconds
   };
@@ -1636,7 +1636,7 @@ class ContextProvider extends Component {
       gunLetter: GunLetters[outletState.index],
       useQAsOutletID: this.state.config?.useQAsOutletID,
       errorObj: hasError ? outletState.errorObj : null,  // null for normal completion
-      currSesError: hasError ? outletState.curr_ses_error || 0 : 0,  // ✅ Pass session error code for error-only screen
+      currSesError: hasError ? outletState.curr_ses_error || 0 : 0,  //  Pass session error code for error-only screen
     };
 
     const popupData = {

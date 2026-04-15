@@ -900,10 +900,10 @@ export const checkNetworkAccess = async () => {
         });
         pingSuccess = true;
         resolvedBy = url;
-        console.log(`[NetworkCheck] Level 2: ${url} — ✅ reachable`);
+        console.log(`[NetworkCheck] Level 2: ${url} — reachable`);
         break; // One success is enough
       } catch (error) {
-        console.log(`[NetworkCheck] Level 2: ${url} — ❌ failed (${error?.message})`);
+        console.log(`[NetworkCheck] Level 2: ${url} — failed (${error?.message})`);
         continue;
       }
     }
@@ -918,7 +918,7 @@ export const checkNetworkAccess = async () => {
     networkAccess = true;
     store.dispatch(setNetworkAccess(networkAccess));
     store.dispatch(setNetworkFailCount(0));
-    console.log(`[NetworkCheck] ✅ Online — resolved by: ${resolvedBy}`);
+    console.log(`[NetworkCheck] Online — resolved by: ${resolvedBy}`);
   } else {
     const currentFailCount = store.getState().charging.networkFailCount;
     const newFailCount = currentFailCount + 1;
@@ -927,12 +927,12 @@ export const checkNetworkAccess = async () => {
       networkAccess = false;
       store.dispatch(setNetworkAccess(networkAccess));
       store.dispatch(setNetworkFailCount(newFailCount));
-      console.log(`[NetworkCheck] ❌ ${newFailCount} consecutive failures — marking offline`);
+      console.log(`[NetworkCheck] ${newFailCount} consecutive failures — marking offline`);
     } else {
       // Not enough failures yet — keep current state
       networkAccess = store.getState().charging.networkAccess;
       store.dispatch(setNetworkFailCount(newFailCount));
-      console.log(`[NetworkCheck] ⏳ Failure ${newFailCount}/3 — holding current state (${networkAccess})`);
+      console.log(`[NetworkCheck] Failure ${newFailCount}/3 — holding current state (${networkAccess})`);
     }
   }
 

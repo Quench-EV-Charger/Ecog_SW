@@ -818,7 +818,7 @@ const powerOffErrCheck = async (states, volts) => {
     );
     await trip(states, {
       msg: "ERR_POWERLOSS",
-      code: "70",
+      code: "64",
       stopReason: "PowerLossError",
     });
   }
@@ -954,7 +954,7 @@ async function checkSuppyVoltageTripACmeter(states, volts, iostate) {
       console.log(`[v${SCRIPT_VERSION}] AC meter: 2+ phases < 200V -> power loss trip`);
       await trip(states, {
         msg: "ERR_POWERLOSS",
-        code: "70",
+        code: "64",
         stopReason: "PowerLossError",
       });
     }
@@ -1080,7 +1080,7 @@ async function checkSuppyVoltageTrip(states, volts, iostate) {
       console.log(`[v${SCRIPT_VERSION}] Power module: 2+ phases < 200V -> power loss trip`);
       await trip(states, {
         msg: "ERR_POWERLOSS",
-        code: "70",
+        code: "64",
         stopReason: "PowerLossError",
       });
     }
@@ -1464,7 +1464,7 @@ async function checkIMDResistance(states, iostate) {
             if (gun1States.length > 0) {
               await trip(gun1States, {
                 msg: "ERR_IMD_RESISTANCE",
-                code: "75",
+                code: "993",
                 stopReason: "IMDResistanceError",
               });
               firstUnhealthyIMDData.isTripped = true;
@@ -1488,7 +1488,7 @@ async function checkIMDResistance(states, iostate) {
             if (gun2States.length > 0) {
               await trip(gun2States, {
                 msg: "ERR_IMD_RESISTANCE",
-                code: "75",
+                code: "993",
                 stopReason: "IMDResistanceError",
               });
               firstUnhealthyIMDData.isTripped = true;
@@ -1539,7 +1539,7 @@ async function checkIMDResistance(states, iostate) {
               if (gun1States.length > 0) {
                 await trip(gun1States, {
                   msg: "ERR_IMD_RESISTANCE",
-                  code: "75",
+                  code: "993",
                   stopReason: "IMDResistanceError",
                 });
                 firstUnhealthyIMDData.isTripped = true;
@@ -1589,7 +1589,7 @@ async function checkIMDResistance(states, iostate) {
               if (gun2States.length > 0) {
                 await trip(gun2States, {
                   msg: "ERR_IMD_RESISTANCE",
-                  code: "75",
+                  code: "993",
                   stopReason: "IMDResistanceError",
                 });
                 firstUnhealthyIMDData.isTripped = true;
@@ -1690,7 +1690,7 @@ async function checkIMDDeviceFaults(states, controller1State, controller2State) 
             if (controller1States.length > 0) {
               await trip(controller1States, {
                 msg: "ERR_IMD_FAULT_C1",
-                code: "78",
+                code: "992",
                 stopReason: "IMDFaultC1",
                 vendorErrorCode: 78,
               });
@@ -1714,7 +1714,7 @@ async function checkIMDDeviceFaults(states, controller1State, controller2State) 
             if (controller2States.length > 0) {
               await trip(controller2States, {
                 msg: "ERR_IMD_FAULT_C2",
-                code: "79",
+                code: "991",
                 stopReason: "IMDFaultC2",
                 vendorErrorCode: 79,
               });
@@ -1760,7 +1760,7 @@ async function checkIMDDeviceFaults(states, controller1State, controller2State) 
             if (controller1States.length > 0) {
               await trip(controller1States, {
                 msg: "ERR_IMD_FAULT_C1",
-                code: "78",
+                code: "992",
                 stopReason: "IMDFaultC1",
                 vendorErrorCode: 78,
               });
@@ -1822,7 +1822,7 @@ async function checkIMDDeviceFaults(states, controller1State, controller2State) 
             if (controller2States.length > 0) {
               await trip(controller2States, {
                 msg: "ERR_IMD_FAULT_C2",
-                code: "79",
+                code: "991",
                 stopReason: "IMDFaultC2",
                 vendorErrorCode: 79,
               });
@@ -1912,7 +1912,7 @@ async function checkACEnergyMeterFail(states, controller1State, controller2State
         errorObjFlags.ac_em_fail = true;
         await trip(states, {
           msg: "ERR_AC_EM_FAIL",
-          code: "80",
+          code: "990",
           stopReason: "ACEnergyMeterFailure",
           vendorErrorCode: 80,
         });

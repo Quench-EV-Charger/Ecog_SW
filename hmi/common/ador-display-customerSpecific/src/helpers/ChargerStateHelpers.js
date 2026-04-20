@@ -15,11 +15,12 @@ export const getBlockedOutlets = (chargerState, chargingMode) => {
 export const getFaultedOutlets = (
   chargerState,
   blockedOutlets,
-  errTogglingTimeout
+  errTogglingTimeout,
+  config
 ) => {
   let faultedOutlets = chargerState.filter((state) => {
     let isConvTimeout = false;
-    if(state?.modbus_selec_online){
+    if(config?.powerSaveInIdleMode){
       if (state?.phs > 2){
           isConvTimeout = state?.can1_RX_time?.conv_timeout;
         }

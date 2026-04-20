@@ -308,6 +308,7 @@ export const buildConfig = async () => {
         config = {
           ...config,
           standard: ocppConfig.standard || config.standard,
+          powerSaveInIdleMode: ocppConfig.powerSaveInIdleMode !== undefined ? ocppConfig.powerSaveInIdleMode : config.powerSaveInIdleMode,
         };
         console.log("[buildConfig] Merged OCPP config:", config);
       }
@@ -774,7 +775,7 @@ export const isErrorStillValid = (
     chargerState && Array.isArray(chargerState) && chargerState[0];
   // errorCode is power_module_comm and still valid (different than io_src and events)
   if (errorCode === "power_module_comm") {
-    if (outletState?.modbus_selec_online) {
+    if (config?.powerSaveInIdleMode) {
       if (outletState?.phs > 2) {
         return outletState?.can1_RX_time?.conv_timeout;
       }

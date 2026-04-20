@@ -153,7 +153,8 @@ class Sessions extends Component {
 
   isPowerModuleCommErr = eachOutlet => {
     let isConvTimeout = false;
-    if(eachOutlet?.modbus_selec_online){
+    const powerSaveInIdleMode = this.context.config?.powerSaveInIdleMode;
+    if(powerSaveInIdleMode){
       if (eachOutlet?.phs > 2){
         isConvTimeout = eachOutlet?.can1_RX_time?.conv_timeout;
       }

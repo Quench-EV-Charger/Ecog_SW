@@ -348,7 +348,7 @@ class ContextProvider extends Component {
         const chargingMode = isComboMode ? isVCCU : 0;
         // we want to skip showing a faulted outlet for first 3 sec. so we will handle that and use faultedOutlets instead of realFaultedOutlets
         const blockedOutlets = getBlockedOutlets(chargerState, chargingMode); // prettier-ignore
-        const realFaultedOutlets = getFaultedOutlets(chargerState, blockedOutlets, this.state.errTogglingTimeout); // prettier-ignore
+        const realFaultedOutlets = getFaultedOutlets(chargerState, blockedOutlets, this.state.errTogglingTimeout, this.state.config); // prettier-ignore
         const faultedOutletsTime = getFaultedOutletsTime(realFaultedOutlets, this.state.faultedOutletsTime); // prettier-ignore
         const faultedOutlets = getHackedFaultedOutlets(realFaultedOutlets, faultedOutletsTime); // prettier-ignore
         const availableOutlets = getAvailableOutlets(chargerState, faultedOutlets, blockedOutlets); // prettier-ignore

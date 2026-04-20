@@ -22,7 +22,7 @@
  * Copyright (c) EcoG GmbH 2023
  * * All rights reserved
  * EcoG Error Reporting Script - Monitors IO, Temperature, and Supply Voltage errors
- * Version: 1.1.2 (Updated with v1.1.4 universal recovery counters)
+ * Version: 1.1.6 (Updated with v1.1.4 universal recovery counters)
  * Modified: 12 October 2025
  *
  * Key Changes:
@@ -32,12 +32,13 @@
  * • Prevents error oscillation and false alarms from transient conditions
  * • Condensed header comments for better code readability
  * • Total: 10 alarms with recovery logic, matching v1.1.4 core behavior
+ * • Updated error codes with Ecog stack error codes
  */
 
 // import fetch from "node-fetch";
 
 // Script Version
-const SCRIPT_VERSION = "1.1.5";
+const SCRIPT_VERSION = "1.1.6";
 
 // Global Objects
 const errorObjCount = {
@@ -348,12 +349,12 @@ const ioMapperState = async () => {
     // Fetch data only for connected controllers
     if (controllers.includes(1)) {
       try {
-        console.log(`[v${SCRIPT_VERSION}] [IOMAPPER] Fetching data for Controller 1...`);
+        //console.log(`[v${SCRIPT_VERSION}] [IOMAPPER] Fetching data for Controller 1...`);
         const controller1Response = await fetch(`${baseURL}controllers/1/api/proxy/iomapper/`, {
           headers: { "Content-Type": "application/json" },
         });
         result.controller1 = await controller1Response.json();
-        console.log(`[v${SCRIPT_VERSION}] [IOMAPPER] Controller 1 data fetched successfully`);
+        //console.log(`[v${SCRIPT_VERSION}] [IOMAPPER] Controller 1 data fetched successfully`);
       } catch (err) {
         console.error(`[v${SCRIPT_VERSION}] [IOMAPPER] Error fetching Controller 1 data:`, err.message);
         result.controller1 = null;
@@ -365,12 +366,12 @@ const ioMapperState = async () => {
 
     if (controllers.includes(2)) {
       try {
-        console.log(`[v${SCRIPT_VERSION}] [IOMAPPER] Fetching data for Controller 2...`);
+        //console.log(`[v${SCRIPT_VERSION}] [IOMAPPER] Fetching data for Controller 2...`);
         const controller2Response = await fetch(`${baseURL}controllers/2/api/proxy/iomapper/`, {
           headers: { "Content-Type": "application/json" },
         });
         result.controller2 = await controller2Response.json();
-        console.log(`[v${SCRIPT_VERSION}] [IOMAPPER] Controller 2 data fetched successfully`);
+        //console.log(`[v${SCRIPT_VERSION}] [IOMAPPER] Controller 2 data fetched successfully`);
       } catch (err) {
         console.error(`[v${SCRIPT_VERSION}] [IOMAPPER] Error fetching Controller 2 data:`, err.message);
         result.controller2 = null;
@@ -818,7 +819,7 @@ const powerOffErrCheck = async (states, volts) => {
     );
     await trip(states, {
       msg: "ERR_POWERLOSS",
-      code: "64",
+      code: "70",
       stopReason: "PowerLossError",
     });
   }
@@ -919,7 +920,7 @@ async function checkSuppyVoltageTripACmeter(states, volts, iostate) {
   // MODIFIED: Check for undervoltage when 2 phases < 200V and Bender is online
   const benderOnline = iostate && iostate["modbus.ccs_bender.online"] === true;
 
-  if (checkTwoPhasesBelow200(volts) && benderOnline) {
+  if (checkTwoPhasesBelow200(volts) && (benderOnline || gongyuanOnline)) {
     console.log(`[v${SCRIPT_VERSION}] [UV-AC] Undervoltage detected - 2+ phases < ${Constants.powermoduleundervoltage}V with Bender online: ${volts}`);
     if (!errorObj.underVoltageErr && !errorObjFlags.underVoltageErr) {
       incrementErrorCounter('underVoltageErr');
@@ -937,7 +938,7 @@ async function checkSuppyVoltageTripACmeter(states, volts, iostate) {
       });
     }
     return; // Exit early, don't check other voltage conditions
-  } else if (checkTwoPhasesBelow200(volts) && !benderOnline) {
+  } else if (checkTwoPhasesBelow200(volts) && !(benderOnline || gongyuanOnline)) {
     // Original power loss logic when Bender is offline
     console.log(`[v${SCRIPT_VERSION}] [PL-AC] Power loss detected - 2+ phases < ${Constants.powermoduleundervoltage}V: ${volts}`);
     incrementErrorCounter('powerLossErr');
@@ -954,7 +955,7 @@ async function checkSuppyVoltageTripACmeter(states, volts, iostate) {
       console.log(`[v${SCRIPT_VERSION}] AC meter: 2+ phases < 200V -> power loss trip`);
       await trip(states, {
         msg: "ERR_POWERLOSS",
-        code: "64",
+        code: "70",
         stopReason: "PowerLossError",
       });
     }
@@ -1045,7 +1046,7 @@ async function checkSuppyVoltageTrip(states, volts, iostate) {
   // MODIFIED: Check for undervoltage when 2 phases < 200V and Bender is online
   const benderOnline = iostate && iostate["modbus.ccs_bender.online"] === true;
 
-  if (checkTwoPhasesBelow200(volts) && benderOnline) {
+  if (checkTwoPhasesBelow200(volts) && (benderOnline || gongyuanOnline)) {
     console.log(`[v${SCRIPT_VERSION}] [UV-PM] Undervoltage detected - 2+ phases < ${Constants.powermoduleundervoltage}V with Bender online: ${volts}`);
     if (!errorObj.underVoltageErr && !errorObjFlags.underVoltageErr) {
       incrementErrorCounter('underVoltageErr');
@@ -1080,7 +1081,7 @@ async function checkSuppyVoltageTrip(states, volts, iostate) {
       console.log(`[v${SCRIPT_VERSION}] Power module: 2+ phases < 200V -> power loss trip`);
       await trip(states, {
         msg: "ERR_POWERLOSS",
-        code: "64",
+        code: "70",
         stopReason: "PowerLossError",
       });
     }
@@ -2204,8 +2205,9 @@ const checkErrors = async () => {
 
             // MODIFIED: Check for undervoltage when 2 phases < 200V and Bender is online
             const benderOnline = iostate["modbus.ccs_bender.online"] === true;
+            const gongyuanOnline = iostate["modbus.gongyuan.online"] === true;
 
-            if (checkTwoPhasesBelow200(acVolts) && benderOnline) {
+            if (checkTwoPhasesBelow200(acVolts) && (benderOnline || gongyuanOnline)) {
               console.log(`[v${SCRIPT_VERSION}] [AC Meter] Undervoltage condition - 2+ phases < ${Constants.powermoduleundervoltage}V with Bender online:`, acVolts);
               // Set undervoltage error directly here since we're not going through the normal voltage check
               if (!errorObj.underVoltageErr && !errorObjFlags.underVoltageErr) {
@@ -2224,7 +2226,7 @@ const checkErrors = async () => {
                   });
                 }
               }
-            } else if (checkTwoPhasesBelow200(acVolts) && !benderOnline) {
+            } else if (checkTwoPhasesBelow200(acVolts) && !(benderOnline || gongyuanOnline)) {
               console.log(`[v${SCRIPT_VERSION}] [AC Meter] Power loss detected - 2+ phases < ${Constants.powermoduleundervoltage}V:`, acVolts);
               await powerfailacmeter(states, iostate);
             } else {

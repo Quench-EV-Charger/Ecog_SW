@@ -1,12 +1,12 @@
 /***********************************/
-/*  Company: ADOR Powertron Ltd.
-    Author: Jay Patil
+/*  Company: QUENCH
+    Author: QUENCH
     Purpose: Autocharge script to enable automatic charging of a car when plugged in. 
              Dynamically checks configuration keys to decide execution.
     Created: 08-06-2023
-    Contact: sidev22@adorpower.com
-    Revision history: 28-11-2024
-    Revision version - 3.0
+    Contact:  QUENCH
+    Revision history: 15-04-2026
+    Revision version - 3.1
     ChangeLogs: Added config key check 
 /***********************************/
 

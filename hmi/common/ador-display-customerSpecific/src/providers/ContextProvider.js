@@ -580,7 +580,23 @@ class ContextProvider extends Component {
     console.log("[ContextProvider] Full config object:", config);
     console.log("[ContextProvider] config.standard:", config?.standard);
     console.log("[ContextProvider] ConnectionTimeOut extracted:", connectionTimeOut);
+    console.log("[ContextProvider] powerSaveInIdleMode:", config?.powerSaveInIdleMode);
     this.setState({ config, connectionTimeOut });
+
+    // Poll for powerSaveInIdleMode if undefined
+    if (config?.powerSaveInIdleMode === undefined) {
+      console.warn("[ContextProvider] powerSaveInIdleMode is undefined, starting polling...");
+      this.powerSaveInIdleModePollingInterval = setInterval(async () => {
+        const updatedConfig = await buildConfig();
+        console.log("[ContextProvider] Polling - powerSaveInIdleMode:", updatedConfig?.powerSaveInIdleMode);
+        
+        if (updatedConfig?.powerSaveInIdleMode !== undefined) {
+          console.log("[ContextProvider] Got explicit powerSaveInIdleMode value:", updatedConfig?.powerSaveInIdleMode);
+          this.setState({ config: updatedConfig });
+          clearInterval(this.powerSaveInIdleModePollingInterval);
+        }
+      }, 10000); // Poll every 10 seconds
+    }
 
     // Execute startup API call
     try {
@@ -721,6 +737,7 @@ class ContextProvider extends Component {
     clearInterval(this.connectionTimeOutInterval);
     clearInterval(this.ocppOnlineInterval);
     clearInterval(this.networkAccessInterval);
+    clearInterval(this.powerSaveInIdleModePollingInterval);
     window.removeEventListener("reset", this.handleReset, false);
     window.removeEventListener("remoteauth", this.handleRemoteAuth, false);
     this.state.ipcClient.end(true);

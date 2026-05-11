@@ -1,4 +1,4 @@
-"""
+﻿"""
 ================================================================================
 CMS NOC Integration Script v24 - Multiple Alerts Handling Optimization
 ================================================================================
@@ -607,6 +607,30 @@ SERVER_URL = "https://quenchcms.com/"
 # SERVER_URL = "http://103.176.134.139:8998/"
 
 # ============================================================================
+# TEST SERVER MIRROR (dual-routing) — added for parallel test environment
+# ============================================================================
+# Every write that goes to SERVER_URL is also fanned out to TEST_SERVER_URL
+# via a fire-and-forget daemon thread, so QA can see the same charger
+# signals on the test backend without affecting production traffic.
+#
+# Important rules of the mirror (see _mirror_to_test_server below):
+#   - Asynchronous: never blocks or slows the primary call.
+#   - Failure-isolated: any mirror error is logged and swallowed.
+#   - One-way: command polling responses are always read from PRIMARY only;
+#     the script never executes commands queued on the test server.
+#   - Bandwidth-aware: the heavy ExpertPostFullStateData upload (up to
+#     ~70MB per call) is NOT mirrored by default — toggle MIRROR_LARGE_UPLOADS
+#     if you need it.
+#
+# Set ENABLE_TEST_MIRROR = False or TEST_SERVER_URL = "" to disable.
+TEST_SERVER_URL = "http://172.16.10.32:4545/"
+ENABLE_TEST_MIRROR = True
+MIRROR_LARGE_UPLOADS = False
+# Tight timeout for mirror requests so a slow/dead test server can't pile
+# up daemon threads on the charger. Independent of the primary timeout.
+TEST_MIRROR_TIMEOUT = 15
+
+# ============================================================================
 # HARDWARE CONNECTION CONFIGURATION - Added 16th August 2025 - Kushagra Mittal
 # ============================================================================
 # Configure the hardware connection endpoints
@@ -706,6 +730,48 @@ session.mount('https://', requests.adapters.HTTPAdapter(
     pool_maxsize=10,
     max_retries=0  # We handle retries manually
 ))
+
+# ─── Dedicated session for test-server mirroring ────────────────────────────
+# Kept separate from the primary `session` so test-server slowness can never
+# starve the primary connection pool. Smaller pool — mirror traffic is
+# low-volume compared to primary.
+_test_session = requests.Session()
+_test_session.mount('http://', requests.adapters.HTTPAdapter(
+    pool_connections=5, pool_maxsize=5, max_retries=0))
+_test_session.mount('https://', requests.adapters.HTTPAdapter(
+    pool_connections=5, pool_maxsize=5, max_retries=0))
+
+
+def _mirror_to_test_server(method, path, **kwargs):
+    """Fire-and-forget: send the same write to TEST_SERVER_URL on a daemon
+    thread. Errors are logged but never propagate — primary flow must be
+    unaffected. Call sites should invoke this for CMS writes (POST and
+    side-effect GETs); pure connectivity probes should not be mirrored.
+
+    `path` is the part after the server URL (e.g. "/api/charger/LogEvent").
+    `kwargs` is the same keyword bundle (params, data, json, headers, ...)
+    passed to the primary `session.{method}` call so the mirror payload
+    matches exactly.
+    """
+    if not ENABLE_TEST_MIRROR or not TEST_SERVER_URL:
+        return
+
+    def _do():
+        try:
+            test_url = TEST_SERVER_URL.rstrip('/') + '/' + path.lstrip('/')
+            mirror_kwargs = dict(kwargs)
+            # Override timeout to keep mirror threads from piling up if the
+            # test server is dead. Drop 'stream' so we don't try to share a
+            # streamed body with the primary call.
+            mirror_kwargs['timeout'] = TEST_MIRROR_TIMEOUT
+            mirror_kwargs.pop('stream', None)
+            resp = _test_session.request(method, test_url, **mirror_kwargs)
+            print(f"{time.ctime()} [Mirror->Test] {method} {test_url} -> {resp.status_code}")
+        except Exception as e:
+            print(f"{time.ctime()} [Mirror->Test] {method} {path} failed: {e}")
+
+    threading.Thread(target=_do, daemon=True).start()
+
 
 # Docker/Yocto compatibility: Disable SSL warnings if needed
 try:
@@ -948,6 +1014,7 @@ def LogVersion():
             print(f"{time.ctime()} [Script->Server] Params: {DataTosend}")
             
             # CRITICAL FIX: Use session for connection pooling and add timeout
+            _mirror_to_test_server("GET", "/api/charger/LogVersion", params=DataTosend)
             response = session.get(SERVER_URL +
                                     "/api/charger/LogVersion", params=DataTosend, timeout=30)
             if response.status_code == 200:
@@ -1416,7 +1483,8 @@ def send_alert_to_cms(outlet, vendor_code, error_code, info, controller_id=None,
         print(f"{time.ctime()} [Alert->CMS] Sending alert to CMS")
         print(f"    [Alert->CMS] POST {SERVER_URL}api/charger/LogEvent")
         print(f"    [Alert->CMS] Params: id={DeviceID}, ev={event_json}")
-        
+
+        _mirror_to_test_server("POST", "/api/charger/LogEvent", params=EventData)
         response = session.post(
             SERVER_URL + "/api/charger/LogEvent",
             params=EventData,
@@ -1572,7 +1640,8 @@ def send_session_event_to_cms(event_type, gun_state, prev_state=None, add_timest
         print(f"{time.ctime()} [Session->CMS] Sending {event_type} to CMS")
         print(f"    [Session->CMS] POST {SERVER_URL}api/charger/LogEvent")
         print(f"    [Session->CMS] Payload: {event_json}")
-        
+
+        _mirror_to_test_server("POST", "/api/charger/LogEvent", params=EventData)
         response = session.post(
             SERVER_URL + "/api/charger/LogEvent",
             params=EventData,
@@ -1640,7 +1709,8 @@ def send_livefeeds_and_handle_commands(state_data):
         headers = {'Content-Type': 'application/json'}
         print(f"{time.ctime()} [Script->Server] POST {SERVER_URL}api/charger/LiveFeeds")
         print(f"{time.ctime()} [Script->Server] Payload: {gun_status}")
-        
+
+        _mirror_to_test_server("POST", "/api/charger/LiveFeeds", data=gun_status, headers=headers)
         response = session.post(
             SERVER_URL + "/api/charger/LiveFeeds", data=gun_status, headers=headers, timeout=30)
 
@@ -1711,10 +1781,13 @@ def CallStateAPI(sessionID):
         print(f"{time.ctime()} [Script->Server] Posting state data")
         print(f"    [Script->Server] POST {SERVER_URL}api/charger/PostStateData")
         print(f"    [Script->Server] Params: id={DeviceID}, SessionID={sessionID}")
-        
+
+        _mirror_to_test_server("POST", "/api/charger/PostStateData",
+                               params={'id': DeviceID, "SessionID": sessionID},
+                               json=StateJson.text)
         response = session.post(
-            SERVER_URL + "/api/charger/PostStateData", 
-            params={'id':  DeviceID, "SessionID": sessionID}, 
+            SERVER_URL + "/api/charger/PostStateData",
+            params={'id':  DeviceID, "SessionID": sessionID},
             json=StateJson.text, timeout=30)
         
         print(f"{time.ctime()} [Server->Script] PostStateData Response: Status={response.status_code}")
@@ -1870,6 +1943,11 @@ def CallStateFull(sessionID, outletno, is_event_triggered=True):
             
             try:
                 # Use requests with custom adapter for better control
+                # Mirror only when MIRROR_LARGE_UPLOADS is on — payload can
+                # be ~70MB and doubling it across the uplink is rarely
+                # what test environments actually need.
+                if MIRROR_LARGE_UPLOADS:
+                    _mirror_to_test_server("POST", "/api/charger/ExpertPostFullStateData", json=payload)
                 response = session.post(
                     url,
                     json=payload,
@@ -2050,6 +2128,12 @@ def ExecuteRequestedAPI(RecivedData):
             last_60000.clear()  # Clear the deque as well
 
             try:
+                # OCPP response payloads can be large; only mirror when the
+                # operator opted into MIRROR_LARGE_UPLOADS.
+                if MIRROR_LARGE_UPLOADS:
+                    _mirror_to_test_server("POST", "/api/charger/UpdateExecutionStatus",
+                                           params={'ExecutionID': RecivedData["ExecutionID"]},
+                                           json=ExecutionResponse)
                 LogExecutionStatus = session.post(
                     SERVER_URL + "/api/charger/UpdateExecutionStatus",
                     params={'ExecutionID': RecivedData["ExecutionID"]},
@@ -2077,6 +2161,9 @@ def ExecuteRequestedAPI(RecivedData):
                 # Still try to update execution status with error message
                 try:
                     error_response = json.dumps(f"Failed to send logs: {type(e).__name__}")
+                    _mirror_to_test_server("POST", "/api/charger/UpdateExecutionStatus",
+                                           params={'ExecutionID': RecivedData["ExecutionID"]},
+                                           json=error_response)
                     session.post(
                         SERVER_URL + "/api/charger/UpdateExecutionStatus",
                         params={'ExecutionID': RecivedData["ExecutionID"]},
@@ -2283,6 +2370,10 @@ def ExecuteRequestedAPI(RecivedData):
                 # Changed by Kushagra - 16th August 2025: Simplified timeout logic
                 timeout_val = LARGE_FILE_TIMEOUT  # Use configured timeout (default 300s)
                 print(f"    [Script] Response size: ~{response_size_mb}MB, using {timeout_val}s timeout")
+                if MIRROR_LARGE_UPLOADS:
+                    _mirror_to_test_server("POST", "/api/charger/UpdateExecutionStatus",
+                                           params={'ExecutionID': RecivedData["ExecutionID"]},
+                                           json=ExecutionResponse)
                 LogExecutionStatus = session.post(SERVER_URL + "/api/charger/UpdateExecutionStatus", params={
                     'ExecutionID': RecivedData["ExecutionID"]}, json=ExecutionResponse, timeout=timeout_val)
             else:
@@ -2293,6 +2384,10 @@ def ExecuteRequestedAPI(RecivedData):
                 # Changed by Kushagra - 16th August 2025: Simplified timeout logic
                 timeout_val = LARGE_FILE_TIMEOUT  # Use configured timeout (default 300s)
                 print(f"    [Script] API result size: ~{response_size_mb}MB, using {timeout_val}s timeout")
+                if MIRROR_LARGE_UPLOADS:
+                    _mirror_to_test_server("POST", "/api/charger/UpdateExecutionStatus",
+                                           params={'ExecutionID': RecivedData["ExecutionID"]},
+                                           json=APIResult)
                 LogExecutionStatus = session.post(SERVER_URL+"/api/charger/UpdateExecutionStatus", params={
                     'ExecutionID': RecivedData["ExecutionID"]}, json=APIResult, timeout=timeout_val)
 
@@ -2321,6 +2416,9 @@ def ExecuteRequestedAPI(RecivedData):
             # Try to update execution status with error message
             try:
                 error_response = json.dumps(f"Timeout after {timeout_val}s - file too large")
+                _mirror_to_test_server("POST", "/api/charger/UpdateExecutionStatus",
+                                       params={'ExecutionID': RecivedData["ExecutionID"]},
+                                       json=error_response)
                 session.post(
                     SERVER_URL + "/api/charger/UpdateExecutionStatus",
                     params={'ExecutionID': RecivedData["ExecutionID"]},
@@ -2397,7 +2495,12 @@ if __name__ == "__main__":
     print(f"{time.ctime()} [Script] CMS NOC Integration v8 Starting - Polling-Only Architecture")
     print(f"Configuration:")
     print(f"  - Hardware URL: {HARDWARE_BASE_URL}")
-    print(f"  - CMS Server URL: {SERVER_URL}")
+    print(f"  - CMS Server URL (primary): {SERVER_URL}")
+    if ENABLE_TEST_MIRROR and TEST_SERVER_URL:
+        print(f"  - Test Server URL (mirror): {TEST_SERVER_URL}")
+        print(f"    Mirror timeout: {TEST_MIRROR_TIMEOUT}s, large uploads mirrored: {MIRROR_LARGE_UPLOADS}")
+    else:
+        print(f"  - Test Server Mirror: DISABLED")
     print(f"  - Poll Interval (state/alerts/sessions): {ALERT_POLLING_INTERVAL} seconds")
     print(f"  - LiveFeeds Interval: {POLLING_INTERVAL} seconds")
     print(f"  - CMS Check Interval: {CMS_CHECK_INTERVAL} seconds")

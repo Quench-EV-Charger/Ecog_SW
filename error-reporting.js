@@ -22,8 +22,8 @@
  * Copyright (c) EcoG GmbH 2023
  * * All rights reserved
  * EcoG Error Reporting Script - Monitors IO, Temperature, and Supply Voltage errors
- * Version: 1.1.7 (Enhanced OCPP service monitoring and auto-start capabilities)
- * Modified: 12 May 2026
+ * Version: 1.1.7 (Updated with ocpp restart on error)
+ * Modified: 15 May 2026
  *
  * Key Changes:
  * • Universal recovery counters for 10 error types (E-Stop, door, temperatures, ground fault, voltage errors)
@@ -2447,90 +2447,90 @@ const checkErrors = async () => {
 };
 
 const ensureOcppClientRunning = async () => {
-   const maxConsecutiveInactive = 6;
-   let consecutiveInactiveCount = 0;
+  const maxConsecutiveInactive = 6;
+  let consecutiveInactiveCount = 0;
 
-   console.log(`[v${SCRIPT_VERSION}] [STARTUP] Checking OCPP client service status...`);
+  console.log(`[v${SCRIPT_VERSION}] [STARTUP] Checking OCPP client service status...`);
 
-   while (consecutiveInactiveCount < maxConsecutiveInactive) {
+  while (consecutiveInactiveCount < maxConsecutiveInactive) {
+    try {
+      const statusResponse = await fetch(`${baseURL}ocpp-client/servicestatus`, { method: "GET" });
+      const status = await statusResponse.text();
+
+      if (status.trim() === "active") {
+        console.log(`[v${SCRIPT_VERSION}] [STARTUP] OCPP client service is active.`);
+        return;
+      }
+
+      consecutiveInactiveCount++;
+      console.log(`[v${SCRIPT_VERSION}] [STARTUP] OCPP client service not active (${consecutiveInactiveCount}/${maxConsecutiveInactive}, status: "${status.trim()}").${consecutiveInactiveCount < maxConsecutiveInactive ? " Rechecking in 10s..." : ""}`);
+    } catch (err) {
+      consecutiveInactiveCount++;
+      console.error(`[v${SCRIPT_VERSION}] [STARTUP] Error checking OCPP client service status (${consecutiveInactiveCount}/${maxConsecutiveInactive}):`, err.message || err);
+    }
+
+    if (consecutiveInactiveCount < maxConsecutiveInactive) {
+      await new Promise(resolve => setTimeout(resolve, 10000));
+    }
+  }
+
+  try {
+    console.log(`[v${SCRIPT_VERSION}] [STARTUP] OCPP client service inactive for ${maxConsecutiveInactive} consecutive checks. Starting service...`);
+    const startResponse = await fetch(`${baseURL}ocpp-client/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (startResponse.ok) {
+      console.log(`[v${SCRIPT_VERSION}] [STARTUP] OCPP client service start request sent successfully. Will check every 60s until active...`);
+    } else {
+      console.error(`[v${SCRIPT_VERSION}] [STARTUP] Failed to start OCPP client service. HTTP ${startResponse.status}`);
+    }
+  } catch (err) {
+    console.error(`[v${SCRIPT_VERSION}] [STARTUP] Error starting OCPP client service:`, err.message || err);
+  }
+
+  // After starting, wait 60s then re-verify using same 6x10s polling pattern; restart if still inactive
+  while (true) {
+    await new Promise(resolve => setTimeout(resolve, 60000));
+
+    let inactiveCount = 0;
+    for (let i = 0; i < maxConsecutiveInactive; i++) {
       try {
-         const statusResponse = await fetch(`${baseURL}ocpp-client/servicestatus`, { method: "GET" });
-         const status = await statusResponse.text();
-
-         if (status.trim() === "active") {
-            console.log(`[v${SCRIPT_VERSION}] [STARTUP] OCPP client service is active.`);
-            return;
-         }
-
-         consecutiveInactiveCount++;
-         console.log(`[v${SCRIPT_VERSION}] [STARTUP] OCPP client service not active (${consecutiveInactiveCount}/${maxConsecutiveInactive}, status: "${status.trim()}").${consecutiveInactiveCount < maxConsecutiveInactive ? " Rechecking in 10s..." : ""}`);
+        const statusResponse = await fetch(`${baseURL}ocpp-client/servicestatus`, { method: "GET" });
+        const status = await statusResponse.text();
+        if (status.trim() === "active") {
+          console.log(`[v${SCRIPT_VERSION}] [STARTUP] OCPP client service is now active.`);
+          return;
+        }
+        inactiveCount++;
+        console.log(`[v${SCRIPT_VERSION}] [STARTUP] OCPP client service not active (${inactiveCount}/${maxConsecutiveInactive}, status: "${status.trim()}").${inactiveCount < maxConsecutiveInactive ? " Rechecking in 10s..." : ""}`);
       } catch (err) {
-         consecutiveInactiveCount++;
-         console.error(`[v${SCRIPT_VERSION}] [STARTUP] Error checking OCPP client service status (${consecutiveInactiveCount}/${maxConsecutiveInactive}):`, err.message || err);
+        inactiveCount++;
+        console.error(`[v${SCRIPT_VERSION}] [STARTUP] Error checking OCPP client service status (${inactiveCount}/${maxConsecutiveInactive}):`, err.message || err);
       }
 
-      if (consecutiveInactiveCount < maxConsecutiveInactive) {
-         await new Promise(resolve => setTimeout(resolve, 10000));
+      if (inactiveCount < maxConsecutiveInactive) {
+        await new Promise(resolve => setTimeout(resolve, 10000));
       }
-   }
+    }
 
-   try {
-      console.log(`[v${SCRIPT_VERSION}] [STARTUP] OCPP client service inactive for ${maxConsecutiveInactive} consecutive checks. Starting service...`);
+    // Still inactive after 6 consecutive checks — start service again
+    try {
+      console.log(`[v${SCRIPT_VERSION}] [STARTUP] OCPP client service inactive for ${maxConsecutiveInactive} consecutive checks. Starting service again...`);
       const startResponse = await fetch(`${baseURL}ocpp-client/start`, {
-         method: "POST",
-         headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
       });
-
       if (startResponse.ok) {
-         console.log(`[v${SCRIPT_VERSION}] [STARTUP] OCPP client service start request sent successfully. Will check every 60s until active...`);
+        console.log(`[v${SCRIPT_VERSION}] [STARTUP] OCPP client service start request sent successfully.`);
       } else {
-         console.error(`[v${SCRIPT_VERSION}] [STARTUP] Failed to start OCPP client service. HTTP ${startResponse.status}`);
+        console.error(`[v${SCRIPT_VERSION}] [STARTUP] Failed to start OCPP client service. HTTP ${startResponse.status}`);
       }
-   } catch (err) {
+    } catch (err) {
       console.error(`[v${SCRIPT_VERSION}] [STARTUP] Error starting OCPP client service:`, err.message || err);
-   }
-
-   // After starting, wait 60s then re-verify using same 6x10s polling pattern; restart if still inactive
-   while (true) {
-      await new Promise(resolve => setTimeout(resolve, 60000));
-
-      let inactiveCount = 0;
-      for (let i = 0; i < maxConsecutiveInactive; i++) {
-         try {
-            const statusResponse = await fetch(`${baseURL}ocpp-client/servicestatus`, { method: "GET" });
-            const status = await statusResponse.text();
-            if (status.trim() === "active") {
-               console.log(`[v${SCRIPT_VERSION}] [STARTUP] OCPP client service is now active.`);
-               return;
-            }
-            inactiveCount++;
-            console.log(`[v${SCRIPT_VERSION}] [STARTUP] OCPP client service not active (${inactiveCount}/${maxConsecutiveInactive}, status: "${status.trim()}").${inactiveCount < maxConsecutiveInactive ? " Rechecking in 10s..." : ""}`);
-         } catch (err) {
-            inactiveCount++;
-            console.error(`[v${SCRIPT_VERSION}] [STARTUP] Error checking OCPP client service status (${inactiveCount}/${maxConsecutiveInactive}):`, err.message || err);
-         }
-
-         if (inactiveCount < maxConsecutiveInactive) {
-            await new Promise(resolve => setTimeout(resolve, 10000));
-         }
-      }
-
-      // Still inactive after 6 consecutive checks — start service again
-      try {
-         console.log(`[v${SCRIPT_VERSION}] [STARTUP] OCPP client service inactive for ${maxConsecutiveInactive} consecutive checks. Starting service again...`);
-         const startResponse = await fetch(`${baseURL}ocpp-client/start`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-         });
-         if (startResponse.ok) {
-            console.log(`[v${SCRIPT_VERSION}] [STARTUP] OCPP client service start request sent successfully.`);
-         } else {
-            console.error(`[v${SCRIPT_VERSION}] [STARTUP] Failed to start OCPP client service. HTTP ${startResponse.status}`);
-         }
-      } catch (err) {
-         console.error(`[v${SCRIPT_VERSION}] [STARTUP] Error starting OCPP client service:`, err.message || err);
-      }
-   }
+    }
+  }
 };
 
 // BEFORE FIX: Async config fetch could leave powerSaveInIdleMode null
@@ -2562,13 +2562,13 @@ const start = async () => {
    console.log(`[v${SCRIPT_VERSION}] [STARTUP] Initializing system...`);
    console.log(`[v${SCRIPT_VERSION}] [STARTUP] ========================================`);
 
-   // Check connected controllers on startup
-   console.log(`[v${SCRIPT_VERSION}] [STARTUP] Checking connected controllers...`);
-   await getConnectedControllers();
+  // Check connected controllers on startup
+  console.log(`[v${SCRIPT_VERSION}] [STARTUP] Checking connected controllers...`);
+  await getConnectedControllers();
 
-   // Check OCPP client service and start if not running
-   console.log(`[v${SCRIPT_VERSION}] [STARTUP] Ensuring OCPP client service is running...`);
-   ensureOcppClientRunning(); // Run in background — does not block startup
+  // Check OCPP client service and start if not running
+  console.log(`[v${SCRIPT_VERSION}] [STARTUP] Ensuring OCPP client service is running...`);
+  ensureOcppClientRunning(); // Run in background — does not block startup
 
    // Retry config fetch up to 3 times
    for (let i = 0; i < 3; i++) {

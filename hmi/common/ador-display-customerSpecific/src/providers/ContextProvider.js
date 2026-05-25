@@ -70,6 +70,8 @@ class ContextProvider extends Component {
     chargerState: [],
     isCommunicationError: false,
     config: {},
+    initialDcEnergy: null,
+    setInitialDcEnergy: (initialDcEnergy) => this.setState({ initialDcEnergy }),
     isChargeCableConnected: false,
     activeConnector: 0,
     SECCreachable: false,
@@ -226,11 +228,13 @@ class ContextProvider extends Component {
       this.state.changePath("/plugev");
     } else if (pathname === "/charging" && pilot === 0) {
       // Normal charging completion - show session summary popup
+      this.setState({ initialDcEnergy: null });
       this.showSessionSummaryAfterCharging(selectedState, false);
       this.state.changePath("/");
     } else if (pathname === "/charging" && (evsestat === 5 || pilot === 7)) {
       // Error during charging - already handled by handleSessionSummaryPopupLogic
       // Just navigate to home, popup will be shown by error handler
+      this.setState({ initialDcEnergy: null });
       this.state.changePath("/");
     } else if (
       !inStoppingProccess(selectedState) &&

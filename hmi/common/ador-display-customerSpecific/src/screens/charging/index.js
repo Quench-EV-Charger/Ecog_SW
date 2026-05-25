@@ -37,7 +37,6 @@ class Charging extends Component {
       background: null,
       stopChargerStatus: "",
       emulatedMetering: null,
-      initialDcEnergy: null
     };
   }
 
@@ -240,14 +239,13 @@ class Charging extends Component {
     // this.state.await setEmulatedMetering();
     const emulatedmetering = await getEmulatedMetering(this.context.config?.API);
     this.setState({ emulatedMetering: emulatedmetering })
-    // Get initial DC energy value
+    // Set initial DC energy only if not already captured (persists across home↔charging navigations)
     const chargerState = this.context.selectedState;
     if (
+      this.context.initialDcEnergy === null &&
       chargerState?.dc_meter?.total_import_device_energy !== undefined
     ) {
-      this.setState({
-        initialDcEnergy: chargerState.dc_meter.total_import_device_energy
-      });
+      this.context.setInitialDcEnergy(chargerState.dc_meter.total_import_device_energy);
     }
     this.setBackground();
     const startDetails = await fetchSessionByOutletAndUser(
@@ -295,11 +293,11 @@ class Charging extends Component {
 
     if (
       chargerState?.dc_meter?.total_import_device_energy !== undefined &&
-      this.state.initialDcEnergy !== null
+      this.context.initialDcEnergy !== null
     ) {
       sessionDcEnergy =
         chargerState.dc_meter.total_import_device_energy -
-        this.state.initialDcEnergy;
+        this.context.initialDcEnergy;
 
       if (sessionDcEnergy < 0) sessionDcEnergy = 0; // safety
     }

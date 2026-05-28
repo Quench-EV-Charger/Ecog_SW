@@ -3,10 +3,13 @@
     Author: Jay Patil, Harsh Tawade
     Purpose: Stop time for errors/alerts
     Created: 18-06-2024
-    Contact: quenchdev4@adordigatron.com / quenchdev5@adordigatron.com 
-    Revision version - 1.1
-    Revision Date: 23-10-24
-    ChangeLogs: Restructured to use mapped values for DB search.
+    Contact: quenchdev4@adordigatron.com / quenchdev5@adordigatron.com
+    Revision version - 1.2
+    Revision Date: 28-05-2026
+    ChangeLogs:
+      v1.1 - Restructured to use mapped values for DB search.
+      v1.2 - Merged imdFaultyErr_controller1/2 into single imdFaultyErr (code 78).
+             Added dcEnergyStuckErr_1 (code 82) and dcEnergyStuckErr_2 (code 83).
 /***********************************/
 
 // Globals:
@@ -30,9 +33,10 @@ const vendorErrorMapping = {
   "groundFault": "90", // GroundFault
   "imdResistanceErr_1": "75", // IMDResistance
   "imdResistanceErr_2": "75", // IMDResistance
-  "imdFaultyErr_controller1": "78", // IMDFaultC1
-  "imdFaultyErr_controller2": "79", // IMDFaultC2
-  "ac_em_fail": "80" // ACEnergyMeterFailure
+  "imdFaultyErr": "78", // IMDFault (charger-level, both controllers)
+  "ac_em_fail": "80", // ACEnergyMeterFailure
+  "dcEnergyStuckErr_1": "82", // DCEnergyStuck Gun 1
+  "dcEnergyStuckErr_2": "83" // DCEnergyStuck Gun 2
 };
 
 

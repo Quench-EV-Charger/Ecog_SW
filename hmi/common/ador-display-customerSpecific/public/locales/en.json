@@ -144,6 +144,7 @@
   "RESERVATION_MESSAGE": "",
   "AC_ENERGY_METER_FAILURE": "AC Energy Meter Failure",
   "IMD_DEVICE_FAULT": "IMD Device Fault",
+  "DC_ENERGY_STUCK_ERR": "Dc meter not functional",
   "PLEASE_CONNECT_VEHICLE": "Please connect your Vehicle if no error on screen",
   "AUTHORIZATION_SUCCESSFUL": "Authorization Successful",
   "GROUND_FAULT": "GROUND FAULT",

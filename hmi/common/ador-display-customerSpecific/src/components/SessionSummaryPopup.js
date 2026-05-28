@@ -207,6 +207,8 @@ class SessionSummaryPopup extends React.Component {
       gunTemperatureErr_1: "GUN_A_TEMP_ERR",
       gunTemperatureErr_2: "GUN_B_TEMP_ERR",
       imdFaultyErr: "IMD_DEVICE_FAULT",
+      dcEnergyStuckErr_1: "DC_ENERGY_STUCK_ERR",
+      dcEnergyStuckErr_2: "DC_ENERGY_STUCK_ERR",
       imdResistanceErr_1: "IMD_RESISTANCE_ERR",
       imdResistanceErr_2: "IMD_RESISTANCE_ERR",
       ac_em_fail: "AC_ENERGY_METER_FAILURE",

@@ -484,12 +484,7 @@ class Sessions extends Component {
                 gun2HasIMD={Boolean(context?.chargerState?.[1]?.errorObj?.imdResistanceErr_2)}
               />
             <IMDFaultyErr
-              shown={Boolean(
-                context?.imdFaultyErr_controller1 ||
-                context?.imdFaultyErr_controller2
-              )}
-              controller1HasIMD={Boolean(context?.imdFaultyErr_controller1)}
-              controller2HasIMD={Boolean(context?.imdFaultyErr_controller2)}
+              shown={Boolean(context?.imdFaultyErr)}
             />
             <ACEnergyMeterFailure
               shown={Boolean(context?.acEnergyMeterFailure)}

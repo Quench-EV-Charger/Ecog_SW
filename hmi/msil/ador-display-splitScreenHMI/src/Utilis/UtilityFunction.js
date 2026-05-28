@@ -824,8 +824,7 @@ export const isErrorStillValid = (
         outletState?.errorObj?.cabinetTemperatureErr ||
         outletState?.errorObj?.powerModuleCommErr_1 ||
         outletState?.errorObj?.powerModuleCommErr_2 ||
-        outletState?.errorObj?.imdFaultyErr_controller1 ||
-        outletState?.errorObj?.imdFaultyErr_controller2 ||
+        outletState?.errorObj?.imdFaultyErr ||
         outletState?.errorObj?.ac_em_fail)
     );
   } else {
@@ -1140,26 +1139,14 @@ export const checkErrors = (chargerState, chargingMode, isComboMode) => {
     return errorObjReturn;
   }
 
-  // ErrorObj: added imdFaultyErr_controller1 check
-  const isImdFaultyErr_controller1 =
+  // ErrorObj: added imdFaultyErr check
+  const isImdFaultyErr =
     chargerState &&
     Array.isArray(chargerState) &&
-    chargerState.some(state => state?.errorObj?.imdFaultyErr_controller1);
+    chargerState.some(state => state?.errorObj?.imdFaultyErr);
 
-  if (isImdFaultyErr_controller1) {
-    errorObjReturn = { showAlert: true, showEStop: false, errorCode: "IMD_FAULTY_ERR_CONTROLLER1" }; // prettier-ignore
-    isComboMode && chargingMode > 0 && resetCombo(API);
-    return errorObjReturn;
-  }
-
-  // ErrorObj: added imdFaultyErr_controller2 check
-  const isImdFaultyErr_controller2 =
-    chargerState &&
-    Array.isArray(chargerState) &&
-    chargerState.some(state => state?.errorObj?.imdFaultyErr_controller2);
-
-  if (isImdFaultyErr_controller2) {
-    errorObjReturn = { showAlert: true, showEStop: false, errorCode: "IMD_FAULTY_ERR_CONTROLLER2" }; // prettier-ignore
+  if (isImdFaultyErr) {
+    errorObjReturn = { showAlert: true, showEStop: false, errorCode: "IMD_FAULTY_ERR" }; // prettier-ignore
     isComboMode && chargingMode > 0 && resetCombo(API);
     return errorObjReturn;
   }

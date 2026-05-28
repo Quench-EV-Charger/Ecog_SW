@@ -61,12 +61,8 @@ const ERROR_OVERLAYS = [
     messages: ["INTERNAL_CABINET_EXCEPTION", "GROUND_FAULT"],
   },
   {
-    condition: (code) => code === "IMD_FAULTY_ERR_CONTROLLER1",
-    messages: ["IMD_FAULTY_ERR_CONTROLLER1"],
-  },
-  {
-    condition: (code) => code === "IMD_FAULTY_ERR_CONTROLLER2",
-    messages: ["IMD_FAULTY_ERR_CONTROLLER2"],
+    condition: (code) => code === "IMD_FAULTY_ERR",
+    messages: ["IMD_FAULTY_ERR"],
   },
   {
     condition: (code) => code === "AC_EM_FAIL",

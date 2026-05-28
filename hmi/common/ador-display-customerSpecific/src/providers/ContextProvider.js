@@ -1059,31 +1059,13 @@ class ContextProvider extends Component {
       return errorObjReturn;
     }
 
-    // ErrorObj: added IMD Faulty Error Controller 1 check
-    const isImdFaultyErr_1 =
+    // ErrorObj: added IMD Faulty Error check
+    const isImdFaultyErr =
       chargerState &&
       Array.isArray(chargerState) &&
-      chargerState[0] &&
-      chargerState[0].errorObj?.imdFaultyErr_controller1;
+      chargerState.some(state => state?.errorObj?.imdFaultyErr);
 
-    if (isImdFaultyErr_1) {
-      this.setState({ imdFaultyErr_controller1: true });
-    } else {
-      this.setState({ imdFaultyErr_controller1: false });
-    }
-
-    // ErrorObj: added IMD Faulty Error Controller 2 check
-    const isImdFaultyErr_2 =
-      chargerState &&
-      Array.isArray(chargerState) &&
-      chargerState[1] &&
-      chargerState[1].errorObj?.imdFaultyErr_controller2;
-
-    if (isImdFaultyErr_2) {
-      this.setState({ imdFaultyErr_controller2: true });
-    } else {
-      this.setState({ imdFaultyErr_controller2: false });
-    }
+    this.setState({ imdFaultyErr: isImdFaultyErr || false });
 
     // ErrorObj: added AC Energy Meter Failure check for both outlets
     const isAcEnergyMeterFailure =

@@ -1776,7 +1776,7 @@ async function checkDCEnergyStuck(states) {
           tracker.tripped = false;
           const gunStates = states.filter((s) => s.outlet == gun);
           if (gunStates.length > 0) {
-            const vendorCode = gun === "1" ? "82" : "83";
+            const vendorCode = gun === "1" ? "92" : "93";
             await untrip(gunStates, vendorCode);
           }
         }
@@ -1811,7 +1811,7 @@ async function checkDCEnergyStuck(states) {
           tracker.tripped = false;
           const gunStates = states.filter((s) => s.outlet == gun);
           if (gunStates.length > 0) {
-            const vendorCode = gun === "1" ? "82" : "83";
+            const vendorCode = gun === "1" ? "92" : "93";
             await untrip(gunStates, vendorCode);
           }
         }
@@ -1828,7 +1828,7 @@ async function checkDCEnergyStuck(states) {
         tracker.tripped = true;
         const gunStates = states.filter((s) => s.outlet == gun);
         if (gunStates.length > 0) {
-          const vendorCode = gun === "1" ? "82" : "83";
+          const vendorCode = gun === "1" ? "92" : "93";
           await trip(gunStates, {
             msg: "ERR_DC_ENERGY_STUCK",
             code: vendorCode,

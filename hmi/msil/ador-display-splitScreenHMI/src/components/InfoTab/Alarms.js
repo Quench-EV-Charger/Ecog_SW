@@ -107,8 +107,7 @@ const Alarms = () => {
       27: "Gun Temp Sensor",
       30: "Grounding",
       75: "IMD",
-      78: "IMD Controller 1",
-      79: "IMD Controller 2",
+      78: "IMD Device",
       80: "AC Energy Meter",
       81: "PLC Modem",
       82: "Cabinet Temp Sensor",
@@ -121,6 +120,8 @@ const Alarms = () => {
       89: "EV Communication",
       90: "Grounding",
       91: "Gun Temp Sensor",
+      92: "DC Energy Stuck (Gun 1)",
+      93: "DC Energy Stuck (Gun 2)",
     };
     return errorCodeList[ec] || "-";
   };
@@ -153,7 +154,6 @@ const Alarms = () => {
       "30",
       "75",
       "78",
-      "79",
       "80",
       "82",
       "83",

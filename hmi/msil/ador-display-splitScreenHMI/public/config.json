@@ -45,6 +45,30 @@
   "isRfidFlow": false,
   "screen_resolution": "1280x720",
   "errorCodes": {
+    "70": {
+      "code": "70",
+      "localizationCode": "POWER_FAILURE"
+    },
+    "92": {
+      "code": "92",
+      "localizationCode": "DC_ENERGY_STUCK_ERR"
+    },
+    "93": {
+      "code": "93",
+      "localizationCode": "DC_ENERGY_STUCK_ERR"
+    },
+    "990": {
+      "code": "990",
+      "localizationCode": "AC_EM_FAIL"
+    },
+    "992": {
+      "code": "992",
+      "localizationCode": "IMD_FAULTY_ERR"
+    },
+    "993": {
+      "code": "993",
+      "localizationCode": "IMD_RESISTANCE_ERR"
+    },
     "997": {
       "code": "997",
       "localizationCode": "ERR_UNDER_VOLTAGE"

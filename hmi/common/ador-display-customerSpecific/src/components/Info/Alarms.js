@@ -78,8 +78,7 @@ class Alarms extends Component {
             "26": "Input Supply",
             "27": "Gun Temp Sensor",
             "75": "IMD Resistance",
-            "78": "IMD Device (C1)",
-            "79": "IMD Device (C2)",
+            "78": "IMD Device",
             "80": "AC Energy Meter",
             "81": "PLC Modem",
             "82": "Cabinet Temp Sensor",
@@ -90,14 +89,16 @@ class Alarms extends Component {
             "88": "EV Communication",
             "89": "EV Communication",
             "90": "Grounding",
-            "91": "Cable Temp Sensor"
+            "91": "Cable Temp Sensor",
+            "92": "DC Energy Stuck (Gun 1)",
+            "93": "DC Energy Stuck (Gun 2)"
         };
         //console.log(errorCodeList[ec]);
         return errorCodeList[ec] ? errorCodeList[ec] : "-";
     };
 
     checkIfCommonError = (errorCode, connectorID) => {
-        const errorListZero = ["9", "17", "18", "19", "22", "26", "75", "78", "79", "80", "82", "83", "85", "87", "90"];
+        const errorListZero = ["9", "17", "18", "19", "22", "26", "75", "78", "80", "82", "83", "85", "87", "90"];
 
         if (errorListZero.includes(errorCode)) {
             if (connectorID === 2) {

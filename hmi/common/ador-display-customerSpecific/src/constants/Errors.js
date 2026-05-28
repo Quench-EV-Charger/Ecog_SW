@@ -6,8 +6,8 @@ export const Errors = {
   outlet_temp: "OUTLET_TEMP", // from safety_tripped_io_src // TODO: Do we still need this?
   cab_temp: "CAB_TEMP", // from safety_tripped_io_src
   communication_error: "COMMUNICATION_ERROR", // handled internally
-  gun1_imd_fault: "IMD Resistance Fault",
-  gun2_imd_fault: "IMD Resistance Fault",
+  imdFaultyErr: "IMD_FAULTY_ERR", // from errorObj (charger-level merged IMD fault)
+  ac_em_fail: "AC_EM_FAIL", // from errorObj
 };
 
 export const OneShotErrors = {

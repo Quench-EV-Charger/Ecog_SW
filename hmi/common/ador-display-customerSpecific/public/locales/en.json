@@ -109,6 +109,7 @@
   "REMOTE_AUTH_WAIT_TEXT": "Please wait, while we prepare your charging request",
   "REMOTE_AUTH_WAIT_SF_TEXT": "Please wait, while we prepare your super fast charging request",
   "REMOTE_AUTH_WAIT_TIME_TEXT": "It might take a few minutes",
+  "WAIT_FOR_CHARGING": "Please wait for charging to start",
   "PREPARING": "Preparing",
   "SF_SELECTED_ON": "Super fast mode selected on Gun {{gun}}",
   "SF_SELECTED": "Super fast mode selected",

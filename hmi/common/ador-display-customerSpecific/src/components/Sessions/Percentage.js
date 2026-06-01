@@ -12,7 +12,7 @@ export default function ({ eachItem }) {
       <Progress
         style={{ marginTop: "1vw" }}
         type="circle"
-        percent={!!eachItem.EVRESSSOC && +eachItem.EVRESSSOC.toFixed(0)}
+        percent={eachItem.EVRESSSOC != null ? +eachItem.EVRESSSOC.toFixed(0) : 0}
         strokeWidth={7}
         strokeColor="#92D050"
         format={(percent) => <span>{percent}%</span>}

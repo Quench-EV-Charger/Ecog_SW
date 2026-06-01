@@ -11,7 +11,7 @@ export const ProgressPercentage = ({ percent }) => (
     strokeWidth={7}
     strokeColor="#00B051"
     format={(percent) => (
-      <span style={{ color: "white" }}>{percent.toFixed(0)}%</span>
+      <span style={{ color: "white" }}>{percent?.toFixed(0) ?? 0}%</span>
     )}
     data-testid="progress-percentage"
   />

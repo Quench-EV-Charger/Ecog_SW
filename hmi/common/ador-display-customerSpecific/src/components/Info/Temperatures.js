@@ -22,14 +22,14 @@ class Temps extends Component {
                                     Gun A DC+ Temperature:
                                 </h2>
 
-                                {((chargerState[0].temperatures.CCS_A2_temp) || (chargerState[0].temperatures.cable_temp_2)) && <h2>
+                                {((chargerState[0]?.temperatures?.CCS_A2_temp) || (chargerState[0]?.temperatures?.cable_temp_2)) && <h2>
                                     Gun A DC- Temperature:
                                 </h2>}
-                                {chargerState[0].temperatures.CCS_B1_temp && <h2>
+                                {chargerState[0]?.temperatures?.CCS_B1_temp && <h2>
                                     Gun B DC+ Temperature:
                                 </h2>}
 
-                                {chargerState[0].temperatures.CCS_B2_temp && <h2>
+                                {chargerState[0]?.temperatures?.CCS_B2_temp && <h2>
                                     Gun B DC- Temperature:
                                 </h2>}
 
@@ -42,22 +42,22 @@ class Temps extends Component {
                             </Col>
                             <Col span={3} style={S.ChargingText}>
                                 <h2>
-                                    {chargerState[0].temperatures.CCS_A1_temp?.toFixed(1) || chargerState[0].temperatures.cable_temp_1?.toFixed(1)} °C
+                                    {chargerState[0]?.temperatures?.CCS_A1_temp?.toFixed(1) || chargerState[0]?.temperatures?.cable_temp_1?.toFixed(1) || "-"} °C
                                 </h2>
-                                {((chargerState[0].temperatures.CCS_A2_temp) || (chargerState[0].temperatures.cable_temp_2?.toFixed(1))) && <h2>
-                                    {chargerState[0].temperatures.CCS_A2_temp?.toFixed(1) || (chargerState[0].temperatures.cable_temp_2?.toFixed(1))} °C
+                                {((chargerState[0]?.temperatures?.CCS_A2_temp) || (chargerState[0]?.temperatures?.cable_temp_2?.toFixed(1))) && <h2>
+                                    {chargerState[0]?.temperatures?.CCS_A2_temp?.toFixed(1) || (chargerState[0]?.temperatures?.cable_temp_2?.toFixed(1))} °C
                                 </h2>}
-                                {chargerState[0].temperatures.CCS_B1_temp && <h2>
-                                    {chargerState[0].temperatures.CCS_B1_temp?.toFixed(1)} °C
+                                {chargerState[0]?.temperatures?.CCS_B1_temp && <h2>
+                                    {chargerState[0]?.temperatures?.CCS_B1_temp?.toFixed(1)} °C
                                 </h2>}
-                                {chargerState[0].temperatures.CCS_B2_temp && <h2>
-                                    {chargerState[0].temperatures.CCS_B2_temp?.toFixed(1)} °C
+                                {chargerState[0]?.temperatures?.CCS_B2_temp && <h2>
+                                    {chargerState[0]?.temperatures?.CCS_B2_temp?.toFixed(1)} °C
                                 </h2>}
                                 <h2>
-                                    {chargerState[0].temperatures.cabinet_temp?.toFixed(1)} °C
+                                    {chargerState[0]?.temperatures?.cabinet_temp?.toFixed(1) ?? "-"} °C
                                 </h2>
                                 <h2>
-                                    {chargerState[0].temperatures.outlet_temp?.toFixed(1)} °C
+                                    {chargerState[0]?.temperatures?.outlet_temp?.toFixed(1) ?? "-"} °C
                                 </h2>
                             </Col>
                         </Row>

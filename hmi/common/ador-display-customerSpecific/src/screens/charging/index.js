@@ -445,7 +445,7 @@ class Charging extends Component {
                       </p>
                       <p style={S.SessionInfoText}>
                         {context.t("DEMAND_CURRENT")}:{" "}
-                        {!!chargerState && chargerState.tc !== undefined ? (
+                        {chargerState?.tc != null ? (
                           <>{chargerState.tc.toFixed(2)} A </>
                         ) : (
                           "N/A"
@@ -469,22 +469,22 @@ class Charging extends Component {
                     <p style={S.SessionInfoText}>
                       <span>Gun DC+ Temp: {
                       (chargerState.outlet==1?
-                        chargerState?.temperatures.hasOwnProperty('CCS_A1_temp')?
-                        chargerState?.temperatures?.CCS_A1_temp.toFixed(1):"-":
-                        chargerState?.temperatures.hasOwnProperty('CCS_B1_temp')?
-                        chargerState?.temperatures?.CCS_B1_temp.toFixed(1):"-")
+                        chargerState?.temperatures?.hasOwnProperty('CCS_A1_temp')?
+                        chargerState?.temperatures?.CCS_A1_temp?.toFixed(1):"-":
+                        chargerState?.temperatures?.hasOwnProperty('CCS_B1_temp')?
+                        chargerState?.temperatures?.CCS_B1_temp?.toFixed(1):"-")
                       }{"°C"}</span>
-                      <span style={S.SessionInfoText}>Inlet Temp: {chargerState.temperatures.outlet_temp?.toFixed(1)}°C</span>
+                      <span style={S.SessionInfoText}>Inlet Temp: {chargerState?.temperatures?.outlet_temp?.toFixed(1) ?? "-"}°C</span>
                     </p>
                     <p style={S.SessionInfoText}>
                       <span>Gun DC- Temp: {
                       (chargerState.outlet==1?
-                        chargerState?.temperatures.hasOwnProperty('CCS_A2_temp')?
-                        chargerState?.temperatures?.CCS_A2_temp.toFixed(1):"-":
-                        chargerState?.temperatures.hasOwnProperty('CCS_B2_temp')?
-                        chargerState?.temperatures?.CCS_B2_temp.toFixed(1):"-")
+                        chargerState?.temperatures?.hasOwnProperty('CCS_A2_temp')?
+                        chargerState?.temperatures?.CCS_A2_temp?.toFixed(1):"-":
+                        chargerState?.temperatures?.hasOwnProperty('CCS_B2_temp')?
+                        chargerState?.temperatures?.CCS_B2_temp?.toFixed(1):"-")
                       }{"°C"}</span>
-                      <span style={S.SessionInfoText}>Cabinet Temp: {chargerState.temperatures.cabinet_temp?.toFixed(1)}°C</span>
+                      <span style={S.SessionInfoText}>Cabinet Temp: {chargerState?.temperatures?.cabinet_temp?.toFixed(1) ?? "-"}°C</span>
                     </p>
                   </Row>
 

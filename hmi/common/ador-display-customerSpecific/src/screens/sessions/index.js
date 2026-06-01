@@ -83,10 +83,10 @@ class Sessions extends Component {
     if (this.context?.chargerState.length === 1 ) {
       return false;
     }
-    if(this.context.chargerState[0].phs == 2 && this.context.chargerState[1].phs == 2){
+    if(this.context.chargerState[0]?.phs == 2 && this.context.chargerState[1]?.phs == 2){
       return true;
     }
-    else if(this.context.chargerState[0].phs == 7 || this.context.chargerState[1].phs == 7){
+    else if(this.context.chargerState[0]?.phs == 7 || this.context.chargerState[1]?.phs == 7){
       return true;
     }
     else{

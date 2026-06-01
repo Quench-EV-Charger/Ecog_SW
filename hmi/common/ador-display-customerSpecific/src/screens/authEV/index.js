@@ -13,7 +13,7 @@ import Spinner from "../../components/Spinner";
 import TimeoutRouter from "../../components/TimeoutRouter";
 import Numpad from "../../components/AuthEV/Numpad";
 
-import { isNeedUnplug, clearRfid, isActive, stopCharging } from "../../utils";
+import { isNeedUnplug, clearRfid, isActive, stopCharging, isOutletPreparing } from "../../utils";
 import ScanRfid from "../../assets/images/scan_rfid.svg";
 import { httpPost,httpGet } from "../../apis/Queries";
 import { addOrUpdateSessionToDb } from "../../localDb/dbActions";
@@ -37,15 +37,16 @@ class AuthorizeEv extends Component {
     allowToShowAlert: false,
     time: 0,
     waitingForOcppMsg: false,
-    showNumpad: true, // State to control Numpad visibility
-    isAutocharging: false, // State to handle autocharging process
-    isReservation: false, // State to handle if reservation is made.
+    showNumpad: true,
+    isAutocharging: false,
+    isReservation: false,
     reservationStartTime : null,
     reservationEndTime : null,
     showReservationPrompt: false,
     reservationDetails: null,
     showReservationDetails: false,
     autochargeauth: true,
+    authConfirmed: false,
   };
   showRfidError = () => {
     this.setState({
@@ -396,7 +397,7 @@ class AuthorizeEv extends Component {
 
   componentDidUpdate(prevProps, prevState) {
     const { changePath, selectedState, faultedOutlets, config, chargingMode } = this.context;
-  
+
     if (
       faultedOutlets &&
       Array.isArray(faultedOutlets) &&
@@ -407,6 +408,11 @@ class AuthorizeEv extends Component {
           changePath("/");
         }
       }
+    }
+
+    // Show popup as soon as auth becomes true (guard prevents repeated setState)
+    if (!this.state.authConfirmed && selectedState?.auth) {
+      this.setState({ authConfirmed: true });
     }
   }
 
@@ -422,7 +428,7 @@ class AuthorizeEv extends Component {
   };
 
   render() {
-    const { showReservationPrompt, reservationDetails, autochargeauth } = this.state;
+    const { showReservationPrompt, reservationDetails, autochargeauth, authConfirmed } = this.state;
     return (
       <MainContext.Consumer>
         {(context) => (
@@ -434,7 +440,42 @@ class AuthorizeEv extends Component {
                 onClose={this.handleClosePrompt}
               />
             )}
-            <TimeoutRouter />
+            {authConfirmed && (
+              <div style={{
+                position: "fixed", top: 0, left: 0, width: "100%", height: "100%",
+                backgroundColor: "rgba(0,0,0,0.55)", zIndex: 9999,
+                display: "flex", flexDirection: "column",
+                justifyContent: "center", alignItems: "center",
+              }}>
+                <div style={{
+                  backgroundColor: "#fff", borderRadius: "16px",
+                  padding: "48px 64px", textAlign: "center",
+                  boxShadow: "0 8px 32px rgba(0,0,0,0.25)",
+                }}>
+                  <div style={{
+                    width: "80px", height: "80px", borderRadius: "50%",
+                    backgroundColor: "#2e7d32", margin: "0 auto",
+                    display: "flex", justifyContent: "center", alignItems: "center",
+                  }}>
+                    <div style={{
+                      width: "18px", height: "36px",
+                      borderRight: "6px solid #fff", borderBottom: "6px solid #fff",
+                      transform: "rotate(45deg)", marginTop: "-10px",
+                    }} />
+                  </div>
+                  <div style={{
+                    marginTop: "24px", fontSize: "28px", fontWeight: "700",
+                    color: "#2e7d32",
+                  }}>
+                    {context.t("AUTHORIZED")}
+                  </div>
+                  <div style={{ marginTop: "12px", fontSize: "20px", color: "#555" }}>
+                    {context.t("WAIT_FOR_CHARGING")}
+                  </div>
+                </div>
+              </div>
+            )}
+            {!isOutletPreparing(context.selectedState) && <TimeoutRouter />}
             <AlertBox
               iconType="warning"
               display={this.state.errorInRfid}

@@ -225,7 +225,7 @@ class ContextProvider extends Component {
     }
 
     if (pathname === "/authorize" && pilot === 0) {
-      this.state.changePath("/plugev");
+      this.state.changePath("/");
     } else if (pathname === "/charging" && pilot === 0) {
       // Normal charging completion - show session summary popup
       this.setState({ initialDcEnergy: null });
@@ -691,29 +691,27 @@ class ContextProvider extends Component {
     // Works for single-gun and dual-gun scenarios
     this.handleSessionSummaryPopupLogic(chargerState, prevState.chargerState);
 
-    if (this.state.config?.isRfidFlow) {
-      const prevPreparingOutletsIds = prevState.preparingOutletsIds;
-      const preparingOutletsIds = this.state.preparingOutletsIds;
-      if (!isArrayOfStringsSame(prevPreparingOutletsIds, preparingOutletsIds)) {
-        const newChangedId = findDifferentElementInArray(
-          prevPreparingOutletsIds,
-          preparingOutletsIds
-        );
-        let newChangedState = this.state.chargerState.find(
-          (o) => o.outlet == newChangedId
-        );
-        if (!isOutletPreparing(newChangedState)) newChangedState = null;
-        if (
-          newChangedState &&
-          (path === "/" ||
-            path === "/screensaver" ||
-            path === "/charging" ||
-            path === "/unplugev" ||
-            path === "/stopping")
-        ) {
-          handleOutletSelect(newChangedState, this.state.setSelectedState);
-          this.state.changePath("/authorize");
-        }
+    const prevPreparingOutletsIds = prevState.preparingOutletsIds;
+    const preparingOutletsIds = this.state.preparingOutletsIds;
+    if (!isArrayOfStringsSame(prevPreparingOutletsIds, preparingOutletsIds)) {
+      const newChangedId = findDifferentElementInArray(
+        prevPreparingOutletsIds,
+        preparingOutletsIds
+      );
+      let newChangedState = this.state.chargerState.find(
+        (o) => o.outlet == newChangedId
+      );
+      if (!isOutletPreparing(newChangedState)) newChangedState = null;
+      if (
+        newChangedState &&
+        (path === "/" ||
+          path === "/screensaver" ||
+          path === "/charging" ||
+          path === "/unplugev" ||
+          path === "/stopping")
+      ) {
+        handleOutletSelect(newChangedState, this.state.setSelectedState);
+        this.state.changePath("/authorize");
       }
     }
 

@@ -16,9 +16,7 @@ function Rfid({status, handleClick, eachOutlet }) {
 
   const socketRef = useRef(null);
   const eachOutletRef = useRef(eachOutlet);
-  const timerRef = useRef(null);
   const [initialized, setInitialized] = useState(false);
-  const [countdown, setCountdown] = useState(60);
   const { theme, toggleTheme } = useContext(ThemeContext);
 
 
@@ -79,21 +77,6 @@ function Rfid({status, handleClick, eachOutlet }) {
     }
   }, [rfidAuthOwner, eachOutlet?.outlet, initialized, handleClick]);
 
-  useEffect(() => {
-    timerRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(timerRef.current);
-          handleClick("initial");
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => {
-      clearInterval(timerRef.current);
-    };
-  },[countdown])
 
 
 
@@ -101,16 +84,11 @@ function Rfid({status, handleClick, eachOutlet }) {
     <div style={{ position: "relative" }}>
       <img src={rfidImg} style={S.rfid_img} alt="Scan RFID" />
       <div style={S.rfid_info(theme)}>
-        Please scan your RFID card to authorize your EV
-        <br />
-        <span style={{ fontSize: 18, color: "#FFA500" }}>
-          Returning to home in {countdown} seconds...
-        </span>
+        Swipe your RFID card or click Start Charging on your mobile app to authorize EV
       </div>
       <div style={{ position: "absolute", top: "380px" }}>
         <button
           onClick={() => {
-            clearInterval(timerRef.current);
             handleClick("initial");
           }}
           style={{

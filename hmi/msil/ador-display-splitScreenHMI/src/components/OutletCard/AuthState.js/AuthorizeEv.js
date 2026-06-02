@@ -41,8 +41,8 @@ const AuthorizeEv = ({ status, outlet, handleClick }) => {
   const [allowToShowAlert, setAllowToShowAlert] = useState(false);
   const [waitingForOcppMsg, setWaitingForOcppMsg] = useState(false);
   const [showNumpad, setShowNumpad] = useState(false);
-  const [isAutocharging, setIsAutocharging] = useState(true);
-  const [autochargeauth, setAutochargeauth] = useState(true);
+  const [isAutocharging, setIsAutocharging] = useState(false);
+  const [autochargeauth, setAutochargeauth] = useState(false);
   const [reservationStartTime, setReservationStartTime] = useState(null);
   const [reservationEndTime, setReservationEndTime] = useState(null);
   const [showAuthMode, setShowAuthMode] = useState(true);
@@ -350,9 +350,6 @@ const AuthorizeEv = ({ status, outlet, handleClick }) => {
     };
   }, [authResHandler, fetchData, selectedState, handleRemoteAuth]);
 
-  useEffect(() => {
-    setAutocharge();
-  }, []);
 
   return (
     <Row>

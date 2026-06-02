@@ -1,4 +1,5 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
+import ReactDOM from "react-dom";
 import * as S from "./style";
 import gunIcon from "../../assets/icons/gun_icon.png";
 import InitialState from "./InitialState/InitialState";
@@ -15,8 +16,10 @@ import {
   timeout,
   inStoppingProccess,
   isNeedUnplug,
+  isActive,
   deAuthorize,
-  isHandshaking
+  isHandshaking,
+  reAuth
 } from "../../Utilis/UtilityFunction";
 import AuthorizeEv from "./AuthState.js/AuthorizeEv";
 import CheckPoints from "./CheckpointScreen/Checkpoints";
@@ -37,6 +40,25 @@ function OutletCard({ eachOutlet, status, onStatusChange }) {
   const dispatch = useDispatch();
   const { addOrUpdateSessionToDb } = useSessionDb();
   const [isTimeout, setIsTimeout] = useState(false)
+  const [showSessionOverlay, setShowSessionOverlay] = useState(false)
+  const [sessionOutletSnapshot, setSessionOutletSnapshot] = useState(null)
+  const reAuthTimestampRef = useRef(undefined)
+  const showSessionOverlayRef = useRef(false)
+
+  const triggerSessionOverlay = (outlet) => {
+    if (!showSessionOverlayRef.current) {
+      showSessionOverlayRef.current = true;
+      setShowSessionOverlay(true);
+      setSessionOutletSnapshot({ ...outlet });
+    }
+  };
+
+  const handleSessionDone = () => {
+    showSessionOverlayRef.current = false;
+    setShowSessionOverlay(false);
+    setSessionOutletSnapshot(null);
+    handleClick("initial");
+  };
 
   const Store = useSelector((state) => state.charging);
   const {
@@ -80,8 +102,8 @@ function OutletCard({ eachOutlet, status, onStatusChange }) {
       const { showAlert, showEStop, errorCode } = errorObj || {};
       const needsEStopRouting = showEStop && eStopRoutingHandled;
       if (needsEStopRouting) {
-        if (status === "sessionresult") handleClick("initial");
-        else if (status !== "initial") handleClick("unplug");
+        // Don't route away from sessionresult — session overlay handles that independently
+        if (status !== "initial" && status !== "sessionresult") handleClick("unplug");
         dispatch(setEStopRoutingHandled(true));
       }
       if (!showEStop && eStopRoutingHandled) {
@@ -90,8 +112,8 @@ function OutletCard({ eachOutlet, status, onStatusChange }) {
 
       const needsPowerFailureRouting = errorCode === "powerloss" && powerFailureRoutingHandled;
       if (needsPowerFailureRouting) {
-        if (status === "sessionresult") handleClick("initial");
-        else if (status !== "initial") handleClick("unplug");
+        // Don't route away from sessionresult — session overlay handles that independently
+        if (status !== "initial" && status !== "sessionresult") handleClick("unplug");
         dispatch(setPowerFailureRoutingHandled(true));
       }
       if (errorCode !== "powerloss" && powerFailureRoutingHandled) {
@@ -114,8 +136,32 @@ function OutletCard({ eachOutlet, status, onStatusChange }) {
     //   chargerState,
     //   config,
     // } = this.state;
-    const { pilot, auth, phs, user, evsestat } = eachOutlet;
+    const { pilot, auth, phs, user, evsestat, sessionPending } = eachOutlet;
     // const { pathname } = this.props.location;
+
+    // Reset session overlay when a new active session starts
+    if (showSessionOverlayRef.current && isActive(eachOutlet)) {
+      showSessionOverlayRef.current = false;
+      setShowSessionOverlay(false);
+      setSessionOutletSnapshot(null);
+    }
+
+    // ReAuth: pilot=1 + sessionPending + auth → re-send auth after 15s (matches common HMI logic)
+    const needsReAuth = pilot === 1 && sessionPending === true && auth === true;
+    if (needsReAuth) {
+      if (reAuthTimestampRef.current === undefined) {
+        reAuthTimestampRef.current = Date.now();
+      } else if (reAuthTimestampRef.current !== Infinity &&
+                 Date.now() - reAuthTimestampRef.current >= 15000) {
+        if (user) {
+          console.log(`[ReAuth] Outlet ${eachOutlet.outlet} - pilot=1 for 15s, re-sending auth`);
+          reAuth(config?.API, user, eachOutlet.outlet, config?.comboMode, chargingMode);
+        }
+        reAuthTimestampRef.current = Infinity;
+      }
+    } else {
+      reAuthTimestampRef.current = undefined;
+    }
 
     const stoppingOutlet = chargerState.find((state) =>
       inStoppingProccess(state)
@@ -149,8 +195,10 @@ function OutletCard({ eachOutlet, status, onStatusChange }) {
     if (status === "auth" && pilot === 0) {
       handleClick("plugev");
     } else if (status === "charging" && pilot === 0) {
+      triggerSessionOverlay(eachOutlet);
       handleClick("sessionresult");
     } else if (status === "charging" && (evsestat === 5 || pilot === 7)) {
+      triggerSessionOverlay(eachOutlet);
       handleClick("sessionresult");
     } else if (
       !inStoppingProccess(eachOutlet) &&
@@ -176,6 +224,7 @@ function OutletCard({ eachOutlet, status, onStatusChange }) {
       if (isTimeout) {
         handleClick("initial");
       } else {
+        triggerSessionOverlay(eachOutlet);
         handleClick("sessionresult");
       }
     } else if (
@@ -186,8 +235,9 @@ function OutletCard({ eachOutlet, status, onStatusChange }) {
       pilot < 3 &&
       phs < 3
     ) {
+      triggerSessionOverlay(eachOutlet);
       handleClick('sessionresult');
-    } else if (status === "plugev" && pilot >= 1 && pilot <= 4 && !auth) {
+    } else if ((status === "initial" || status === "plugev") && pilot >= 1 && pilot <= 4 && !auth) {
       handleClick("auth");
     } else if (
       status === "checkpoints" &&
@@ -220,7 +270,7 @@ function OutletCard({ eachOutlet, status, onStatusChange }) {
   }, [Store]);
 
   return (
-    <div style={S.boxStyle(theme)}>
+    <div style={{ ...S.boxStyle(theme), position: "relative" }}>
       <div style={{ display: "flex", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center" }}>
           <img style={S.gun_icon} src={gunIcon} alt="" />
@@ -235,7 +285,7 @@ function OutletCard({ eachOutlet, status, onStatusChange }) {
         </div>
       </div>
 
-      <div>
+      <div style={{ position: "relative" }}>
         {status === "initial" && (
           <InitialState eachOutlet={eachOutlet} handleClick={handleClick} chargingStatus={chargingStatus}/>
         )}
@@ -263,8 +313,76 @@ function OutletCard({ eachOutlet, status, onStatusChange }) {
         {status === "stopcharging" && <StopCharging eachOutlet={eachOutlet} handleClick={handleClick} />}
         {status === "stopcharger" && <PostCharging eachOutlet={eachOutlet} handleClick={handleClick} />}
         {status === "unplug" && <ChargingComplete eachOutlet={eachOutlet} handleClick={handleClick} status={status}/>}
-        {status === "sessionresult" && <SessionResult outlet={eachOutlet}  handleClick={handleClick} />}
+
+        {eachOutlet.auth && eachOutlet.sessionPending && (
+          <div style={{
+            position: "absolute",
+            top: 0, left: 0, width: "100%", height: "100%",
+            backgroundColor: "rgba(0, 0, 0, 0.7)",
+            zIndex: 10,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: "8px",
+          }}>
+            <div style={{
+              backgroundColor: theme === "dark" ? "#1e1e1e" : "#fff",
+              borderRadius: "16px",
+              padding: "28px 36px",
+              textAlign: "center",
+              boxShadow: theme === "dark" ? "0 8px 32px rgba(0,0,0,0.6)" : "0 8px 32px rgba(0,0,0,0.25)",
+              border: theme === "dark" ? "1px solid rgba(24,144,255,0.3)" : "1px solid #2e7d32",
+              width: "80%",
+            }}>
+              <div style={{
+                width: "60px", height: "60px", borderRadius: "50%",
+                backgroundColor: "#2e7d32", margin: "0 auto",
+                display: "flex", justifyContent: "center", alignItems: "center",
+              }}>
+                <div style={{
+                  width: "14px", height: "28px",
+                  borderRight: "5px solid #fff", borderBottom: "5px solid #fff",
+                  transform: "rotate(45deg)", marginTop: "-8px",
+                }} />
+              </div>
+              <div style={{
+                marginTop: "16px", fontSize: "22px", fontWeight: "700",
+                color: "#2e7d32",
+              }}>
+                Authorized EV
+              </div>
+              <div style={{ marginTop: "8px", fontSize: "16px", color: theme === "dark" ? "#aaa" : "#555" }}>
+                Please wait for charging to start
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+
+      {showSessionOverlay && ReactDOM.createPortal(
+        <div style={{
+          position: "fixed",
+          top: 0, left: 0, width: "100%", height: "100vh",
+          background: "rgba(0, 0, 0, 0.3)",
+          backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
+          zIndex: 200,
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          flexDirection: "column",
+        }}>
+          <div style={{ position: "relative", padding: "20px", maxWidth: "95vw", pointerEvents: "auto" }}>
+            <SessionResult
+              outlet={sessionOutletSnapshot || eachOutlet}
+              outletId={eachOutlet.outlet}
+              handleClick={handleSessionDone}
+            />
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

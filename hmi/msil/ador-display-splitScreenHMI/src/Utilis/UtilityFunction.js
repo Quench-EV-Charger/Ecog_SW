@@ -696,6 +696,37 @@ export const postRFID = async (API, rfid) => {
 };
 
 
+export const reAuth = async (API, idTag, outletId, isComboMode, chargingMode) => {
+  if (!API || !idTag) return;
+  try {
+    const headers = new Headers();
+    headers.append("Content-Type", "application/json");
+    if (isComboMode && chargingMode > 0) {
+      await fetch(`${API}/services/rfid/v2/authdetails`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ idTAG: String(idTag), outletId: 0 }),
+      });
+    } else {
+      if (outletId) {
+        await fetch(`${API}/services/rfid/outletId`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ outletId: Number(outletId) }),
+        });
+      }
+      await fetch(`${API}/services/rfid/idtag`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ idTag }),
+      });
+    }
+    console.log(`[ReAuth] Outlet ${outletId} - re-sent auth for idTag: ${idTag}`);
+  } catch (err) {
+    console.error("[ReAuth] Failed:", err);
+  }
+};
+
 export const clearRfid = async (API) => {
   if (!API) return;
   const myHeaders = new Headers();

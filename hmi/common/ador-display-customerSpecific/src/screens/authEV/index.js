@@ -411,7 +411,7 @@ class AuthorizeEv extends Component {
     }
 
     // Show popup as soon as auth becomes true (guard prevents repeated setState)
-    if (!this.state.authConfirmed && selectedState?.auth) {
+    if (!this.state.authConfirmed && selectedState?.auth && selectedState?.sessionPending) {
       this.setState({ authConfirmed: true });
     }
   }

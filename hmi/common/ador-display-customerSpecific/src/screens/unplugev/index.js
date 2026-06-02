@@ -4,7 +4,6 @@ import { withRouter } from "react-router-dom";
 
 import MainContext from "../../providers/MainContext";
 import Navbar from "../../components/navbar";
-import AlertBox from "../../components/AlertBox";
 import TimeoutRouter from "../../components/TimeoutRouter";
 import DateBox from "../../components/DateBox";
 
@@ -21,16 +20,7 @@ const EmptyRow = () => <Row style={{height: "10vh"}}/>;
 class UnplugEV extends Component {
   static contextType = MainContext;
 
-  state = {
-    isTimeout: null,
-  };
-
   componentDidMount() {
-    const search = this.props.location.search;
-    const params = new URLSearchParams(search);
-    const isTimeout = params.get("isTimeout");
-    this.setState({ isTimeout });
-
     if (this.context.config?.isRfidFlow) {
       if (this.context.shouldGoHomeOnSessionStart)
         this.context.setShouldGoHomeOnSessionStart(false);
@@ -48,14 +38,6 @@ class UnplugEV extends Component {
               heading={context.t("UNPLUG_EV")}
               theme="light"
               headerColor="#00B051"
-            />
-            <AlertBox
-              iconType="warning"
-              display={this.state.isTimeout}
-              onClose={() => this.setState({ isTimeout: null })}
-              errorMessage={context.t("UNPLUG_TIMEOUT")}
-              width="55.859vw"
-              height="32.813vw"
             />
             <Row style={S.UnplugEVPage} data-testid="unplug-ev-page">
               <EmptyRow />

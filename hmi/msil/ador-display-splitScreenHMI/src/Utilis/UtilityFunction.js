@@ -695,6 +695,7 @@ export const postRFID = async (API, rfid) => {
   }
 };
 
+
 export const clearRfid = async (API) => {
   if (!API) return;
   const myHeaders = new Headers();

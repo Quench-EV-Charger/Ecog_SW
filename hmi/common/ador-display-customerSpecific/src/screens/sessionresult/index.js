@@ -33,70 +33,40 @@ class SessionResult extends Component {
     transaction: null,
   };
 
-  componentDidMount = async () => {
-    const { changePath } = this.context;
+  componentDidMount = () => {
     const search = this.props.location?.search;
     const params = new URLSearchParams(search);
-    // const user = params.get("user");
-    // console.log(user)
-    // if (!user) {
-    //   // this.setState({ selectedMode: "0" });
-    //   // localStorage.setItem("selectedMode", "0");
-    //   // this.context.publishChargingMode("0");
-    //   clearTimeout(this.state.revertTimer);
-    //   changePath("/");
-    // }
-    // console.log(user, outlet)
-    // let sessionDetails = await fetchSessionByOutletAndUser(outlet, user);
-    // if (!sessionDetails || !sessionDetails?.user) {
-    //   // this.setState({ selectedMode: "0" });
-    //   // localStorage.setItem("selectedMode", "0");
-    //   // this.context.publishChargingMode("0");
-    //   clearTimeout(this.state.revertTimer);
-    //   changePath("/");
-    // }
-    // console.log(sessionDetails)
-
-    // const isAC = sessionDetails?.outletType === OutletType.AC;
-    // const timeTaken = msToReadableTime(
-    //   sessionDetails?.sessionStop - sessionDetails?.sessionStart
-    // );
-
-    // if (sessionDetails?.startPercentage) {
-    //   sessionDetails.startPercentage =
-    //     sessionDetails?.startPercentage?.toFixed(0);
-    // }
-    // if (sessionDetails?.percentage) {
-    //   sessionDetails.percentage = sessionDetails?.percentage?.toFixed(0);
-    // }
-    // sessionDetails = { ...sessionDetails, timeTaken };
-
     const iswentwrong = params.get("iswentwrong");
+    this.isMountedFlag = true;
+    this._pollTransaction(iswentwrong);
+  };
 
-    const API = this?.context?.config?.API;
-
+  _pollTransaction = async (iswentwrong) => {
+    const API = "http://127.0.0.1:3001";
     const myHeaders = new Headers();
     myHeaders.append("db-identifer", "sessions");
-
-    const requestOptions = {
-      method: "GET",
-      headers: myHeaders,
-    };
+    const requestOptions = { method: "GET", headers: myHeaders };
 
     try {
       const response = await fetch(`${API}/db/items`, requestOptions);
       const data = await response.json();
       const transaction = data[data.length - 1];
-      console.log(transaction)
-      this.setState({ transaction });
+      if (transaction && this.isMountedFlag) {
+        this.setState({ transaction, iswentwrong });
+        return;
+      }
     } catch (error) {
-      console.error("Error fetching data:", error);
-      this.setState({ transaction: null ,iswentwrong}); // Or handle error in another way
+      console.error("Error fetching session data:", error);
+    }
+
+    if (this.isMountedFlag) {
+      this._pollTimer = setTimeout(() => this._pollTransaction(iswentwrong), 2000);
     }
   };
 
   componentWillUnmount() {
-    this.isMountedFlag = false; // Set the flag to false when the component unmounts
+    this.isMountedFlag = false;
+    clearTimeout(this._pollTimer);
   }
 
   handleDoneClick = () => {

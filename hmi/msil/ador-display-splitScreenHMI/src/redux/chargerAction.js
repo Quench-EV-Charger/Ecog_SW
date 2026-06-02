@@ -19,7 +19,10 @@ import {
   getCleanedPreventAutoRouteOutlets,
   getFirstOutletIdToAllowAutoRoute,
 } from "../Utilis/UtilityFunction";
-import { timeout, checkErrors } from "../Utilis/UtilityFunction";
+import { timeout, checkErrors, deAuthorize } from "../Utilis/UtilityFunction";
+
+const authTimestamps = {}; // track when auth became true per outlet for deauth timeout
+const sessionInProcess = {}; // track if a session was in process (phs > 2) per outlet
 
 export const fetchChargerState = () => async (dispatch, getStateFn) => {
   const { charging } = getStateFn();
@@ -155,4 +158,44 @@ export const fetchChargerState = () => async (dispatch, getStateFn) => {
       shouldDisplay: 1,
     })
   );
+
+  const connectionTimeOut = charging.config?.standard?.ConnectionTimeOut || 60;
+  const timeoutMs = connectionTimeOut * 1000;
+
+  chargerState.forEach((outlet) => {
+    const outletId = outlet?.outlet;
+
+    // Mark session as in-process once phs goes above 2 (active charging started)
+    if (outlet?.phs > 2) {
+      sessionInProcess[outletId] = true;
+    }
+
+    // If a session was in process and gun is now disconnected, deauth immediately
+    if (sessionInProcess[outletId] && outlet?.pilot === 0) {
+      if (outlet?.auth) {
+        console.log(`[DeAuth] Outlet ${outletId} - session ended, pilot=0, sending deauth`);
+        deAuthorize(API, outlet);
+      }
+      sessionInProcess[outletId] = false;
+      delete authTimestamps[outletId];
+      return;
+    }
+
+    // Connection timeout deauth: authorized but no session started within timeout
+    const isAvailableWithAuth = outlet?.auth && !outlet?.sessionPending && outlet?.pilot === 0;
+
+    if (isAvailableWithAuth) {
+      if (!authTimestamps[outletId]) {
+        authTimestamps[outletId] = Date.now();
+      } else if (Date.now() - authTimestamps[outletId] >= timeoutMs) {
+        if (outlet?.auth) {
+          console.log(`[DeAuth] Outlet ${outletId} - auth timeout reached, sending deauth`);
+          deAuthorize(API, outlet);
+        }
+        delete authTimestamps[outletId];
+      }
+    } else {
+      delete authTimestamps[outletId];
+    }
+  });
 };

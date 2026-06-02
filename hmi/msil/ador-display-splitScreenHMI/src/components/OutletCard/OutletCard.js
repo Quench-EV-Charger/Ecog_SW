@@ -160,8 +160,10 @@ function OutletCard({ eachOutlet, status, onStatusChange }) {
       if (status === "auth") {
         handleClick('unplug')
         setIsTimeout(true)
-        // this.state.changePath(/unplugev?isTimeout=${true}); Need to be checked 
-        deAuthorize(config?.API, eachOutlet);
+        // this.state.changePath(/unplugev?isTimeout=${true}); Need to be checked
+        if (!eachOutlet?.sessionPending) {
+          // deAuthorize(config?.API, eachOutlet);
+        }
       } else if (status === "plugev" || status === "charging") {
         handleClick("unplug");
       }

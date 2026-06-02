@@ -24,7 +24,7 @@ class Transactions extends Component {
     }
 
     fetchTransactions = async () => {
-        const API = this?.context?.config?.API;
+        const API = "http://127.0.0.1:3001";
         try {
             const myHeaders = new Headers();
             myHeaders.append("db-identifer", "sessions");

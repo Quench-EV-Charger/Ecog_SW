@@ -19,6 +19,7 @@ import {
   buildConfig,
   clearRfid,
   deAuthorize,
+  reAuth,
   findDifferentElementInArray,
   getAllOutletsAsOutOfOrder,
   getCleanedPreventAutoRouteOutlets,
@@ -64,6 +65,9 @@ class ContextProvider extends Component {
   prevSelectedState = null;
   sessionSummaryPopupProcessing = false; // ✅ Sync flag to prevent re-entry
   displayedSessionHash = null; // ✅ Track hash of last displayed session to prevent re-rendering
+  authTimestamps = {}; // track when auth became true per outlet for deauth timeout
+  sessionInProcess = {}; // track if a session was in process (phs > 2) per outlet
+  reAuthTimestamps = {}; // track when pilot=1+active-session condition started per outlet for 15s delay
 
   state = {
     t: this.props.t,
@@ -187,6 +191,7 @@ class ContextProvider extends Component {
       changePath,
       firstOutletIdToAllowAutoRoute,
       config,
+      sessionPending,
     } = this.state;
     const { pilot, auth, phs, user, evsestat } = selectedState;
     const { pathname } = this.props.location;
@@ -242,8 +247,10 @@ class ContextProvider extends Component {
       pathname !== "/unplugev"
     ) {
       if (pathname === "/authorize") {
-        this.state.changePath(`/unplugev?isTimeout=${true}`);
-        deAuthorize(config?.API, selectedState);
+        this.state.changePath("/unplugev");
+        if (!sessionPending) {
+          // deAuthorize(config?.API, selectedState);
+        }
       } else if (pathname === "/plugev" || pathname === "/charging") {
         this.state.changePath("/unplugev");
       }
@@ -252,13 +259,9 @@ class ContextProvider extends Component {
       !isNeedUnplug(selectedState) &&
       pathname === "/unplugev"
     ) {
-      if (this.props.location?.search === "?isTimeout=true") {
-        this.state.changePath("/");
-      } else {
-        // After unplugging - show session summary popup
-        this.showSessionSummaryAfterCharging(selectedState, false);
-        this.state.changePath("/");
-      }
+      // After unplugging - show session summary popup
+      this.showSessionSummaryAfterCharging(selectedState, false);
+      this.state.changePath("/");
     } else if (
       !inStoppingProccess(selectedState) &&
       !isNeedUnplug(selectedState) &&
@@ -292,6 +295,65 @@ class ContextProvider extends Component {
     }
 
     this.setState({ stoppingOutlet: !!stoppingOutlet });
+
+    const { connectionTimeOut } = this.state;
+    const timeoutMs = (connectionTimeOut || 60) * 1000;
+
+    chargerState.forEach((outlet) => {
+      const outletId = outlet?.outlet;
+
+      // Re-auth on reconnect: gun plugged back in (pilot=1) while session is still pending and authorized
+      // Condition must hold for 15s before re-auth is sent
+      const needsReAuth = outlet?.pilot === 1 && outlet?.sessionPending === true && outlet?.auth === true;
+      if (needsReAuth) {
+        if (this.reAuthTimestamps[outletId] === undefined) {
+          this.reAuthTimestamps[outletId] = Date.now();
+        } else if (this.reAuthTimestamps[outletId] !== Infinity &&
+                   Date.now() - this.reAuthTimestamps[outletId] >= 15000) {
+          const idTag = outlet?.user;
+          if (idTag) {
+            console.log(`[ReAuth] Outlet ${outletId} - pilot=1 for 15s, re-sending auth idTag: ${idTag}`);
+            reAuth(config?.API, idTag, config?.comboMode, this.state.chargingMode);
+          }
+          this.reAuthTimestamps[outletId] = Infinity; // mark sent, don't send again until condition resets
+        }
+      } else {
+        delete this.reAuthTimestamps[outletId];
+      }
+
+      // Mark session as in-process once phs goes above 2 (active charging started)
+      if (outlet?.phs > 2) {
+        this.sessionInProcess[outletId] = true;
+      }
+
+      // If a session was in process and gun is now disconnected, deauth immediately
+      if (this.sessionInProcess[outletId] && outlet?.pilot === 0) {
+        if (outlet?.auth) {
+          console.log(`[DeAuth] Outlet ${outletId} - session ended, pilot=0, sending deauth`);
+          deAuthorize(config?.API, outlet);
+        }
+        this.sessionInProcess[outletId] = false;
+        delete this.authTimestamps[outletId];
+        return;
+      }
+
+      // Connection timeout deauth: authorized but no session started within timeout
+      const isAvailableWithAuth = outlet?.auth && !outlet?.sessionPending && outlet?.pilot === 0;
+
+      if (isAvailableWithAuth) {
+        if (!this.authTimestamps[outletId]) {
+          this.authTimestamps[outletId] = Date.now();
+        } else if (Date.now() - this.authTimestamps[outletId] >= timeoutMs) {
+          if (outlet?.auth) {
+            console.log(`[DeAuth] Outlet ${outletId} - auth timeout reached, sending deauth`);
+            deAuthorize(config?.API, outlet);
+          }
+          delete this.authTimestamps[outletId];
+        }
+      } else {
+        delete this.authTimestamps[outletId];
+      }
+    });
   };
 
   fetchState = async () => {
@@ -1293,7 +1355,7 @@ class ContextProvider extends Component {
   // Fetch finalized sessions from backend database
   fetchSessionsFromBackend = async () => {
     try {
-      const response = await fetch("http://10.20.27.50:3001/db/items", {
+      const response = await fetch("http://127.0.0.1:3001/db/items", {
         method: "GET",
         headers: {
           "db-identifer": "sessions",

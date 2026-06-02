@@ -27,8 +27,9 @@ class ReservationNotification extends React.Component {
     };
 
     checkReservation = async () => {
+        const { outletId } = this.props;
+        if (!this.context.config?.API || !outletId) return;
         try {
-            const { outletId } = this.props;
             const { chargerState } = this.context;
             const details = await reservationHour(this.context.config?.API, outletId);
             if (details) {
@@ -42,10 +43,10 @@ class ReservationNotification extends React.Component {
     };
 
     checkReservationDetails = async () => {
-
+        const { outletId } = this.props;
+        if (!this.context.config?.API || !outletId) return;
         try {
             const { chargerState } = this.context;
-            const { outletId } = this.props;
             const resp = await fetch(`${this.context.config?.API}/services/ocpp/reservations`);
             const json = await resp.json();
             console.log("Raw Reservation API:", json);

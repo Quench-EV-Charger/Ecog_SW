@@ -4,8 +4,8 @@
     Purpose: Stop time for errors/alerts
     Created: 18-06-2024
     Contact: quenchdev4@adordigatron.com / quenchdev5@adordigatron.com
-    Revision version - 1.3
-    Revision Date: 28-05-2026
+    Revision version - 1.4
+    Revision Date: 02-06-2026
     ChangeLogs:
       v1.1 - Restructured to use mapped values for DB search.
       v1.2 - Merged imdFaultyErr_controller1/2 into single imdFaultyErr (code 78).
@@ -14,6 +14,7 @@
              dcEnergyStuckErr_1 uses vendor code 92 (ERR_DC_ENERGY_STUCK Gun 1).
              dcEnergyStuckErr_2 uses vendor code 93 (ERR_DC_ENERGY_STUCK Gun 2).
              Vendor codes 82/83 remain exclusive to cabinetTemperatureErr/outletTemperatureErr.
+      v1.4 - Fixed dcEnergyStuckErr_1/2 vendor codes to 50092/50093 to match error-reporting.js trip codes.
 /***********************************/
 
 // Globals:
@@ -39,8 +40,8 @@ const vendorErrorMapping = {
   "imdResistanceErr_2": "75", // IMDResistance
   "imdFaultyErr": "78", // IMDFault (charger-level, both controllers)
   "ac_em_fail": "80", // ACEnergyMeterFailure
-  "dcEnergyStuckErr_1": "92", // DCEnergyStuck Gun 1
-  "dcEnergyStuckErr_2": "93" // DCEnergyStuck Gun 2
+  "dcEnergyStuckErr_1": "50092", // DCEnergyStuck Gun 1
+  "dcEnergyStuckErr_2": "50093" // DCEnergyStuck Gun 2
 };
 
 

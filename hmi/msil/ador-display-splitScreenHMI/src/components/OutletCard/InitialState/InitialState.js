@@ -42,6 +42,7 @@ function InitialState(props) {
   const outletId = Number(eachOutlet.outlet);
 
   const checkReservationDetails = async () => {
+    if (!config?.API || !outletId) return;
     try {
       const details = await reservedDetails(config?.API, outletId);
       const outletState = chargerState[outletId - 1];

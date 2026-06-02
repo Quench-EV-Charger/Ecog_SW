@@ -45,20 +45,36 @@ const SessionResult = ({ handleClick }) => {
 
 
   useEffect(() => {
+    const API = store?.config?.API;
+    let cancelled = false;
+
     const fetchTransaction = async () => {
-      const API = store?.config?.API;
       try {
         const res = await fetch(`${API}/db/items`, {
           method: 'GET',
           headers: { 'db-identifer': 'sessions' },
         });
         const data = await res.json();
-        setTransaction(data[data.length - 1]);
+        const last = data[data.length - 1];
+        if (!cancelled && last) {
+          setTransaction(last);
+          return true;
+        }
       } catch (err) {
         console.error('Error:', err);
       }
+      return false;
     };
-    fetchTransaction();
+
+    const poll = async () => {
+      const found = await fetchTransaction();
+      if (!found && !cancelled) {
+        setTimeout(poll, 2000);
+      }
+    };
+
+    poll();
+    return () => { cancelled = true; };
   }, [store?.config?.API]);
 
   const handleDoneClick = () => {

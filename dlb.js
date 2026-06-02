@@ -1,4 +1,4 @@
-// Version 1.0.0
+// Version 1.0.2 merged
 
 // import fetch from "node-fetch";
 
@@ -19,6 +19,13 @@ const config = {
     debug: true,
     MAX_POWER_PER_MODULE: 30000, // 30kW per module, should read from state object, convMaxPower
 };
+
+// Thermal power capping (merged from powercap.js)
+const tempThreshold = 70;
+const kP = 5;
+let currentTemp = 30;
+let updatePLimit = [true, true];
+let plimit = 180000;
 
 // Constants
 const MODULE_CONFIGS = {
@@ -328,13 +335,58 @@ const MODULE_CONFIGS = {
             },
             STATE_10: {
                 name: 'state_10',
-                description: '3 modules to outlet A, 1 to outlet B',
-                allocation: { outlet1: "1,2,3", outlet2: "1" }
+                description: '2 modules to outlet A, 2 to outlet B',
+                allocation: { outlet1: "1,2", outlet2: "1,2" }
             },
             STATE_11: {
                 name: 'state_11',
+                description: '3 module to outlet A, 1 to outlet B',
+                allocation: { outlet1: "1,2,3", outlet2: "1" }
+            },
+            STATE_12: {
+                name: 'state_12',
                 description: '1 module to outlet A, 3 to outlet B',
                 allocation: { outlet1: "1", outlet2: "1,2,3" }
+            },
+            STATE_13: {
+                name: 'state_13',
+                description: '1 module to outlet A, 0 to outlet B',
+                allocation: { outlet1: "1", outlet2: "" }
+            },
+            STATE_14: {
+                name: 'state_14',
+                description: '2 module to outlet A, 0 to outlet B',
+                allocation: { outlet1: "1,2", outlet2: "" }
+            },
+            STATE_15: {
+                name: 'state_15',
+                description: '3 module to outlet A, 0 to outlet B',
+                allocation: { outlet1: "1,2,3", outlet2: "" }
+            },
+            STATE_16: {
+                name: 'state_16',
+                description: '4 module to outlet A, 0 to outlet B',
+                allocation: { outlet1: "1,2,3,4", outlet2: "" }
+            },
+            STATE_17: {
+                name: 'state_17',
+                description: '0 module to outlet A, 1 to outlet B',
+                allocation: { outlet1: "", outlet2: "1" }
+            },
+            STATE_18: {
+                name: 'state_18',
+                description: '0 module to outlet A, 2 to outlet B',
+                allocation: { outlet1: "", outlet2: "1,2" }
+            },
+            STATE_19: {
+                name: 'state_19',
+                description: '0 module to outlet A, 3 to outlet B',
+                allocation: { outlet1: "", outlet2: "1,2,3" }
+            },
+            STATE_20: {
+                name: 'state_20',
+                description: '0 module to outlet A, 4 to outlet B',
+                allocation: { outlet1: "", outlet2: "1,2,3,4" }
             }
         }
     },
@@ -398,18 +450,88 @@ const MODULE_CONFIGS = {
             },
             STATE_11: {
                 name: 'state_11',
-                description: '3 modules to outlet A, 1 to outlet B',
-                allocation: { outlet1: "1,2,3", outlet2: "1" }
+                description: '2 modules to outlet A, 2 to outlet B',
+                allocation: { outlet1: "1,2", outlet2: "1,2" }
             },
             STATE_12: {
                 name: 'state_12',
-                description: '1 module to outlet A, 3 to outlet B',
-                allocation: { outlet1: "1", outlet2: "1,2,3" }
+                description: '3 module to outlet A, 1 to outlet B',
+                allocation: { outlet1: "1,2,3", outlet2: "1" }
             },
             STATE_13: {
                 name: 'state_13',
-                description: '2 modules to outlet A, 2 to outlet B',
-                allocation: { outlet1: "1,2", outlet2: "1,2" }
+                description: '1 modules to outlet A, 3 to outlet B',
+                allocation: { outlet1: "1", outlet2: "1,2,3" }
+            },
+            STATE_14: {
+                name: 'state_14',
+                description: '1 modules to outlet A, 4 to outlet B',
+                allocation: { outlet1: "1", outlet2: "1,2,3,4" }
+            },
+            STATE_15: {
+                name: 'state_15',
+                description: '4 modules to outlet A, 1 to outlet B',
+                allocation: { outlet1: "1,2,3,4", outlet2: "1" }
+            },
+            STATE_16: {
+                name: 'state_16',
+                description: '2 modules to outlet A, 3 to outlet B',
+                allocation: { outlet1: "1,2", outlet2: "1,2,3" }
+            },
+            STATE_17: {
+                name: 'state_17',
+                description: '3 modules to outlet A, 2 to outlet B',
+                allocation: { outlet1: "1,2,3", outlet2: "1,2" }
+            },
+            STATE_18: {
+                name: 'state_18',
+                description: '1 modules to outlet A, 0 to outlet B',
+                allocation: { outlet1: "1", outlet2: "" }
+            },
+            STATE_19: {
+                name: 'state_19',
+                description: '2 modules to outlet A, 0 to outlet B',
+                allocation: { outlet1: "1,2", outlet2: "" }
+            },
+            STATE_20: {
+                name: 'state_20',
+                description: '3 modules to outlet A, 0 to outlet B',
+                allocation: { outlet1: "1,2,3", outlet2: "" }
+            },
+            STATE_21: {
+                name: 'state_21',
+                description: '4 modules to outlet A, 0 to outlet B',
+                allocation: { outlet1: "1,2,3,4", outlet2: "" }
+            },
+            STATE_22: {
+                name: 'state_22',
+                description: '5 modules to outlet A, 0 to outlet B',
+                allocation: { outlet1: "1,2,3,4,5", outlet2: "" }
+            },
+            STATE_23: {
+                name: 'state_23',
+                description: '0 modules to outlet A, 1 to outlet B',
+                allocation: { outlet1: "", outlet2: "1" }
+            },
+            STATE_24: {
+                name: 'state_24',
+                description: '0 modules to outlet A, 2 to outlet B',
+                allocation: { outlet1: "", outlet2: "1,2" }
+            },
+            STATE_25: {
+                name: 'state_25',
+                description: '0 modules to outlet A, 3 to outlet B',
+                allocation: { outlet1: "", outlet2: "1,2,3" }
+            },
+            STATE_26: {
+                name: 'state_26',
+                description: '0 modules to outlet A, 4 to outlet B',
+                allocation: { outlet1: "", outlet2: "1,2,3,4" }
+            },
+            STATE_27: {
+                name: 'state_27',
+                description: '0 modules to outlet A, 5 to outlet B',
+                allocation: { outlet1: "", outlet2: "1,2,3,4,5" }
             }
         }
     }
@@ -448,20 +570,83 @@ setDLBStatesForMode(config.mode);
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
+ * Detects if the charger is noCombo by checking:
+ * 1. Module count (noCombo typically has 1 module)
+ * 2. Controller 2 accessibility (noCombo has no controller 2)
+ * @returns {Promise<boolean>} - True if noCombo charger
+ */
+function fetchWithTimeout(url, options) {
+    options = options || {};
+    const timeoutMs = typeof options.timeout === "number" ? options.timeout : 0;
+    const fetchOptions = Object.assign({}, options);
+    delete fetchOptions.timeout;
+
+    if (!timeoutMs) return fetch(url, fetchOptions);
+
+    return Promise.race([
+        fetch(url, fetchOptions),
+        new Promise((_, reject) => {
+            const err = new Error("Request timed out");
+            err.code = "ETIMEDOUT";
+            setTimeout(() => reject(err), timeoutMs);
+        })
+    ]);
+}
+
+const isNoComboCharger = async () => {
+    try {
+        // Check 1: Get module count from config
+        const response = await fetch("http://10.20.27.100/api/system/userconfig");
+        if (!response.ok) {
+            logger.warn("Could not fetch config, defaulting to dual-outlet mode");
+            return false;
+        }
+        const cfg = await response.json();
+        const moduleCount = findKeyDeep(cfg, "num_of_modules") || 2;
+
+        // Check 2: Try to access controller 2
+        let controller2Exists = false;
+        try {
+            // Construct controller 2 URL based on BASE_URL
+            let controller2Url = "http://10.20.27.101/api/system/userconfig";
+
+            const response2 = await fetchWithTimeout(controller2Url, { timeout: 2000 });
+            controller2Exists = response2.ok;
+        } catch (error) {
+            controller2Exists = false;
+        }
+
+        // Decision logic: noCombo = 1 module AND no controller 2
+        const isNoCombo = moduleCount === 1 && !controller2Exists;
+
+        logger.info(
+            `Charger detection: modules=${moduleCount}, controller2=${controller2Exists}, isNoCombo=${isNoCombo}`
+        );
+
+        return isNoCombo;
+    } catch (error) {
+        logger.error("Failed to detect charger type:", error);
+        return false; // Default to dual-outlet for safety
+    }
+};
+
+
+
+/**
  * Updates connection tracking to determine which gun was connected first
  * @param {Boolean} isOutlet1Connected - Current connection state of outlet 1
  * @param {Boolean} isOutlet2Connected - Current connection state of outlet 2
  */
 const updateConnectionTracking = (isOutlet1Connected, isOutlet2Connected) => {
     const currentTime = Date.now();
-    
+
     // Track outlet 1 connection changes
     if (isOutlet1Connected && !connectionTracker.outlet1.connected) {
         // Outlet 1 just connected
         connectionTracker.outlet1.connected = true;
         connectionTracker.outlet1.connectionTime = currentTime;
         connectionTracker.outlet1.justConnected = true;
-        
+
         if (!connectionTracker.firstConnectedOutlet) {
             connectionTracker.firstConnectedOutlet = 'outlet1';
             logger.info('Outlet 1 is the first gun connected');
@@ -471,7 +656,7 @@ const updateConnectionTracking = (isOutlet1Connected, isOutlet2Connected) => {
         connectionTracker.outlet1.connected = false;
         connectionTracker.outlet1.connectionTime = null;
         connectionTracker.outlet1.justConnected = false;
-        
+
         // If outlet 1 was the first connected and it disconnects, reset priority
         if (connectionTracker.firstConnectedOutlet === 'outlet1' && !isOutlet2Connected) {
             connectionTracker.firstConnectedOutlet = null;
@@ -480,14 +665,14 @@ const updateConnectionTracking = (isOutlet1Connected, isOutlet2Connected) => {
             logger.info('Outlet 2 is now the priority gun after outlet 1 disconnected');
         }
     }
-    
+
     // Track outlet 2 connection changes
     if (isOutlet2Connected && !connectionTracker.outlet2.connected) {
         // Outlet 2 just connected
         connectionTracker.outlet2.connected = true;
         connectionTracker.outlet2.connectionTime = currentTime;
         connectionTracker.outlet2.justConnected = true;
-        
+
         if (!connectionTracker.firstConnectedOutlet) {
             connectionTracker.firstConnectedOutlet = 'outlet2';
             logger.info('Outlet 2 is the first gun connected');
@@ -497,7 +682,7 @@ const updateConnectionTracking = (isOutlet1Connected, isOutlet2Connected) => {
         connectionTracker.outlet2.connected = false;
         connectionTracker.outlet2.connectionTime = null;
         connectionTracker.outlet2.justConnected = false;
-        
+
         // If outlet 2 was the first connected and it disconnects, reset priority
         if (connectionTracker.firstConnectedOutlet === 'outlet2' && !isOutlet1Connected) {
             connectionTracker.firstConnectedOutlet = null;
@@ -506,7 +691,7 @@ const updateConnectionTracking = (isOutlet1Connected, isOutlet2Connected) => {
             logger.info('Outlet 1 is now the priority gun after outlet 2 disconnected');
         }
     }
-    
+
     // Reset if both are disconnected
     if (!isOutlet1Connected && !isOutlet2Connected) {
         connectionTracker.firstConnectedOutlet = null;
@@ -526,7 +711,7 @@ const getPriorityOutlet = () => {
 const logger = {
     info: (message, ...args) => console.log(`[INFO] ${message}`, ...args),
     error: (message, ...args) => console.error(`[ERROR] ${message}`, ...args),
-    warn: (message, ...args) => console.error(`[WARM] ${message}`, ...args),
+    warn: (message, ...args) => console.error(`[WARN] ${message}`, ...args),
     debug: (message, ...args) => {
         if (config.debug) {
             console.log(`[DEBUG] ${message}`, ...args);
@@ -553,6 +738,10 @@ const api = {
 
     postPowercap: async (controllerId, powerCapW) => {
         try {
+            const isNoCombo = expectedMode === 'noCombo';
+            if (isNoCombo && controllerId == '2') {
+                return
+            }
             const response = await fetch(`${config.BASE_URL}/outlets/${controllerId}/powercap`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -619,7 +808,7 @@ const api = {
             const response = await fetch(`${config.BASE_URL}/controllers/${controllerId}/api/proxy/iomapper/dlb/mode`);
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             const data = await response.json();
-            return data.current_mode ;
+            return data.current_mode;
         } catch (error) {
             logger.error('Failed to get DLB mode:', error);
             return null;
@@ -644,12 +833,15 @@ const api = {
         }
     },
 
-    getDLBModeFromBothConfigs: async () => {
+    getDLBModeFromBothConfigs: async (isNoCombo) => {
         try {
             const urls = [
-                "http://10.20.27.100/api/system/userconfig",
-                "http://10.20.27.101/api/system/userconfig"
+                `http://10.20.27.100/api/system/userconfig`,
             ];
+
+            if (!isNoCombo) {
+                urls.push('http://10.20.27.101/api/system/userconfig')
+            }
 
             // Run both requests in parallel
             const responses = await Promise.all(urls.map(url => fetch(url)));
@@ -673,6 +865,9 @@ const api = {
             });
 
             // Compare both
+            if (dlbModes[0] && isNoCombo) {
+                return dlbModes[0]
+            }
             if (dlbModes[0] && dlbModes[1] && dlbModes[0] === dlbModes[1]) {
                 return dlbModes[0];
             } else {
@@ -692,40 +887,25 @@ const api = {
                 "http://10.20.27.101/api/system/userconfig"
             ];
 
-            // Run both requests in parallel
-            const responses = await Promise.all(urls.map(url => fetch(url)));
+            const fetchConfig = async (url) => {
+                const res = await fetch(url);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return res.json();
+            };
 
-            // Validate responses
-            for (let i = 0; i < responses.length; i++) {
-                if (!responses[i].ok) {
-                    throw new Error("HTTP error! status: " + responses[i].status);
-                }
-            }
+            // Return as soon as ANY API succeeds (Promise.any not in Node 12)
+            const config = await promiseAny(urls.map((url) => fetchConfig(url)));
 
-            // Parse JSON
-            const configs = await Promise.all(responses.map(res => res.json()));
-
-            // Extract dlbMode safely
-           const moduleCounts = configs.map(cfg => {
-            const value = findKeyDeep(cfg, 'num_of_modules');
-            return value !== undefined ? value : 2;  // default = 2
-          });
-
-
-            // Compare both
-            if (moduleCounts[0] && moduleCounts[1] && moduleCounts[0] === moduleCounts[1]) {
-                return moduleCounts[0];
-            } else {
-                return 2; //by default return number of module 2;
-            }
-
+            const value = findKeyDeep(config, "num_of_modules");
+            return value !== undefined ? value : 2;
         } catch (error) {
-            logger.error("Failed to get dlbMode from both user configs:", error);
-            return 2; //by default return number of module 2;
+            // Comes here ONLY if BOTH APIs failed
+            logger.error("Both userconfig APIs failed:", error);
+            return 2;
         }
     },
 
-    fetchSmartChargingLimits: async() => {
+    fetchSmartChargingLimits: async () => {
         try {
             const response = await fetch(config.BASE_URL + '/services/ocpp/smartCharging/limits');
             if (!response.ok) {
@@ -739,25 +919,149 @@ const api = {
             logger.error('Error fetching smart charging limits:', error);
             return { limits: [], CPMaxProfileLimit: null };
         }
+    },
+
+    getIOState: async () => {
+        try {
+            const response = await fetch(`${config.BASE_URL}/controllers/1/api/system/iostate`, {
+                method: 'GET'
+            });
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            logger.error('Failed to get IOState:', error);
+            return null;
+        }
     }
 
 };
 
+// Promise.any polyfill (Node 12)
+function promiseAny(promises) {
+    return new Promise((resolve, reject) => {
+        const errors = [];
+        let pending = promises.length;
+
+        if (pending === 0) {
+            const err = new Error("All promises were rejected");
+            err.errors = errors;
+            return reject(err);
+        }
+
+        promises.forEach((p, i) => {
+            Promise.resolve(p)
+                .then(resolve)
+                .catch((e) => {
+                    errors[i] = e;
+                    pending -= 1;
+                    if (pending === 0) {
+                        const err = new Error("All promises were rejected");
+                        err.errors = errors; // similar to AggregateError.errors
+                        reject(err);
+                    }
+                });
+        });
+    });
+}
+
 function findKeyDeep(obj, targetKey) {
-  if (obj && typeof obj === 'object') {
-    for (const key in obj) {
-      if (key === targetKey) {
-        return obj[key];
-      }
-      // Recursively search in nested objects/arrays
-      const value = obj[key];
-      const result = findKeyDeep(value, targetKey);
-      if (result !== undefined) {
-        return result;
-      }
+    if (obj && typeof obj === 'object') {
+        for (const key in obj) {
+            if (key === targetKey) {
+                return obj[key];
+            }
+            // Recursively search in nested objects/arrays
+            const value = obj[key];
+            const result = findKeyDeep(value, targetKey);
+            if (result !== undefined) {
+                return result;
+            }
+        }
     }
-  }
-  return undefined;
+    return undefined;
+}
+
+
+function voltToTemp(volt) {
+    let res = 17682000 / (49200000 / volt - 27682);
+    let t = ((res / 1000) - 1) / 0.003859;
+
+    if (t > -273.15 && res > 0) {
+        return t;
+    } else {
+        return -273.15;
+    }
+}
+
+function applyThermalPowerCap(outlet1State, outlet2State, caps, ioState, isNoCombo) {
+    if (!ioState || !ioState.io) {
+        return caps;
+    }
+
+    const findValue = (id) => {
+        const entry = ioState.io.find(item => item.id === id);
+        return entry ? entry.value : null;
+    };
+
+    const tempA1 = voltToTemp(findValue('iio:device0/in_voltage0_raw'));
+    const tempA2 = voltToTemp(findValue('iio:device0/in_voltage1_raw'));
+    const tempB1 = voltToTemp(findValue('iio:device0/in_voltage2_raw'));
+    const tempB2 = voltToTemp(findValue('iio:device0/in_voltage3_raw'));
+
+    let cap1 = caps.cap1;
+    let cap2 = caps.cap2;
+
+    const states = [outlet1State, outlet2State];
+    const temps = [
+        Math.max(tempA1, tempA2),
+        Math.max(tempB1, tempB2)
+    ];
+
+    for (let i = 0; i < 2; i++) {
+        if (isNoCombo && i === 1) continue;
+        const outletState = states[i];
+        if (!outletState) continue;
+
+        currentTemp = Math.floor(temps[i]);
+
+        if (currentTemp >= tempThreshold) {
+            if (updatePLimit[i] === true) {
+                plimit = outletState.pv * outletState.pc;
+                updatePLimit[i] = false;
+                logger.debug(`updatePLimit set false for outlet ${i + 1}, PLimit: ${plimit}`);
+            }
+
+            let error = tempThreshold - currentTemp;
+            let pidOutput = parseInt(kP * error) * 1000;
+            let powerCap = Math.floor(plimit + pidOutput);
+
+            if (powerCap <= 0) {
+                powerCap = 1000;
+            }
+
+            const currentCap = i === 0 ? cap1 : cap2;
+            const finalCap = currentCap != null ? Math.min(currentCap, powerCap) : powerCap;
+
+            if (i === 0) {
+                if (finalCap !== cap1) {
+                    logger.info(`Thermal powercap applied on outlet 1: temp=${currentTemp}C, from ${cap1}W to ${finalCap}W`);
+                }
+                cap1 = finalCap;
+            } else {
+                if (finalCap !== cap2) {
+                    logger.info(`Thermal powercap applied on outlet 2: temp=${currentTemp}C, from ${cap2}W to ${finalCap}W`);
+                }
+                cap2 = finalCap;
+            }
+        } else {
+            if (outletState.phs === 1 && updatePLimit[i] !== true) {
+                updatePLimit[i] = true;
+                logger.debug(`updatePLimit reset true for outlet ${i + 1}`);
+            }
+        }
+    }
+
+    return { cap1, cap2 };
 }
 
 
@@ -770,10 +1074,18 @@ function selectOptimalState(isOutlet1Connected, isOutlet2Connected, outlet1Deman
         outlet2Demand
     })   // correct this
     const powerOfModule = effectivePowerPerModule || config.MAX_POWER_PER_MODULE
-    const POWER_MARGIN = 200;
+    const POWER_MARGIN = 5000;
 
     logger.warn("selectOptimalState");
     logger.warn(`[expectedMode] Mode: ${expectedMode} | [CONFIG] Mode: ${config.mode} | [DEMAND] Outlet 1: ${outlet1Demand} W | [DEMAND] Outlet 2: ${outlet2Demand} W`);
+
+    // noCombo mode: Simple 2-state logic (idle or active)
+    if (expectedMode === 'noCombo') {
+        if (!isOutlet1Connected || outlet1Demand < 100) {
+            return DLB_STATES['STATE_0'];  // Idle state
+        }
+        return DLB_STATES['STATE_1'];  // Active state with 1 module
+    }
 
     // Update connection tracking
     updateConnectionTracking(isOutlet1Connected, isOutlet2Connected);
@@ -787,6 +1099,23 @@ function selectOptimalState(isOutlet1Connected, isOutlet2Connected, outlet1Deman
 
     // EV connected to outlet 1
     if (isOutlet1Connected && !isOutlet2Connected) {
+        if (expectedMode === 'quintupleCombo' && outlet1Demand > 100) {
+            logger.warn("selectOptimalState: quintupleCombo");
+            if (outlet1Demand <= powerOfModule - POWER_MARGIN) return findStateByAllocation(1, 0);
+            if (outlet1Demand <= powerOfModule * 2 - POWER_MARGIN) return findStateByAllocation(2, 0);
+            if (outlet1Demand <= powerOfModule * 3 - POWER_MARGIN) return findStateByAllocation(3, 0);
+            if (outlet1Demand <= powerOfModule * 4 - POWER_MARGIN) return findStateByAllocation(4, 0);
+            if (outlet1Demand <= powerOfModule * 5 - POWER_MARGIN) return findStateByAllocation(5, 0);
+        }
+
+        if (expectedMode === 'quadrupleCombo' && outlet1Demand > 100) {
+            logger.warn("selectOptimalState: quadrupleCombo");
+            if (outlet1Demand <= powerOfModule - POWER_MARGIN) return findStateByAllocation(1, 0);
+            if (outlet1Demand <= powerOfModule * 2 - POWER_MARGIN) return findStateByAllocation(2, 0);
+            if (outlet1Demand <= powerOfModule * 3 - POWER_MARGIN) return findStateByAllocation(3, 0);
+            if (outlet1Demand <= powerOfModule * 4 - POWER_MARGIN) return findStateByAllocation(4, 0);
+        }
+
         if (expectedMode === 'tripleCombo' && outlet1Demand > 100) {
             logger.warn("selectOptimalState: tripleCombo");
             if (outlet1Demand <= powerOfModule - POWER_MARGIN) return findStateByAllocation(1, 0);
@@ -805,6 +1134,24 @@ function selectOptimalState(isOutlet1Connected, isOutlet2Connected, outlet1Deman
 
     // EV connected to outlet 2
     if (!isOutlet1Connected && isOutlet2Connected) {
+        if (expectedMode === 'quintupleCombo' && outlet2Demand > 100) {
+            logger.warn("selectOptimalState: quintupleCombo");
+            if (outlet2Demand <= powerOfModule - POWER_MARGIN) return findStateByAllocation(0, 1);
+            if (outlet2Demand <= powerOfModule * 2 - POWER_MARGIN) return findStateByAllocation(0, 2);
+            if (outlet2Demand <= powerOfModule * 3 - POWER_MARGIN) return findStateByAllocation(0, 3);
+            if (outlet2Demand <= powerOfModule * 4 - POWER_MARGIN) return findStateByAllocation(0, 4);
+            if (outlet2Demand <= powerOfModule * 5 - POWER_MARGIN) return findStateByAllocation(0, 5);
+        }
+
+
+        if (expectedMode === 'quadrupleCombo' && outlet2Demand > 100) {
+            logger.warn("selectOptimalState: quadrupleCombo");
+            if (outlet2Demand <= powerOfModule - POWER_MARGIN) return findStateByAllocation(0, 1);
+            if (outlet2Demand <= powerOfModule * 2 - POWER_MARGIN) return findStateByAllocation(0, 2);
+            if (outlet2Demand <= powerOfModule * 3 - POWER_MARGIN) return findStateByAllocation(0, 3);
+            if (outlet2Demand <= powerOfModule * 4 - POWER_MARGIN) return findStateByAllocation(0, 4);
+        }
+
         if (expectedMode === 'tripleCombo' && outlet2Demand > 100) {
             logger.warn("selectOptimalState: tripleCombo");
             if (outlet2Demand <= powerOfModule - POWER_MARGIN) return findStateByAllocation(0, 1);
@@ -823,6 +1170,8 @@ function selectOptimalState(isOutlet1Connected, isOutlet2Connected, outlet1Deman
 
     // EV connected to both outlets and demand is balanced (Before Auth)
     if (outlet1Demand === 0 && outlet2Demand === 0) {
+        if (expectedMode === 'quintupleCombo') return DLB_STATES['STATE_8'];
+        if (expectedMode === 'quadrupleCombo') return DLB_STATES['STATE_7'];
         if (expectedMode === 'tripleCombo') return DLB_STATES['STATE_6'];
         if (expectedMode === 'singleCombo') return DLB_STATES['STATE_2'];
         if (expectedMode === 'dualCombo') return DLB_STATES['STATE_5'];
@@ -843,6 +1192,55 @@ function selectOptimalState(isOutlet1Connected, isOutlet2Connected, outlet1Deman
         return findStateByAllocation(1, totalModules - 1);
     }
 
+    // Quintuple Combo Mode Logic
+    if (expectedMode === 'quintupleCombo') {
+        if (outlet1Demand > (powerOfModule * 4 - POWER_MARGIN) && outlet2Demand <= powerOfModule - POWER_MARGIN)
+            return findStateByAllocation(5, 1);
+
+        if (outlet1Demand <= powerOfModule - POWER_MARGIN && outlet2Demand > (powerOfModule * 4 - POWER_MARGIN))
+            return findStateByAllocation(1, 5);
+
+        if ((outlet1Demand > (powerOfModule * 3 - POWER_MARGIN)) && ((outlet2Demand <= powerOfModule * 2 - POWER_MARGIN) && outlet2Demand > powerOfModule - POWER_MARGIN))
+            return findStateByAllocation(4, 2);
+
+        if ((outlet2Demand > (powerOfModule * 3 - POWER_MARGIN)) && ((outlet1Demand <= powerOfModule * 2 - POWER_MARGIN) && outlet1Demand > powerOfModule - POWER_MARGIN))
+            return findStateByAllocation(2, 4);
+
+        if (outlet1Demand > (powerOfModule * 3 - POWER_MARGIN) && outlet2Demand <= powerOfModule - POWER_MARGIN)
+            return findStateByAllocation(4, 1);
+
+        if (outlet1Demand <= powerOfModule - POWER_MARGIN && outlet2Demand > (powerOfModule * 3 - POWER_MARGIN))
+            return findStateByAllocation(1, 4);
+
+        if ((outlet1Demand <= (powerOfModule * 3 - POWER_MARGIN) && outlet1Demand > (powerOfModule * 2 - POWER_MARGIN)) && ((outlet2Demand <= powerOfModule * 2 - POWER_MARGIN) && outlet2Demand > powerOfModule - POWER_MARGIN))
+            return findStateByAllocation(3, 2);
+
+        if ((outlet2Demand <= (powerOfModule * 3 - POWER_MARGIN) && outlet2Demand > (powerOfModule * 2 - POWER_MARGIN)) && ((outlet1Demand <= powerOfModule * 2 - POWER_MARGIN) && outlet1Demand > powerOfModule - POWER_MARGIN))
+            return findStateByAllocation(2, 3);
+
+        if (outlet1Demand > (powerOfModule * 2 - POWER_MARGIN) && outlet2Demand <= powerOfModule - POWER_MARGIN)
+            return findStateByAllocation(3, 1);
+
+        if (outlet1Demand <= powerOfModule - POWER_MARGIN && outlet2Demand > (powerOfModule * 2 - POWER_MARGIN))
+            return findStateByAllocation(1, 3);
+
+        if ((outlet1Demand <= (powerOfModule * 2 - POWER_MARGIN) && outlet1Demand > (powerOfModule - POWER_MARGIN)) && ((outlet2Demand <= powerOfModule * 2 - POWER_MARGIN) && outlet2Demand > powerOfModule - POWER_MARGIN))
+            return findStateByAllocation(2, 2);
+
+        if (outlet1Demand > (powerOfModule - POWER_MARGIN) && outlet2Demand <= powerOfModule - POWER_MARGIN)
+            return findStateByAllocation(2, 1);
+
+        if (outlet1Demand <= powerOfModule - POWER_MARGIN && outlet2Demand > (powerOfModule - POWER_MARGIN))
+            return findStateByAllocation(1, 2);
+
+        if (outlet1Demand <= powerOfModule - POWER_MARGIN && outlet2Demand <= powerOfModule - POWER_MARGIN)
+            return DLB_STATES['STATE_8'];
+
+        return findStateByAllocation(3, 3);
+
+
+    }
+
     // Triple Combo Mode Logic
     if (expectedMode === 'tripleCombo') {
         if (outlet1Demand > (powerOfModule * 2 - POWER_MARGIN) && outlet2Demand <= powerOfModule - POWER_MARGIN)
@@ -861,6 +1259,48 @@ function selectOptimalState(isOutlet1Connected, isOutlet2Connected, outlet1Deman
             return findStateByAllocation(1, 2);
 
         return findStateByAllocation(2, 2);
+    }
+
+    // Quadruple Combo Mode Logic (5 modules - ODD, needs priority!)
+    if (expectedMode === 'quadrupleCombo') {
+        if (outlet1Demand > (powerOfModule * 3 - POWER_MARGIN) && outlet2Demand <= powerOfModule - POWER_MARGIN)
+            return findStateByAllocation(4, 1);
+
+        if (outlet1Demand <= powerOfModule - POWER_MARGIN && outlet2Demand > (powerOfModule * 3 - POWER_MARGIN))
+            return findStateByAllocation(1, 4);
+
+        if (outlet1Demand > (powerOfModule * 2 - POWER_MARGIN) && outlet2Demand <= powerOfModule - POWER_MARGIN)
+            return findStateByAllocation(3, 1);
+
+        if (outlet1Demand <= powerOfModule - POWER_MARGIN && outlet2Demand > (powerOfModule * 2 - POWER_MARGIN))
+            return findStateByAllocation(1, 3);
+
+        if (outlet1Demand > (powerOfModule - POWER_MARGIN) && outlet2Demand <= powerOfModule - POWER_MARGIN)
+            return findStateByAllocation(2, 1);
+
+        if (outlet1Demand <= powerOfModule - POWER_MARGIN && outlet2Demand > (powerOfModule - POWER_MARGIN))
+            return findStateByAllocation(1, 2);
+
+        if ((outlet1Demand <= (powerOfModule * 2 - POWER_MARGIN) && outlet1Demand > (powerOfModule - POWER_MARGIN)) && ((outlet2Demand <= powerOfModule * 2 - POWER_MARGIN) && outlet2Demand > powerOfModule - POWER_MARGIN))
+            return findStateByAllocation(2, 2);
+
+        if ((outlet1Demand > (powerOfModule * 2 - POWER_MARGIN)) && (outlet2Demand > powerOfModule * 2 - POWER_MARGIN))
+            if (priorityOutlet === 'outlet1') {
+                return findStateByAllocation(3, 2);
+            }
+            else {
+                return findStateByAllocation(2, 3);
+            }
+
+        if (outlet1Demand > (powerOfModule * 2 - POWER_MARGIN) && outlet2Demand > powerOfModule - POWER_MARGIN)
+            return findStateByAllocation(3, 2);
+
+        if (outlet2Demand > (powerOfModule * 2 - POWER_MARGIN) && outlet1Demand > powerOfModule - POWER_MARGIN)
+            return findStateByAllocation(2, 3);
+
+
+        // Fallback: No priority set, default to 1+1 minimum
+        return DLB_STATES['STATE_7'];
     }
 
     // Dual Combo Mode Logic
@@ -939,9 +1379,9 @@ function findStateByAllocationWithPriority(outlet1Modules, outlet2Modules, prior
     if (!priorityOutlet || (outlet1Modules + outlet2Modules) % 2 === 0) {
         return findStateByAllocation(outlet1Modules, outlet2Modules);
     }
-    
+
     const totalModules = outlet1Modules + outlet2Modules;
-    
+
     // For odd module counts with both guns connected, ensure priority gun gets extra module
     // and second gun gets at least 1 module
     if (totalModules % 2 === 1 && outlet1Modules > 0 && outlet2Modules > 0) {
@@ -957,7 +1397,7 @@ function findStateByAllocationWithPriority(outlet1Modules, outlet2Modules, prior
             return findStateByAllocation(minOutlet1Modules, remainingForOutlet2);
         }
     }
-    
+
     // Default to normal allocation if no special priority handling needed
     return findStateByAllocation(outlet1Modules, outlet2Modules);
 }
@@ -1015,31 +1455,50 @@ function findClosestState(targetOutlet1Modules, targetOutlet2Modules) {
  */
 const getCurrentDlbStateFromApi = async () => {
     try {
-        // Get state from both controllers to ensure consistency
-        const data1 = await api.getIOmapper(1);
-        const data2 = await api.getIOmapper(2);
+        const isNoCombo = expectedMode === 'noCombo';
 
-        const currentStateName1 = data1["dlb.current_state"];
-        const currentStateName2 = data2["dlb.current_state"];
+        if (isNoCombo) {
+            // noCombo: Only get from controller 1
+            const data1 = await api.getIOmapper(1);
+            const currentStateName = data1["dlb.current_state"];
 
-        // For logging purposes
-        if (currentStateName1 !== currentStateName2) {
-            logger.info(`Warning: Controllers report different states: Controller 1: ${currentStateName1}, Controller 2: ${currentStateName2}`);
-        }
-
-        // Use controller 1's state as the source of truth (or choose controller 2 if preferred)
-        const currentStateName = currentStateName1 || currentStateName2;
-
-        // Find the matching state object
-        for (const [key, state] of Object.entries(DLB_STATES)) {
-            if (state.name === currentStateName) {
-                return state;
+            // Find the matching state object
+            for (const [key, state] of Object.entries(DLB_STATES)) {
+                if (state.name === currentStateName) {
+                    return state;
+                }
             }
-        }
 
-        // If no match found, return STATE_0 as default
-        logger.warn(`Unknown state name from API: ${currentStateName}, defaulting to STATE_0`);
-        return DLB_STATES.STATE_0;
+            // If no match found, return STATE_0 as default
+            logger.warn(`Unknown state name from API: ${currentStateName}, defaulting to STATE_0`);
+            return DLB_STATES.STATE_0;
+        } else {
+            // Dual-outlet: Get state from both controllers to ensure consistency
+            const data1 = await api.getIOmapper(1);
+            const data2 = await api.getIOmapper(2);
+
+            const currentStateName1 = data1["dlb.current_state"];
+            const currentStateName2 = data2["dlb.current_state"];
+
+            // For logging purposes
+            if (currentStateName1 !== currentStateName2) {
+                logger.info(`Warning: Controllers report different states: Controller 1: ${currentStateName1}, Controller 2: ${currentStateName2}`);
+            }
+
+            // Use controller 1's state as the source of truth (or choose controller 2 if preferred)
+            const currentStateName = currentStateName1 || currentStateName2;
+
+            // Find the matching state object
+            for (const [key, state] of Object.entries(DLB_STATES)) {
+                if (state.name === currentStateName) {
+                    return state;
+                }
+            }
+
+            // If no match found, return STATE_0 as default
+            logger.warn(`Unknown state name from API: ${currentStateName}, defaulting to STATE_0`);
+            return DLB_STATES.STATE_0;
+        }
     } catch (error) {
         logger.error('Error getting current DLB state from API:', error, 'Falling back to STATE_0');
         // Fallback to STATE_0 if API call fails
@@ -1050,13 +1509,13 @@ const getCurrentDlbStateFromApi = async () => {
 /**
  * Gets the current module allocation from outlet states
  * @param {Object} outlet1State - State data for outlet 1
- * @param {Object} outlet2State - State data for outlet 2
+ * @param {Object} outlet2State - State data for outlet 2 (can be null for noCombo)
  * @returns {Object} - Current module allocation
  */
 const getCurrentModuleAllocation = (outlet1State, outlet2State) => {
     return {
         outlet1: outlet1State.ActiveConverterModules || '',
-        outlet2: outlet2State.ActiveConverterModules || ''
+        outlet2: outlet2State.ActiveConverterModules || ''  // Optional chaining for noCombo
     };
 };
 
@@ -1069,15 +1528,15 @@ const getTargetModuleAllocation = (targetState) => {
     if (!targetState || !targetState.allocation) {
         return { outlet1: [], outlet2: [] };
     }
-    
+
     // Convert string allocations to arrays
-    const outlet1Modules = targetState.allocation.outlet1 
+    const outlet1Modules = targetState.allocation.outlet1
         ? targetState.allocation.outlet1.split(',').map(m => m.trim()).filter(m => m !== '')
         : [];
-    const outlet2Modules = targetState.allocation.outlet2 
+    const outlet2Modules = targetState.allocation.outlet2
         ? targetState.allocation.outlet2.split(',').map(m => m.trim()).filter(m => m !== '')
         : [];
-    
+
     return { outlet1: outlet1Modules, outlet2: outlet2Modules };
 };
 
@@ -1101,16 +1560,16 @@ const calculatePowerDemand = (outletState) => {
  */
 const isEvConnected = (outletData) => {
     const isneedunplug = isNeedUnplug(outletData);
-    return outletData.pilot >= 1 && !isneedunplug
+    return outletData.pilot >= 1 && outletData.pilot <= 4 && !isneedunplug
 };
 
 const isNeedUnplug = (outletState) => {
-  if (!outletState) return false;
+    if (!outletState) return false;
 
-  return (
-    (outletState.needsUnplug && !outletState.sessionPending) ||
-    (outletState.pilot === 2 && outletState.phs === 7 && outletState.auth && !outletState.sessionPending)
-  );
+    return (
+        (outletState.needsUnplug && !outletState.sessionPending) ||
+        (outletState.pilot === 2 && outletState.phs === 8 && outletState.auth && !outletState.sessionPending)
+    );
 };
 
 
@@ -1144,33 +1603,42 @@ const applySafetyPowerLimit = async ({ isOutlet1Connected, isOutlet2Connected })
 
 /**
  * Checks and sets the DLB mode on both controllers if needed
- * @returns {Promise<boolean>} - Returns true if mode was set correctly
+ * @returns {Promise<Object>} - Returns object with modeSetSuccessfully and expectedMode
  */
 const checkAndSetDlbMode = async () => {
     try {
-        // Get current mode from both controllers
-        const [mode1, mode2] = await Promise.all([
-            api.getDlbMode(1),
-            api.getDlbMode(2)
-        ]);
+        // Detect charger type first
+        const isNoCombo = await isNoComboCharger();
 
-        const dlbModeInUserConfig = await api.getDLBModeFromBothConfigs()
+        // Get current mode from controller(s)
+        let mode1, mode2;
+        if (isNoCombo) {
+            mode1 = await api.getDlbMode(1);
+            mode2 = mode1;  // Pretend controller 2 has same mode for noCombo
+        } else {
+            [mode1, mode2] = await Promise.all([
+                api.getDlbMode(1),
+                api.getDlbMode(2)
+            ]);
+        }
+
+        const dlbModeInUserConfig = await api.getDLBModeFromBothConfigs(isNoCombo);
 
         expectedMode = dlbModeInUserConfig != null ? dlbModeInUserConfig : config.mode;
         logger.debug(`Current DLB modes - Controller 1: ${mode1}, Controller 2: ${mode2}, Expected: ${expectedMode}`);
 
         // Check if modes match expected configuration
         const needsUpdate1 = mode1 !== expectedMode;
-        const needsUpdate2 = mode2 !== expectedMode;
+        const needsUpdate2 = !isNoCombo && mode2 !== expectedMode;
 
         if (needsUpdate1 || needsUpdate2) {
             logger.info(`DLB mode mismatch detected. Setting mode to: ${expectedMode}`);
-            
+
             const updatePromises = [];
             if (needsUpdate1) {
                 updatePromises.push(api.setDlbMode(1, expectedMode));
             }
-            if (needsUpdate2) {
+            if (needsUpdate2 && !isNoCombo) {
                 updatePromises.push(api.setDlbMode(2, expectedMode));
             }
 
@@ -1180,10 +1648,10 @@ const checkAndSetDlbMode = async () => {
         } else {
             logger.debug(`DLB mode is correctly set to: ${expectedMode}`);
         }
-        return {modeSetSuccessfully:true, expectedMode};
+        return { modeSetSuccessfully: true, expectedMode };
     } catch (error) {
         logger.error('Failed to check/set DLB mode:', error);
-        return {modeSetSuccessfully:true, expectedMode};
+        return { modeSetSuccessfully: true, expectedMode };
     }
 };
 
@@ -1193,10 +1661,16 @@ const checkAndSetDlbMode = async () => {
  * @returns {Promise<void>} - Resolves once both controllers have been updated
  */
 const updateControllerDLBStates = async (targetState) => {
-    await Promise.all([
-        api.postDlbSwitch(1, targetState),
-        api.postDlbSwitch(2, targetState)
-    ]);
+    const isNoCombo = expectedMode === 'noCombo';
+
+    if (isNoCombo) {
+        await api.postDlbSwitch(1, targetState);
+    } else {
+        await Promise.all([
+            api.postDlbSwitch(1, targetState),
+            api.postDlbSwitch(2, targetState)
+        ]);
+    }
     logger.debug(`Controllers updated to state: ${targetState.name}`);
     await wait(1000); // Wait for state change to take effect
 };
@@ -1271,7 +1745,7 @@ const determineModuleChanges = (currentState, targetState) => {
 const updateModuleAllocations = async (moduleChanges) => {
     // First update outlets that are LOSING modules to free them up
     const updatePromises = [];
-    
+
     logger.warn(`moduleChanges: ${JSON.stringify(moduleChanges)}`);
 
     // Handle outlet 1 first if it's losing modules
@@ -1354,23 +1828,27 @@ const updateFinalPowerCaps = async ({ calculatedPowerCap1, calculatedPowerCap2 }
  */
 const handleAssignments = async () => {
     try {
+        const isNoCombo = expectedMode === 'noCombo';
+
         const outletStates = await api.getState();
-        if (outletStates.length !== 2) {
-            logger.error('Invalid number of outlets:', outletStates.length);
+        const expectedOutlets = isNoCombo ? 1 : 2;
+        if (outletStates.length !== expectedOutlets) {
+            logger.error(`Invalid number of outlets for ${expectedMode}:`, outletStates.length);
             return;
         }
 
-        const [outlet1State, outlet2State] = outletStates;
+        const outlet1State = outletStates[0];
+        const outlet2State = isNoCombo ? null : outletStates[1];
         const outlet1Demand = calculatePowerDemand(outlet1State);
-        const outlet2Demand = calculatePowerDemand(outlet2State);
+        const outlet2Demand = isNoCombo ? 0 : calculatePowerDemand(outlet2State);
         const isOutlet1Connected = isEvConnected(outlet1State);
-        const isOutlet2Connected = isEvConnected(outlet2State);
-        
+        const isOutlet2Connected = isNoCombo ? false : isEvConnected(outlet2State);
+
         // Initialize hysteresis tracker/state and config (persists across calls via function property)
         const HYSTERESIS_CONFIG = handleAssignments.hysteresisConfig || {
             ENABLED: true,
             minSustainMs: 6000,         // time-based hysteresis threshold
-            minConsecutive: 5,          // count-based hysteresis threshold
+            minConsecutive: 15,          // count-based hysteresis threshold
             bypassWhenNoEvConnected: true
         };
         handleAssignments.hysteresisConfig = HYSTERESIS_CONFIG;
@@ -1410,7 +1888,7 @@ const handleAssignments = async () => {
             }
             return shouldApply;
         };
-        
+
         // Bootstrap config and per-cycle bypass flag
         const BOOTSTRAP_CONFIG = handleAssignments.bootstrapConfig || {
             ENABLED: true,
@@ -1418,7 +1896,7 @@ const handleAssignments = async () => {
         };
         handleAssignments.bootstrapConfig = BOOTSTRAP_CONFIG;
         handleAssignments.bootstrapBypassThisCycle = false;
-        
+
         // Update connection tracking for priority determination
         updateConnectionTracking(isOutlet1Connected, isOutlet2Connected);
 
@@ -1430,7 +1908,7 @@ const handleAssignments = async () => {
 
         const { limits, CPMaxProfileLimit } = await api.fetchSmartChargingLimits();
         const outlet1LimitRaw = (limits && limits.find(l => l.outlet == "1") && limits.find(l => l.outlet == "1").limit) || null;
-        const outlet2LimitRaw = (limits && limits.find(l => l.outlet == "2") && limits.find(l => l.outlet == "2").limit) || null;
+        const outlet2LimitRaw = isNoCombo ? null : (limits && limits.find(l => l.outlet == "2") && limits.find(l => l.outlet == "2").limit) || null;
 
         logger.info(`Demands: [O1=${outlet1Demand}W, O2=${outlet2Demand}W], Connected: [O1=${isOutlet1Connected}, O2=${isOutlet2Connected}]`);
 
@@ -1444,7 +1922,7 @@ const handleAssignments = async () => {
         const moduleCount = totalModules
         const powerPerModule = config.MAX_POWER_PER_MODULE
         const effectivePowerPerModule = Math.floor(effectiveMaxTotalPower / moduleCount)
-        
+
         // Get target state to determine actual module allocation
         let targetState = selectOptimalState(isOutlet1Connected, isOutlet2Connected, outlet1Demand, outlet2Demand, effectivePowerPerModule);
         let targetAllocation = getTargetModuleAllocation(targetState);
@@ -1452,7 +1930,7 @@ const handleAssignments = async () => {
         // Bootstrap: if a newly connected outlet has zero modules in desired state, force 1 module to that outlet for handshake
         const o1BootstrapActive = BOOTSTRAP_CONFIG.ENABLED && isOutlet1Connected && connectionTracker.outlet1.connectionTime;
         const o2BootstrapActive = BOOTSTRAP_CONFIG.ENABLED && isOutlet2Connected && connectionTracker.outlet2.connectionTime;
-        
+
         if (o1BootstrapActive || o2BootstrapActive) {
             const priorityOutlet = getPriorityOutlet();
             if (o1BootstrapActive && targetAllocation.outlet1.length === 0) {
@@ -1486,11 +1964,11 @@ const handleAssignments = async () => {
             // Calculate power based on actual module allocation
             const outlet1ModuleCount = targetAllocation.outlet1.length;
             const outlet2ModuleCount = targetAllocation.outlet2.length;
-            
+
             // Base power allocation from modules
             const basePowerCap1 = outlet1ModuleCount * effectivePowerPerModule;
             const basePowerCap2 = outlet2ModuleCount * effectivePowerPerModule;
-            
+
             // Apply smart charging limits and other constraints
             calculatedPowerCap1 = Math.min(
                 outlet1LimitRaw || Infinity,
@@ -1513,10 +1991,10 @@ const handleAssignments = async () => {
             }
 
             logger.info(`Module-based allocation: O1=${outlet1ModuleCount} modules (${basePowerCap1}W), O2=${outlet2ModuleCount} modules (${basePowerCap2}W)`);
-            
+
         } else if (isOutlet1Connected) {
             const basePowerCap1 = effectiveMaxTotalPower;
-            
+
             calculatedPowerCap1 = Math.min(
                 outlet1LimitRaw || Infinity,
                 basePowerCap1,
@@ -1530,7 +2008,7 @@ const handleAssignments = async () => {
 
         } else if (isOutlet2Connected) {
             const basePowerCap2 = effectiveMaxTotalPower;
-            
+
             calculatedPowerCap2 = Math.min(
                 outlet2LimitRaw || Infinity,
                 basePowerCap2,
@@ -1549,20 +2027,35 @@ const handleAssignments = async () => {
             calculatedPowerCap2 = CPMaxProfileLimit !== null && CPMaxProfileLimit !== undefined ? effectiveMaxTotalPower : maxTotalPower;
         }
 
+        if (isOutlet1Connected || isOutlet2Connected) {
+            const ioState = await api.getIOState();
+            if (ioState) {
+                const thermalCaps = applyThermalPowerCap(
+                    outlet1State,
+                    outlet2State,
+                    { cap1: calculatedPowerCap1, cap2: calculatedPowerCap2 },
+                    ioState,
+                    isNoCombo
+                );
+                calculatedPowerCap1 = thermalCaps.cap1;
+                calculatedPowerCap2 = thermalCaps.cap2;
+            }
+        }
+
         logger.info(`Final PowerCaps: O1=${calculatedPowerCap1}W, O2=${calculatedPowerCap2}W (Modules=${moduleCount}, Power/Module=${powerPerModule}W), Effective Power/Module=${effectivePowerPerModule}W)`);
-        
+
         // STEP 4: Apply state change only if needed
         const currentIOState = await getCurrentDlbStateFromApi();
         // Reuse the targetState already calculated above
 
-        if(handleAssignments.bootstrapBypassThisCycle) {
+        if (handleAssignments.bootstrapBypassThisCycle) {
             logger.info("ByPAssed Hysteris will gun connection")
         }
-        
+
         const needsUpdate = handleAssignments.bootstrapBypassThisCycle ? (currentIOState.name !== targetState.name) : shouldApplyStateChange(currentIOState.name, targetState.name, isOutlet1Connected, isOutlet2Connected);
         // const needsUpdate = shouldApplyStateChange(currentIOState.name, targetState.name, isOutlet1Connected, isOutlet2Connected);
 
-        const powerCapChanged = (outlet1State.PowerCapW !== calculatedPowerCap1) || (outlet2State.PowerCapW !== calculatedPowerCap2);
+        const powerCapChanged = (outlet1State.PowerCapW !== calculatedPowerCap1) || (outlet2State && outlet2State.PowerCapW !== calculatedPowerCap2);
 
         if (needsUpdate) {
             logger.info(`State change: ${currentIOState.name} → ${targetState.name}`);
@@ -1573,6 +2066,10 @@ const handleAssignments = async () => {
                 { name: currentIOState.name, allocation: getCurrentModuleAllocation(outlet1State, outlet2State) },
                 targetState
             );
+
+            logger.info(`waiting for 0.5 sec before module allocation`);
+
+            await wait(500)
 
             await updateModuleAllocations(moduleChanges);
 
@@ -1615,7 +2112,7 @@ async function setModuleRating() {
 
         // Safely check nested properties
         if (data && data.ccs && data.ccs.intcc && data.ccs.intcc.power_rating) {
-            if(data.ccs.intcc.power_rating == 30000 || data.ccs.intcc.power_rating == 40000) {
+            if (data.ccs.intcc.power_rating == 30000 || data.ccs.intcc.power_rating == 40000) {
                 config.MAX_POWER_PER_MODULE = data.ccs.intcc.power_rating;
             } else {
                 config.MAX_POWER_PER_MODULE = 30000;
@@ -1639,7 +2136,6 @@ const main = async () => {
     logger.info('Starting main execution');
 
     await setModuleRating()
-    const moduleCountNumber = await api.getModuleCountFromBothConfigs()
 
 
     // Main loop
@@ -1648,7 +2144,7 @@ const main = async () => {
         await setModuleRating()
         const moduleCountNumber = await api.getModuleCountFromBothConfigs()
         logger.info('Checking DLB mode configuration...');
-        const {modeSetSuccessfully, expectedMode} = await checkAndSetDlbMode();
+        const { modeSetSuccessfully, expectedMode } = await checkAndSetDlbMode();
         // Update DLB_STATES dynamically for singleCombo mode based on actual module count
         setDLBStatesForMode(expectedMode, moduleCountNumber);
         logger.info(`DLB_STATES configured for ${expectedMode} mode with ${moduleCountNumber} modules`);

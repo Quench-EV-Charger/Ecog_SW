@@ -155,7 +155,7 @@ function OutletCard({ eachOutlet, status, onStatusChange }) {
                  Date.now() - reAuthTimestampRef.current >= 15000) {
         if (user) {
           console.log(`[ReAuth] Outlet ${eachOutlet.outlet} - pilot=1 for 15s, re-sending auth`);
-          reAuth(config?.API, user, eachOutlet.outlet, config?.comboMode, chargingMode);
+          reAuth(config?.API, user, config?.comboMode, chargingMode);
         }
         reAuthTimestampRef.current = Infinity;
       }

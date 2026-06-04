@@ -221,6 +221,7 @@ class ContextProvider extends Component {
       localStorage.setItem("user", outletStateToSet?.user);
       localStorage.setItem("selectedOutlet", outletStateToSet?.outlet);
       this.setState({ selectedState: outletStateToSet });
+      if (pathname === "/charging") this.setState({ initialDcEnergy: null });
       changePath("/stopping");
     }
     if (pathname === "/stopping" && !inStoppingProccess(selectedState)) {
@@ -252,6 +253,7 @@ class ContextProvider extends Component {
           // deAuthorize(config?.API, selectedState);
         }
       } else if (pathname === "/plugev" || pathname === "/charging") {
+        if (pathname === "/charging") this.setState({ initialDcEnergy: null });
         this.state.changePath("/unplugev");
       }
     } else if (
@@ -270,6 +272,7 @@ class ContextProvider extends Component {
       phs < 3
     ) {
       // Charging interrupted - show session summary popup
+      this.setState({ initialDcEnergy: null });
       this.showSessionSummaryAfterCharging(selectedState, false);
       this.state.changePath("/");
     } else if (pathname === "/plugev" && pilot >= 1 && pilot <= 4 && !auth) {
@@ -377,6 +380,7 @@ class ContextProvider extends Component {
       const { showAlert, showEStop, errorCode } = errorObj || {};
       const needsEStopRouting = showEStop && !this.state.eStopRoutingHandled;
       if (needsEStopRouting) {
+        if (this.props.location.pathname === "/charging") this.setState({ initialDcEnergy: null });
         this.state.changePath("/");
         this.setState({ eStopRoutingHandled: true });
       }
@@ -387,6 +391,7 @@ class ContextProvider extends Component {
       const needsPowerFailureRouting =
         errorCode === "powerloss" && !this.state.powerFailureRoutingHandled;
       if (needsPowerFailureRouting) {
+        if (this.props.location.pathname === "/charging") this.setState({ initialDcEnergy: null });
         this.state.changePath("/");
         this.setState({ powerFailureRoutingHandled: true });
       }

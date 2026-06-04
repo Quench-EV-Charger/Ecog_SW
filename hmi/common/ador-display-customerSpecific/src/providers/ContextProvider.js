@@ -877,8 +877,8 @@ class ContextProvider extends Component {
     const ocppOnline = await fetch(endpoint)
       .then((response) => response.json())
       .then((data) => {
-        console.log(`[NetworkCheck] OCPP status response:`, data?.connectionStatus);
-        return data?.connectionStatus === "connected";
+        console.log(`[NetworkCheck] OCPP status response:`, data?.bootNotificationStatus);
+        return data?.bootNotificationStatus === "accepted";
       })
       .catch((error) => {
         console.log(`[NetworkCheck] OCPP status check failed — endpoint: ${endpoint}`, error?.message);

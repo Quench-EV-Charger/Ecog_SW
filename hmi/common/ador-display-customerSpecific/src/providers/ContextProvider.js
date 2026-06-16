@@ -221,7 +221,7 @@ class ContextProvider extends Component {
       localStorage.setItem("user", outletStateToSet?.user);
       localStorage.setItem("selectedOutlet", outletStateToSet?.outlet);
       this.setState({ selectedState: outletStateToSet });
-      if (pathname === "/charging") this.setState({ initialDcEnergy: null });
+      this.setState({ initialDcEnergy: null });
       changePath("/stopping");
     }
     if (pathname === "/stopping" && !inStoppingProccess(selectedState)) {
@@ -750,6 +750,20 @@ class ContextProvider extends Component {
         // Gun not plugged, user is at valid screen, and no error exists - show remote start popup
         console.log("Remote start detected - showing popup for outlet:", nowAuthenticatedOne.outlet);
         this.showRemoteStartPopup(nowAuthenticatedOne.outlet);
+      }
+    }
+
+    // Capture initialDcEnergy the moment the selected gun transitions to phs === 7 (charging)
+    const selectedOutlet = this.state.selectedState?.outlet;
+    if (selectedOutlet !== undefined && Array.isArray(prevState.chargerState) && Array.isArray(chargerState)) {
+      const prevOutletState = prevState.chargerState.find(s => s.outlet == selectedOutlet);
+      const currOutletState = chargerState.find(s => s.outlet == selectedOutlet);
+      if (
+        prevOutletState?.phs !== 7 &&
+        currOutletState?.phs === 7 &&
+        currOutletState?.dc_meter?.total_import_device_energy !== undefined
+      ) {
+        this.setState({ initialDcEnergy: currOutletState.dc_meter.total_import_device_energy });
       }
     }
 
@@ -1488,6 +1502,7 @@ class ContextProvider extends Component {
     this.setState({
       sessionSummaryPopupShown: true,
       sessionSummaryData: popupLoadingData,
+      initialDcEnergy: null,
     });
 
     // Wait 8 seconds for DB to populate and errorObj to update
@@ -1601,6 +1616,7 @@ class ContextProvider extends Component {
       sessionSummaryPopupShown: true,
       sessionSummaryPopupShownForCurrentError: true,  // Mark that we've shown it for this error
       sessionSummaryData: popupData,
+      initialDcEnergy: null,
     });
 
     // ⚠️ DO NOT reset sync flag yet - keep it true until error clears from charger state
@@ -1630,6 +1646,7 @@ class ContextProvider extends Component {
     this.setState({
       sessionSummaryPopupShown: true,
       sessionSummaryData: sessionData,
+      initialDcEnergy: null,
     });
   };
 
@@ -1657,6 +1674,7 @@ class ContextProvider extends Component {
     console.log("[SessionSummary] Showing loading popup for normal charging completion");
     this.setState({
       sessionSummaryPopupShown: true,
+      initialDcEnergy: null,
       sessionSummaryData: {
         mode: "loading",
         sessions: [],
@@ -1717,6 +1735,7 @@ class ContextProvider extends Component {
     this.setState({
       sessionSummaryPopupShown: true,
       sessionSummaryData: popupData,
+      initialDcEnergy: null,
     });
 
     // Auto-hide after 45 seconds and navigate home

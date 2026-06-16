@@ -193,7 +193,9 @@ function OutletCard({ eachOutlet, status, onStatusChange }) {
     }
 
     if (status === "auth" && pilot === 0) {
-      handleClick("plugev");
+      // gun removed → clear the autocharge-shown flag so next plug shows animation again
+      sessionStorage.removeItem(`autochargeShown_outlet_${eachOutlet.outlet}`);
+      handleClick("initial"); // gun unplugged during auth → back to available screen
     } else if (status === "charging" && pilot === 0) {
       triggerSessionOverlay(eachOutlet);
       handleClick("sessionresult");
@@ -237,7 +239,7 @@ function OutletCard({ eachOutlet, status, onStatusChange }) {
     ) {
       triggerSessionOverlay(eachOutlet);
       handleClick('sessionresult');
-    } else if ((status === "initial" || status === "plugev") && pilot >= 1 && pilot <= 4 && !auth) {
+    } else if (status === "initial" && pilot >= 1 && pilot <= 4 && !auth) {
       handleClick("auth");
     } else if (
       status === "checkpoints" &&
@@ -285,7 +287,7 @@ function OutletCard({ eachOutlet, status, onStatusChange }) {
         </div>
       </div>
 
-      <div style={{ position: "relative" }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", position: "relative" }}>
         {status === "initial" && (
           <InitialState eachOutlet={eachOutlet} handleClick={handleClick} chargingStatus={chargingStatus}/>
         )}

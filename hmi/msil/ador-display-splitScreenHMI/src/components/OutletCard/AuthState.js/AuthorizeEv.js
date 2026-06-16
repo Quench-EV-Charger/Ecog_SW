@@ -288,10 +288,17 @@ const AuthorizeEv = ({ status, outlet, handleClick }) => {
     try {
       const chargingStore = store.getState();
       const { config } = chargingStore.charging;
-      const response = await httpGet(`${config.API}/db/config`);
-      setIsAutocharging(response?.autoChargeMode || false);
+      // autoChargeMode lives in /ocpp-client/config, not /db/config
+      const response = await httpGet(`${config.API}/ocpp-client/config`);
+      const isAuto = response?.autoChargeMode || false;
+      console.log("[AutoCharge] autoChargeMode =", isAuto);
+      setIsAutocharging(isAuto);
+      if (isAuto) {
+        // Show the autocharge animation; it will dismiss itself after 10s
+        setAutochargeauth(true);
+      }
     } catch (error) {
-      console.error("Failed to set autocharge:", error);
+      console.error("[AutoCharge] Failed to fetch config:", error);
     }
     setTimeout(() => {
       setIsAutocharging(false);
@@ -306,6 +313,18 @@ const AuthorizeEv = ({ status, outlet, handleClick }) => {
   //     handleClick("checkpoint");
   //   }
   // })
+
+  // Show autocharge animation only ONCE per plug session.
+  // sessionStorage survives component remounts (navigation away & back),
+  // but is cleared explicitly in OutletCard when the gun is unplugged.
+  useEffect(() => {
+    const key = `autochargeShown_outlet_${outlet?.outlet}`;
+    if (!sessionStorage.getItem(key)) {
+      sessionStorage.setItem(key, "true");
+      setAutocharge();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let socketRef;

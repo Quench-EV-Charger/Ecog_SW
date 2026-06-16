@@ -143,8 +143,11 @@ function InitialState(props) {
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        marginTop: "40px",
+        justifyContent: "center",
+        height: "100%",
+        padding: "2vh 0",
         position: "relative",
+        gap: "4vh",
       }}
       onClick={startAndStopButtonClick}
     >
@@ -228,25 +231,26 @@ function InitialState(props) {
         <>
           <span
             style={{
-              fontSize: "40px",
+              fontSize: "clamp(2rem, 4vw, 3rem)",
+              fontWeight: "500",
               color: theme === "dark" ? "white" : "black",
+              textAlign: "center",
             }}
           >
             {chargingStatus === "available" ? "Plug your EV" : "Click to Start"}
           </span>
           <div
             style={{
-              padding: "16px",
               display: "flex",
               justifyContent: "center",
               alignItems: "center",
-              marginBottom: "10px",
+              width: "100%",
             }}
           >
             {showQRCode ? (
               <QRCodeSVG
                 value={hashStr}
-                size={200}
+                size={220}
                 level="H"
                 includeMargin={true}
                 bgColor={theme === "dark" ? "#1e1e1e" : "#ffffff"}
@@ -256,6 +260,8 @@ function InitialState(props) {
               <img
                 style={{
                   width: "55%",
+                  maxWidth: "280px",
+                  height: "auto",
                   opacity: "70%",
                   filter: theme === "dark" ? "invert(0)" : "invert(1)",
                 }}
@@ -267,10 +273,9 @@ function InitialState(props) {
 
           <span
             style={{
-              fontSize: "30px",
+              fontSize: "clamp(1.5rem, 3vw, 2.2rem)",
+              fontWeight: "500",
               color: theme === "dark" ? "white" : "black",
-              position: "relative",
-              bottom: "25px",
             }}
           >
             {eachOutlet.PowerCapW / 1000} kW

@@ -5,9 +5,12 @@ export const boxStyle = (theme) => ({
   boxShadow:
     "0px 10px 25px -5px rgba(0, 0, 0, 0.2), 0px 8px 10px -6px rgba(0, 0, 0, 0.1)",
   borderRadius: "12px",
-  width: "50%", // or whatever fits your layout
-  height: "500px", // optional
+  width: "50%",
+  flex: 1,
+  display: "flex",
+  flexDirection: "column",
   boxSizing: "border-box",
+  overflow: "hidden",
 })
 
 export const gun_icon = {

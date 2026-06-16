@@ -78,7 +78,9 @@ function Dashboard() {
     flexDirection: "row",
     gap: "25px",
     justifyContent: "center",
-    margin: "10px 25px 0 25px",
+    alignItems: "stretch",
+    flex: 1,
+    margin: "10px 25px",
     background:
       theme === "dark"
         ? "linear-gradient(180deg, #000000 25%, #2A2A3A 100%)"
@@ -257,7 +259,9 @@ function Dashboard() {
             ) : (
               <>
                 <Navbar onTabChange={setSelectedTab} isMaintenanceMode={selectedTab === "maintenance"} />
-                {renderContent()}
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                  {renderContent()}
+                </div>
                 <Footer />
                 {chargerState[0] && (
                   <RfidDisconnectedPopup

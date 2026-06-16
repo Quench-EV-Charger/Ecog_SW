@@ -8,7 +8,7 @@ import { setRfidAuthOwner } from "../../../../redux/rfidSlice";
 import { ThemeContext } from "../../../ThemeContext/ThemeProvider";
 import { isHandshaking } from "../../../../Utilis/UtilityFunction";
 
-function Rfid({status, handleClick, eachOutlet }) {
+function Rfid({ status, handleClick, eachOutlet }) {
   const dispatch = useDispatch();
   const charging = useSelector((state) => state.charging);
   const rfidAuthOwner = useSelector((state) => state.rfid.rfidAuthOwner);
@@ -81,12 +81,24 @@ function Rfid({status, handleClick, eachOutlet }) {
 
 
   return (
-    <div style={{ position: "relative" }}>
-      <img src={rfidImg} style={S.rfid_img} alt="Scan RFID" />
+    <div style={{
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      height: "100%",
+      padding: "2vh 8px",
+      gap: "4vh",
+      boxSizing: "border-box",
+    }}>
       <div style={S.rfid_info(theme)}>
-        Swipe your RFID card or click Start Charging on your mobile app to authorize EV
+        Swipe your RFID card or click<br/>
+        "Start Charging" on your mobile app to authorize EV
       </div>
-      <div style={{ position: "absolute", top: "380px" }}>
+      <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", width: "100%" }}>
+        <img src={rfidImg} style={S.rfid_img} alt="Scan RFID" />
+      </div>
+      <div>
         <button
           onClick={() => {
             handleClick("initial");
@@ -97,7 +109,7 @@ function Rfid({status, handleClick, eachOutlet }) {
             padding: "0 18px",
             borderRadius: 40,
             height: 48,
-            fontSize: 16,
+            fontSize: "clamp(1rem, 1.5vw, 1.2rem)",
             boxShadow: "0 0 5px #FFA500",
             color: "#FFA500",
             cursor: "pointer",
@@ -106,6 +118,9 @@ function Rfid({status, handleClick, eachOutlet }) {
             position: "relative",
             overflow: "hidden",
             transition: "all 0.3s ease",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
           }}
           onMouseOver={(e) => {
             e.currentTarget.style.boxShadow = "0 0 1px #FFA500";
@@ -123,10 +138,9 @@ function Rfid({status, handleClick, eachOutlet }) {
               border: "solid #FFA500",
               borderWidth: "0 3px 3px 0",
               padding: 4,
-              marginRight: 8,
             }}
           />Back
-          
+
         </button>
       </div>
     </div>

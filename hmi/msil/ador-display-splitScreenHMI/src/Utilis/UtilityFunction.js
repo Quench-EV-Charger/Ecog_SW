@@ -878,8 +878,10 @@ export const checkOCPPStatus = async () => {
   try {
     const response = await fetch(endpoint);
     const data = await response.json();
-    console.log(`[NetworkCheck] OCPP status response:`, data?.bootNotificationStatus);
-    const ocppOnline = data?.bootNotificationStatus === "accepted";
+    const isConnected = data?.connectionStatus === "connected";
+    const isAccepted = data?.bootNotificationStatus === "accepted";
+    const ocppOnline = isConnected && isAccepted;
+    console.log(`[NetworkCheck] OCPP status response:`, { connectionStatus: data?.connectionStatus, bootNotificationStatus: data?.bootNotificationStatus, ocppOnline });
 
     // Dispatch to Redux store
     store.dispatch(setOCPPOnline(ocppOnline));

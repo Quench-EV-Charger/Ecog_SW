@@ -784,6 +784,7 @@ class ContextProvider extends Component {
       );
       if (!isOutletPreparing(newChangedState)) newChangedState = null;
       if (
+        !this.state.config?.comboMode &&
         newChangedState &&
         (path === "/" ||
           path === "/screensaver" ||

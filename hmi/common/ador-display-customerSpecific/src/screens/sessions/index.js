@@ -442,6 +442,21 @@ class Sessions extends Component {
     clearInterval(this.reservationCheckInterval);
   };
 
+  hasCriticalOverlay = (context) => {
+    return (
+      context.showEStop ||
+      context.showAlert ||
+      context.errorCode ||
+      context.imdFaultyErr ||
+      context.acEnergyMeterFailure ||
+      context.showHandshakeErrorModal ||
+      Boolean(
+        context?.chargerState?.[0]?.errorObj?.imdResistanceErr_1 ||
+        context?.chargerState?.[1]?.errorObj?.imdResistanceErr_2
+      )
+    );
+  };
+
   render() {
     const { faultedOutlets} = this.context;
     const {showReservationPrompt,reservationDetails} = this.state;
@@ -458,7 +473,7 @@ class Sessions extends Component {
                 onClose={this.handleClosePrompt}
               />
             )}
-            {context.shouldDisplay > 0 && isFaultedOutletsEmpty &&(
+            {!this.hasCriticalOverlay(context) && context.shouldDisplay > 0 && isFaultedOutletsEmpty &&(
               <OverlayVCCU 
                 display={true} 
                 ANPR={""} 

@@ -36,7 +36,7 @@ class Transactions extends Component {
 
             const response = await fetch(`${API}/db/items`, requestOptions);
             const data = await response.json();
-            const filteredData = data.filter((transaction) => transaction.connectorID);
+            const filteredData = data.filter((transaction) => transaction.connectorID !== null && transaction.connectorID !== undefined);
             
             filteredData.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 

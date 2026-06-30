@@ -4,7 +4,7 @@
  * Only licensed to be used on/with EcoG OS.
  * Commented source of record: error-reporting_R60.js
  */
-const SCRIPT_VERSION = "1.2.3";
+const SCRIPT_VERSION = "1.2.4";
 
 const errorObjCount = {
   powerLossErr: 0,
@@ -2258,6 +2258,9 @@ const checkErrors = async () => {
                 voltage_L1_L2: 0,
                 voltage_L2_L3: 0,
                 voltage_L3_L1: 0,
+                voltage_L1: 0,
+                voltage_L2: 0,
+                voltage_L3: 0,
                 current_L1: 0,
                 current_L2: 0,
                 current_L3: 0,
@@ -2294,6 +2297,9 @@ const checkErrors = async () => {
                 voltage_L1_L2: iostate["modbus.selec.voltage_L1_L2"],
                 voltage_L2_L3: iostate["modbus.selec.voltage_L3_L2"],
                 voltage_L3_L1: iostate["modbus.selec.voltage_L1_L3"],
+                voltage_L1: iostate["modbus.selec.voltage_L1"],
+                voltage_L2: iostate["modbus.selec.voltage_L2"],
+                voltage_L3: iostate["modbus.selec.voltage_L3"],
                 current_L1: iostate["modbus.selec.current_L1"],
                 current_L2: iostate["modbus.selec.current_L2"],
                 current_L3: iostate["modbus.selec.current_L3"],

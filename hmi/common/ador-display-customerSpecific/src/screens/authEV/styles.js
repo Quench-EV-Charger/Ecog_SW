@@ -42,8 +42,8 @@ export const ContentTextCol = {
   alignItems: "center",
 };
 export const ContentText = {
-  fontSize: "2.66vw",
-  lineHeight: "3.2vw",
+  fontSize: "2.35vw",
+  lineHeight: "2.9vw",
   color: "#373744",
 };
 export const ImgCol = {
@@ -71,9 +71,9 @@ export const FooterTextContainer = {
 };
 
 export const FooterText = {
-  fontSize: "2.1875vw",
+  fontSize: "2vw",
   fontWeight: "700",
-  lineHeight: "3.2vw",
+  lineHeight: "2.9vw",
   color: "#373744",
 };
 

@@ -16,15 +16,12 @@ export default class SessionsFooter extends Component {
   constructor(props) {
     super(props);
     this.state = {
-      qrString: "", // <-- define qrString in state
+      chargerName: "", // <-- define chargerName in state
       config:props.config
     };
   }
 
-  qrPollInterval = null;
-  lastQRHashStr = null;
-
-  fetchQRString = async () => {
+  fetchChargerName = async () => {
     const { config } = this.state;
 
     if (config?.API) {
@@ -32,32 +29,10 @@ export default class SessionsFooter extends Component {
         const response = await fetch(`${config.API}/ocpp-client/config`);
         const data = await response.json();
 
-        // Check if QR string has changed
-        if (this.lastQRHashStr !== data.QRHashStr) {
-          this.lastQRHashStr = data.QRHashStr;
-
-          if (data.QRHashStr && data.QRHashStr.trim()) {
-            // Always get first QR string (in case of comma-separated)
-            const firstQrString = data.QRHashStr.includes(",") 
-              ? data.QRHashStr.split(",")[0].trim() 
-              : data.QRHashStr;
-            
-            // Check if FIRST string has underscore
-            if (firstQrString.includes("_")) {
-              const parts = firstQrString.split("_");
-              const extractedString = parts[parts.length - 1];
-              this.setState({ qrString: extractedString });
-              console.log("[SessionsFooter] QR footer text updated:", extractedString);
-            } else {
-              // First string has no underscore, don't show anything
-              this.setState({ qrString: "" });
-              console.log("[SessionsFooter] QR footer text cleared");
-            }
-          } else {
-            // QR string is empty/cleared
-            this.setState({ qrString: "" });
-            console.log("[SessionsFooter] QR footer text cleared (empty)");
-          }
+        if (data.chargerName && data.chargerName.trim()) {
+          this.setState({ chargerName: data.chargerName.trim() });
+        } else {
+          this.setState({ chargerName: "" });
         }
       } catch (err) {
         console.warn("Failed to fetch QR string:", err);
@@ -66,19 +41,7 @@ export default class SessionsFooter extends Component {
   };
 
   async componentDidMount() {
-    // Initial fetch
-    await this.fetchQRString();
-    
-    // Start polling every 5 seconds
-    this.qrPollInterval = setInterval(() => {
-      this.fetchQRString();
-    }, 5000);
-  }
-
-  componentWillUnmount() {
-    if (this.qrPollInterval) {
-      clearInterval(this.qrPollInterval);
-    }
+    await this.fetchChargerName();
   }
 
   render() {
@@ -96,7 +59,7 @@ export default class SessionsFooter extends Component {
       rfidReaderDisconnectedText, // Text to show if RFID reader is disconnected
     } = this.props;
 
-    const { qrString } = this.state;
+    const { chargerName } = this.state;
 
     // Function to handle click event on the 'Retrieve' button
     // const handleRetrieveClick = () => {
@@ -143,7 +106,7 @@ export default class SessionsFooter extends Component {
         <DateBox color={errorCode ? "white" : "dark"} />
 
         {/* Show QR string fetched from backend */}
-        {qrString && (
+        {chargerName && (
           <div style={{
             margin: 0,
             left: 0,
@@ -155,7 +118,7 @@ export default class SessionsFooter extends Component {
             // textShadow: color === "dark" ? "1px 1px 0 black, -1px -1px 0 black, 1px -1px 0 black, -1px 1px 0 black" : "2px 2px 0 white, -2px -2px 0 white, 2px -2px 0 white, -2px 2px 0 white",
   
           }}>
-            <strong>{qrString}</strong>
+            <strong>{chargerName}</strong>
           </div>
         )}
       </div>

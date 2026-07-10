@@ -1,0 +1,12 @@
+
+config simswitchconfig 'simswitchconfig'
+	option cellulardataswitchlimitenable '0'
+	option sim1datausagelimit '1000'
+	option sim2datausagelimit '1000'
+	option cellulardatausagemanagerperiodicity 'daily'
+	option cellulardataswitchonspeedenable '0'
+	option uploadspeedthreshold '250'
+	option downloadspeedthreshold '250'
+	option speedtestinterval '5'
+	option periodicspeedtestinterval '6'
+	option simswitch 'none'

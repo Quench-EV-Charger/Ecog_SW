@@ -1,0 +1,2 @@
+config general "general"
+    option url 'http://45.118.163.8:3003/'

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Initializing Quench Server...</title>
+    <style>
+        :root {
+            --bg: #0F172A;
+            --surface: #1E293B;
+            --ink: #F8FAFC;
+            --subtext: #94A3B8;
+            --blue: #38BDF8;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg);
+            color: var(--ink);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        /* Pulsing Logo Animation */
+        .loader-container {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 30px;
+        }
+
+        .pulse-ring {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background-color: var(--blue);
+            opacity: 0;
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        .pulse-ring:nth-child(2) {
+            animation-delay: 1s;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(0.5);
+                opacity: 0.8;
+            }
+            100% {
+                transform: scale(1.5);
+                opacity: 0;
+            }
+        }
+
+        .logo-inner {
+            position: relative;
+            z-index: 10;
+            width: 60px;
+            height: 60px;
+            background-color: var(--blue);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.5);
+        }
+
+        /* Lightning Bolt Icon */
+        .logo-inner svg {
+            width: 32px;
+            height: 32px;
+            fill: #0F172A;
+            margin-left: 2px;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin: 0 0 10px 0;
+            letter-spacing: -0.5px;
+        }
+
+        p {
+            font-size: 15px;
+            color: var(--subtext);
+            margin: 0;
+            max-width: 400px;
+            text-align: center;
+            line-height: 1.5;
+        }
+
+        .dots::after {
+            content: '';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: ''; }
+            40% { content: '.'; }
+            60% { content: '..'; }
+            80%, 100% { content: '...'; }
+        }
+    </style>
+</head>
+<body>
+    <div class="loader-container">
+        <div class="pulse-ring"></div>
+        <div class="pulse-ring"></div>
+        <div class="logo-inner">
+            <svg viewBox="0 0 24 24">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+            </svg>
+        </div>
+    </div>
+    
+    <h1>Waking up Quench<span class="dots"></span></h1>
+    <p>Please wait while the local server initializes and pulls the latest cloud configuration. This usually takes 5-10 seconds.</p>
+
+    <script>
+        // Start polling the server
+        let retryCount = 0;
+        const maxRetries = 60; // Wait up to 60 seconds
+
+        function checkServer() {
+            fetch('http://localhost:8000/api/config', { 
+                method: 'GET',
+                mode: 'cors'
+            })
+            .then(response => {
+                if (response.ok) {
+                    // The server is UP! Redirect the user instantly.
+                    window.location.replace('http://localhost:8000');
+                } else {
+                    retry();
+                }
+            })
+            .catch(error => {
+                // Connection refused or server not ready yet.
+                retry();
+            });
+        }
+
+        function retry() {
+            retryCount++;
+            if (retryCount >= maxRetries) {
+                document.querySelector('h1').innerText = "Startup Timeout";
+                document.querySelector('p').innerText = "The server failed to start within 60 seconds. Please check the command prompt window for errors.";
+                document.querySelector('.pulse-ring').style.animation = 'none';
+                document.querySelector('.pulse-ring:nth-child(2)').style.animation = 'none';
+            } else {
+                setTimeout(checkServer, 1000);
+            }
+        }
+
+        // Wait 1 second before first poll to give the bat script time to start Python
+        setTimeout(checkServer, 1000);
+    </script>
+</body>
+</html>

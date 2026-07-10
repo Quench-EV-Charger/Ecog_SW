@@ -1,0 +1,282 @@
+{
+  "ADLB-180": {
+    "secc": {
+      "ccs": {
+        "circuitControl": true,
+        "num_of_modules": 6,
+        "extcc": {
+          "proto": "sim",
+          "ip": "10.20.17.10",
+          "port": 610
+        },
+        "stack": {
+          "evseId": "FR*A23*E45B*69C",
+          "maxKW": 180,
+          "maxA": 400,
+          "combo": {
+            "maxKW": 120,
+            "maxA": 200
+          },
+          "imd": "gongyuan",
+          "powerSaveInIdleMode": true
+        },
+        "intcc": {
+          "conv": "infy",
+          "dcbrk": false,
+          "acbrk": false,
+          "iso": false,
+          "extVolt": "sim"
+        },
+        "dlbMode": "quintupleCombo"
+      },
+      "chademo": {
+        "circuitControl": true,
+        "extcc": {
+          "proto": "sim",
+          "ip": "10.20.17.10",
+          "port": 630
+        },
+        "intcc": {
+          "conv": "sim",
+          "dcbrk": false,
+          "acbrk": false,
+          "iso": false,
+          "extVolt": "sim"
+        },
+        "stack": {
+          "v2h": true,
+          "dyn": true
+        }
+      },
+      "ac": {
+        "circuitControl": true,
+        "extcc": {
+          "proto": "modbus",
+          "ip": "10.20.17.10",
+          "port": 620
+        },
+        "stack": {
+          "lifeBeat": false,
+          "seccLock": true,
+          "relayGpio": 467,
+          "lockCloseGpio": 45,
+          "lockOpenGpio": 44,
+          "lockSense": true,
+          "lockSenseFile": "/sys/bus/iio/devices/iio:device0/in_voltage0_raw",
+          "lockSenseTresh": 2000
+        }
+      }
+    },
+    "seccle": {
+      "ccs": {
+        "circuitControl": true,
+        "num_of_modules": 6,
+        "extcc": {
+          "proto": "sim",
+          "ip": "10.20.17.10",
+          "port": 610
+        },
+        "stack": {
+          "evseId": "FR*A23*E45B*69C",
+          "maxKW": 180,
+          "maxA": 400,
+          "combo": {
+            "maxKW": 120,
+            "maxA": 200
+          },
+          "imd": "gongyuan",
+          "powerSaveInIdleMode": true
+        },
+        "intcc": {
+          "conv": "infy",
+          "dcbrk": false,
+          "acbrk": false,
+          "iso": false,
+          "extVolt": "sim"
+        },
+        "dlbMode": "quintupleCombo"
+      },
+      "chademo": {
+        "circuitControl": true,
+        "extcc": {
+          "proto": "sim",
+          "ip": "10.20.17.10",
+          "port": 630
+        },
+        "intcc": {
+          "conv": "sim",
+          "dcbrk": false,
+          "acbrk": false,
+          "iso": false,
+          "extVolt": "sim"
+        },
+        "stack": {
+          "v2h": true,
+          "dyn": true
+        }
+      },
+      "ac": {
+        "circuitControl": true,
+        "extcc": {
+          "proto": "modbus",
+          "ip": "10.20.17.10",
+          "port": 620
+        },
+        "stack": {
+          "lifeBeat": false,
+          "seccLock": true,
+          "relayGpio": 467,
+          "lockCloseGpio": 45,
+          "lockOpenGpio": 44,
+          "lockSense": true,
+          "lockSenseFile": "/sys/bus/iio/devices/iio:device0/in_voltage0_raw",
+          "lockSenseTresh": 2000
+        }
+      }
+    },
+    "ocpp": {
+      "chargingPointModel": "CLASSIC",
+      "chargingPointVendor": "QUENCH",
+      "chargePointSerialNumber": "60",
+      "routerUrl": "",
+      "OCPPEndpointToBackend": "ws://test-ecog-ocpp.io",
+      "chargerName": "EcoG-Test",
+      "basicAuthentication": false,
+      "basicAuthenticationWithCert": "false",
+      "basicAuthenticationCertPath": "/data/EcoG/openApi/serviceConf/ocpp/certs",
+      "Identity": "user",
+      "AuthorizationKey": "password",
+      "protocol": "ocpp1.6",
+      "meterValuesUnit": "Wh",
+      "forceTransactionMeterUnitWh": false,
+      "stackSelectionEnabled": false,
+      "RFIDEnabled": true,
+      "authAllOutlet": false,
+      "allowLittleEndianIdTag": false,
+      "allCapsIdTag": false,
+      "forceOfflineMode": false,
+      "timeFallbackEnabled": true,
+      "gracefulStopOnHardReset": true,
+      "superFastMode": false,
+      "PreparingStatusDC": false,
+      "customMeasurands": false,
+      "sendEventAsDataTransfer": false,
+      "maxPowerLimitInkW": 180,
+      "maxCurrentLimitInAmps": 500,
+      "powerSaveInIdleMode": true,
+      "useChargerMaxCurrent": false,
+      "autoChargeMode": true,
+      "underVoltageThreshold": 353,
+      "overVoltageThreshold": 477,
+      "emulatedMetering": false,
+      "storeSessionAndEvent": true,
+      "singleTimeStampOnMeterValueMeasurand": false,
+      "OCPPBackendConnectionTimeout": -1,
+      "DTReserveCustomEnabled": true,
+      "reservationAlertLeadTime": 60,
+      "authServiceEnabled": false,
+      "advancedDiagnostics": true,
+      "syncFtpLocation": "",
+      "dataSyncInterval": -1,
+      "storeStopTxData": true,
+      "QRHashStr": "",
+      "acceptRemoteStartOnPreparingOnly": false,
+      "VehicleMacDTStr": false,
+      "HMISettingsSecret": "",
+      "standard": {
+        "StopTxnSampledData": "Energy.Active.Import.Register, SoC",
+        "ConnectionTimeOut": 60,
+        "ClockAlignedDataInterval": 0,
+        "MeterValuesAlignedData": "Energy.Active.Import.Interval",
+        "MeterValuesAlignedDataMaxLength": 25,
+        "AllowOfflineTxForUnknownId": false,
+        "AuthorizationCacheEnabled": false,
+        "AuthorizeRemoteTxRequests": false,
+        "GetConfigurationMaxKeys": 100,
+        "HeartbeatInterval": 300,
+        "LocalAuthListEnabled": true,
+        "LocalAuthorizeOffline": true,
+        "SupportedFeatureProfiles": "Core, FirmwareManagement, LocalAuthListManagement, Reservation, RemoteTrigger, SmartCharging",
+        "LocalAuthListMaxLength": 10000,
+        "SendLocalListMaxLength": 2500,
+        "LocalPreAuthorize": true,
+        "MeterValueSampleInterval": 5,
+        "MinimumStatusDuration": 1,
+        "WebSocketPingInterval": 5,
+        "TransactionMessageAttempts": 5,
+        "TransactionMessageRetryInterval": 20,
+        "MeterValuesSampledData": "Energy.Active.Import.Register, Power.Active.Import, SoC, Current.Import, Voltage, Current.Offered, Power.Active.Import, Temperature, Power.Offered, Energy.Active.Import.Interval",
+        "ChargeProfileMaxStackLevel": 20,
+        "ChargingScheduleAllowedChargingRateUnit": "Power",
+        "ChargingScheduleMaxPeriods": 10,
+        "ConnectorSwitch3to1PhaseSupported": false,
+        "MaxChargingProfilesInstalled": 10,
+        "ReserveConnectorZeroSupported": false,
+        "StopTransactionOnInvalidId": false,
+        "NumberOfConnectors": 2,
+        "ConnectorPhaseRotation": "NotApplicable",
+        "ResetRetries": 4,
+        "StopTransactionOnEVSideDisconnect": true,
+        "StopTxnAlignedData": "Energy.Active.Import.Register, SoC",
+        "UnlockConnectorOnEVSideDisconnect": true,
+        "BasicAuthPassword": "password",
+        "HeartBeatInterval": 30
+      },
+      "state": {
+        "meterValue": "curr_ses_Wh",
+        "firmwareVersion": "version",
+        "identifier": "user",
+        "energyActiveImportRegister": "curr_ses_Wh",
+        "energyActiveImportRegisterAC": "aux/ac_meter"
+      },
+      "dataTransfer": {
+        "VendorsId": [
+          "MSIL"
+        ],
+        "MessagesId": [
+          "AutoStop",
+          "Reservation"
+        ]
+      },
+      "basciAuthenticationCertPath": "/data/EcoG/openApi/serviceConf/root.crt",
+      "vendorsId": []
+    },
+    "router": {
+      "model": "RB44 / Silbo",
+      "lan_ip": "10.20.27.1",
+      "default_ssid_prefix": "AP_",
+      "admin_user": "admin",
+      "admin_password": "admin",
+      "firmware": "1.0.0",
+      "notes": "Default router settings for ADLB-180"
+    },
+    "notes": "Default SECC/SECCLE/OCPP/Router config expectations for ADLB-180"
+  },
+  "EXAMPLE-EDIT": {
+    "secc": {
+      "num_of_modules": 2,
+      "maxKW": 60,
+      "maxA": 200,
+      "dlbMode": "singleCombo"
+    },
+    "seccle": {
+      "num_of_modules": 2,
+      "maxKW": 60,
+      "maxA": 200,
+      "dlbMode": "singleCombo"
+    },
+    "ocpp": {
+      "protocol": "ocpp1.6",
+      "chargingPointVendor": "QUENCH",
+      "chargingPointModel": "EXAMPLE",
+      "maxPowerLimitInkW": 60,
+      "maxCurrentLimitInAmps": 200
+    },
+    "router": {
+      "lan_ip": "192.168.1.1",
+      "admin_user": "admin",
+      "admin_password": "admin"
+    },
+    "notes": "Placeholder config expectations"
+  }
+}

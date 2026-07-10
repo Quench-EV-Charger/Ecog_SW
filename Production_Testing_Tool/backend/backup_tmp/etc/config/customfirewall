@@ -1,0 +1,11 @@
+
+config redirect 'IPCAMERA_LOOPBACK_RULE'
+	option name 'IPCAMERA_LOOPBACK_RULE'
+	option target 'DNAT'
+	option proto 'tcp udp'
+	option dest_ip '1.1.1.1'
+	option dest_port '81'
+	option action 'dnat'
+	option IP '2.2.2.2'
+	option port '81'
+

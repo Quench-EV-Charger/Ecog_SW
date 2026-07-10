@@ -1,0 +1,11 @@
+
+config etherwake 'setup'
+	option pathes '/usr/bin/etherwake /usr/bin/ether-wake'
+	option sudo 'off'
+	option broadcast 'off'
+
+config target 'target1'
+	option mac '11:22:33:44:55:66'
+	option name 'example'
+	option password 'AABBCCDDEEFF'
+	option wakeonboot 'off'

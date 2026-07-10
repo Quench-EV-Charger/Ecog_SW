@@ -1,0 +1,12 @@
+
+config siaserverconfig 'siaserverconfig'
+	option receivernumber '000001'
+	option enablehealthpacketpublish '1'
+	option healthpacketpublishinterval '15'
+	option enablecrcprocessing '1'
+	option siaipaddress '136.232.0.126'
+	option port '5000'
+	option siteid '1'
+	option linenumber '000000'
+	option accountnumber '987987'
+	option serialnum '1'

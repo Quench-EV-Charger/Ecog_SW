@@ -1,0 +1,4 @@
+
+config update 'update1'
+	option ssid 'AP_45C08260039'
+	option passwd 'Ador@2020'

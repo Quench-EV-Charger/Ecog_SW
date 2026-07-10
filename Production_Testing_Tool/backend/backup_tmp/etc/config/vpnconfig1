@@ -1,0 +1,13 @@
+
+config genericconfig 'general'
+	option enablezerotiergeneral '0'
+	option enablewireguardgeneral '0'
+	option enableipsecgeneral '0'
+	option enablepptpgeneral '0'
+	option enableopenvpngeneral '1'
+	option openvpnrunning '1'
+
+config pptp 'pptp'
+	option pptpserver 'PL226.vpnbook.com'
+	option pptpuser 'vpnbook'
+	option pptppassword '4dK5esN'

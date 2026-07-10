@@ -1,0 +1,10 @@
+
+config testapp 'testapp1'
+	option action 'RUN'
+	option inputs '0'
+	option utility 'Run Test App'
+
+config testapp 'testapp2'
+	option action 'SHOW'
+	option inputs '0'
+	option utility 'Show Test Result'

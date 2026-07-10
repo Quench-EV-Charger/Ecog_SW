@@ -1,0 +1,10 @@
+
+config MaintenanceReboot 'event'
+	option SelectReboot 'reboot'
+	option enable '0'
+	option RebootType 'hardware'
+	list Minutes '59'
+	list Hours '22'
+	list DayOfMonth '*'
+	list Month '*'
+	list DayOfWeek '*'

@@ -1,0 +1,3 @@
+
+config block 'block'
+	option config '/tmp/url.txt'

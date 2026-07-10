@@ -1,0 +1,28 @@
+
+config local 'local1'
+	option authentication 'Digest'
+	option date_format '%FT%T%z'
+	option enable '1'
+	option interface 'eth0.5'
+	option logging_level '1'
+	option password 'password'
+	option port '7547'
+	option ubus_socket '/var/run/ubus.sock'
+	option username 'username'
+
+config acs 'acs1'
+	option password 'admin'
+	option periodic_enable '1'
+	option periodic_interval '15'
+	option periodic_time '1970-01-01T14:48:22.143Z'
+	option url 'http://url.com'
+	option username 'admin'
+
+config device 'device1'
+	option hardware_version 'v0'
+	option oui 'D09395'
+	option product_class 'Silbo_RD44-A-EC200A'
+	option manufacturer 'Invendis
+Invendis-Silbo'
+	option serial_number '45C08260039'
+	option software_version '1.17_1.17_RC1'

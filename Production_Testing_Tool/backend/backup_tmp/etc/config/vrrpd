@@ -1,0 +1,4 @@
+
+config genericconfig 'general'
+	option enablevrrpd '0'
+

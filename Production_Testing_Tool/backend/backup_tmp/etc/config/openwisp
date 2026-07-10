@@ -1,0 +1,10 @@
+
+config controller 'http'
+	option interval '120'
+	option verify_ssl '0'
+	option management_interface 'tun0'
+	option merge_config '1'
+	option post_reload_hook '/root/InterfaceManager/script/Post_Back.sh'
+	option url 'https://139.59.65.241'
+	option uuid '4c74b0b893ec456aa6cda0dd82cc4592'
+	option key '40091d3157064e38957c30494af836f1'

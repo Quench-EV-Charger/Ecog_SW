@@ -1,0 +1,5 @@
+
+config generic 'customconfig'
+	option manufacturer_url 'Invendis-Silbo'
+	option manufacturer 'Invendis'
+	option CustomModelname 'Silbo_RD44-A-EC200A'

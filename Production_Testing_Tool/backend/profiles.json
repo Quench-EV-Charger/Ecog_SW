@@ -1,0 +1,38 @@
+[
+  {
+    "profile_id": "ADLB-180",
+    "name": "180 kW ADLB (Mahindra)",
+    "num_modules": "6",
+    "maxKW": "180",
+    "maxA": "500",
+    "dlbMode": "quintupleCombo",
+    "ct_primary_A": "200",
+    "dc_shunt_A": "500",
+    "ocpp_model": "Mahindra",
+    "ocpp_vendor": "QUENCH",
+    "protocol": "ocpp1.6",
+    "num_connectors": "2",
+    "max_power_limit_kw": "confirm vs 180",
+    "max_current_limit_a": "confirm vs 500",
+    "notes": "Verified from PLTP 72115-0000-13-60",
+    "example": false
+  },
+  {
+    "profile_id": "EXAMPLE-EDIT",
+    "name": "EXAMPLE template (edit before use)",
+    "num_modules": "2",
+    "maxKW": "60",
+    "maxA": "200",
+    "dlbMode": "singleCombo",
+    "ct_primary_A": "100",
+    "dc_shunt_A": "300",
+    "ocpp_model": "<model>",
+    "ocpp_vendor": "QUENCH",
+    "protocol": "ocpp1.6",
+    "num_connectors": "1",
+    "max_power_limit_kw": "<set>",
+    "max_current_limit_a": "<set>",
+    "notes": "Placeholder values - replace with the real charger spec",
+    "example": true
+  }
+]

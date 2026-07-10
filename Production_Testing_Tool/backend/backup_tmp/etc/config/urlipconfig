@@ -1,0 +1,10 @@
+
+config Mode 'Mode1'
+	option Accesspolicy 'Blacklist'
+	option EEnable '1'
+
+config urlipconfig 'urlipconfig1'
+	option Accesspolicy 'Blacklist'
+	option EEnable '1'
+	option RS485ConfigSectionName 'example.com'
+	option UrlfilteringSwitch '1'

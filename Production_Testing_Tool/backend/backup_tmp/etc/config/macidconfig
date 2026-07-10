@@ -1,0 +1,7 @@
+
+config macidconfig 'macidconfig1'
+	option Accesspolicy 'Disable'
+	option EEnable '1'
+	option MACID 'e8:6f:38:1a:f2:61'
+	option MACfilteringSwitch '0'
+	option NetworkMode '1'

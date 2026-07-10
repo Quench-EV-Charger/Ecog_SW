@@ -1,0 +1,14 @@
+{
+  "saurabh": {
+    "password": "1111",
+    "role": "superuser"
+  },
+  "visesh": {
+    "password": "1111",
+    "role": "operator"
+  },
+  "operator": {
+    "password": "0000",
+    "role": "operator"
+  }
+}

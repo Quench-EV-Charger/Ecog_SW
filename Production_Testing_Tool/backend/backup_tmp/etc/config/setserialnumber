@@ -1,0 +1,8 @@
+ 
+config setserialnumber 'setserialnumber'
+	option action 'SET'
+	option input1Element 'text'
+	option input1Name '13VXXXXXXXX'
+	option input1Type 'text'
+	option inputs '2'
+	option utility 'Set Serial Number'

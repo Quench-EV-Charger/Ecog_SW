@@ -1,0 +1,11 @@
+
+config mbusd 'mbusd1'
+	option databits '8'
+	option device '/dev/ttyUSB0'
+	option enabled '0'
+	option loglevel '2'
+	option parity 'N'
+	option port '502'
+	option rts '0'
+	option speed '19200'
+	option stopbits '2'

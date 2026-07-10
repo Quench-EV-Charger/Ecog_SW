@@ -1,0 +1,6 @@
+
+config tcpdump 'tcpdump'
+	option tcp_mount '/tmp'
+	option tcp_inout 'inout'
+	option ipaddress 'hostip'
+	option timeout '11'

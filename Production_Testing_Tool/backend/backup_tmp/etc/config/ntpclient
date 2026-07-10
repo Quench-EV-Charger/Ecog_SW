@@ -1,0 +1,22 @@
+
+config ntpserver 'ntpserver1'
+	option hostname '0.openwrt.pool.ntp.org'
+	option port '123'
+
+config ntpserver 'ntpserver2'
+	option hostname '1.openwrt.pool.ntp.org'
+	option port '123'
+
+config ntpserver 'ntpserver3'
+	option hostname '2.openwrt.pool.ntp.org'
+	option port '123'
+
+config ntpserver 'ntpserver4'
+	option hostname '3.openwrt.pool.ntp.org'
+	option port '123'
+
+config ntpdrift 'ntpdrift1'
+	option freq '0'
+
+config ntpclient 'ntpclient1'
+	option interval '180'

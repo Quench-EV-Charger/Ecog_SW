@@ -1,6 +1,6 @@
 """
 ================================================================================
-CMS NOC Integration Script v24 - Multiple Alerts Handling Optimization
+CMS NOC Integration Script v26 - Session Persistence Fix
 ================================================================================
 Modified by: Visesh Chauhan
 Original v3 Date: 16th August 2025
@@ -9,6 +9,8 @@ v7 Update Date: 2nd October 2025 (Dynamic Line Reduction)
 v18 Update Date: 6th October 2025 (Optimized Minimum Line Limit)
 v19 Update Date: 14th January 2026 (WebSocket Reconnection Optimization)
 v24 Update Date: 20th April 2026 (Multiple Alerts Handling Optimization)
+v25 Update Date: 9th June 2026 (Version Bump and Stability)
+v26 Update Date: 16th June 2026 (Session Persistence Fix)
 
 COMPREHENSIVE CHANGE LOG - Version History:
 - v1: Initial Script (cms_script.py) - Basic integration
@@ -18,7 +20,9 @@ COMPREHENSIVE CHANGE LOG - Version History:
 - v7: Dynamic Line Reduction - Adaptive error handling
 - v18: Optimized Minimum Line Limit - Reduced MIN_LOG_LINES
 - v19: WebSocket Reconnection Optimization - Fast reconnection
-- v24: Multiple Alerts Handling Optimization (Current) - Dynamic error array tracking
+- v24: Multiple Alerts Handling Optimization - Dynamic error array tracking
+- v25: Version Bump and Stability - Version string alignment
+- v26: Session Persistence Fix (Current) - Added persistent state storage and single-instance lock
 ================================================================================
 
 VERSION 19 CHANGES (14th January 2026) - WebSocket Reconnection Optimization:
@@ -143,6 +147,37 @@ BACKWARD COMPATIBILITY:
 
 ================================================================================
 
+VERSION 26 CHANGES (16th June 2026) - Session Persistence Fix:
+================================================================================
+
+CRITICAL CHANGES:
+1. **Persistent State Storage (NEW)**
+   - Added `session_state.json` to persist `last_session_state` (`active` and `phs` flags).
+   - Prevents the script from forgetting active sessions across restarts or crashes.
+   - Eliminates duplicate `SESSION_START` and `START_CHARGING` events on boot.
+
+2. **Single-Instance Lock (NEW)**
+   - Added a socket bind lock on `HARDWARE_PORT` (3001) during initialization.
+   - Prevents multiple concurrent instances of `CMS_Script.py` from polling simultaneously.
+   - Eliminates identically-timestamped duplicate events caused by overlapping processes.
+
+================================================================================
+
+VERSION 25 CHANGES (9th June 2026) - Version Bump and Stability:
+================================================================================
+
+CHANGES:
+1. **Version String Alignment**
+   - Updated LogVersion() version string from 'ador-samsung-1-23-v1' to 'ador-samsung-1-25-v1'
+   - Aligns reported version with actual script version on quenchcms.com
+   - Startup banner updated to reflect v25
+
+2. **No Functional Changes**
+   - All polling logic, alert handling, and session detection unchanged
+   - Full backward compatibility maintained
+
+================================================================================
+
 VERSION 18 CHANGES (6th October 2025) - Optimized Minimum Line Limit:
 ================================================================================
 
@@ -170,15 +205,15 @@ TIMING PARAMETERS:
 
 MEMORY AND SIZE LIMITS:
 - MAX_RESPONSE_SIZE: 70 MB (prevent OOM)
-- MAX_STATE_LOG_LINES: 100,000 lines (command-triggered max)
+- MAX_STATE_LOG_LINES: 50,000 lines (command-triggered max)
 - MAX_EVENT_STATE_LOG_LINES: 2,000 lines (event-triggered fixed)
-- MAX_OCPP_LOG_LINES: 100,000 lines (kept in memory)
+- MAX_OCPP_LOG_LINES: 50,000 lines (kept in memory)
 - MAX_OCPP_PROCESS_LINES: 500,000 lines (processing limit)
 - LARGE_FILE_TIMEOUT: 300 seconds (5 minutes)
 
 DYNAMIC LINE REDUCTION (v7 + v18 Enhanced):
-- current_state_log_lines: 100,000 (starts at MAX, adapts down)
-- current_ocpp_log_lines: 100,000 (starts at MAX, adapts down)
+- current_state_log_lines: 50,000 (starts at MAX, adapts down)
+- current_ocpp_log_lines: 50,000 (starts at MAX, adapts down)
 - MIN_LOG_LINES: 10,000 (NEW - reduced from 20,000)
 - LINE_REDUCTION_STEP: 10,000 (reduce/increase by 10k per step)
 - SUCCESS_COUNT_TO_RESET: 3 (consecutive successes before increase)
@@ -433,9 +468,9 @@ and v3 Script (cms_script_v3.py):
 
 5. CONFIGURABLE PARAMETERS (NEW):
    - POLLING_INTERVAL: 60 seconds (configurable)
-   - MAX_STATE_LOG_LINES: 100,000 lines for command-triggered logs
+   - MAX_STATE_LOG_LINES: 50,000 lines for command-triggered logs
    - MAX_EVENT_STATE_LOG_LINES: 1,000 lines for event-triggered logs (user-configurable)
-   - MAX_OCPP_LOG_LINES: 100,000 lines kept in memory
+   - MAX_OCPP_LOG_LINES: 50,000 lines kept in memory
    - MAX_OCPP_PROCESS_LINES: 500,000 lines max processing
    - LARGE_FILE_TIMEOUT: 300 seconds for large payloads
    - MAX_500_ERRORS: 5 consecutive errors before marking CMS disconnected
@@ -603,8 +638,12 @@ except ImportError:
 
 import sys  # For system exit
 
-SERVER_URL = "https://quenchcms.com/"
+SERVER_URL = "https://www.manthanquench.online"
 # SERVER_URL = "http://103.176.134.139:8998/"
+
+# Global variable initialization to satisfy static analysis
+DeviceID = "Unknown"
+DataTosend = {}
 
 # ============================================================================
 # HARDWARE CONNECTION CONFIGURATION - Added 16th August 2025 - Kushagra Mittal
@@ -617,6 +656,8 @@ SERVER_URL = "https://quenchcms.com/"
 HARDWARE_HOST = "10.20.27.50"  # IP address of the real hardware
 HARDWARE_PORT = 3001  # Port for HTTP APIs
 HARDWARE_BASE_URL = f"http://{HARDWARE_HOST}:{HARDWARE_PORT}"
+# Dedicated port for the single-instance lock. Must NOT be the hardware API port.
+SINGLE_INSTANCE_LOCK_PORT = 3999
 # WebSocket config removed - using polling-only architecture
 
 # Option 2: SIMULATOR CONFIGURATION (ACTIVE)
@@ -662,7 +703,7 @@ MAX_RESPONSE_SIZE = 70 * 1024 * 1024  # 70MB limit
 
 # Maximum number of lines to read from state logs
 # Default: 100,000 lines - Reduce for faster processing or limited memory
-MAX_STATE_LOG_LINES = 100000  # Maximum lines for full state logs (command-triggered)
+MAX_STATE_LOG_LINES = 50000  # Maximum lines for full state logs (command-triggered)
 
 # Maximum lines for event-triggered state logs (WebSocket events)
 # Default: 500 lines - Reduced to prevent timeouts in production
@@ -673,7 +714,7 @@ MAX_EVENT_STATE_LOG_LINES = 2000  # User-configurable: lines sent per WebSocket 
 
 # Maximum number of OCPP log lines to keep in memory
 # Default: 60,000 lines - Only the last N lines are sent to server
-MAX_OCPP_LOG_LINES = 100000  # Maximum lines kept for OCPP logs
+MAX_OCPP_LOG_LINES = 50000  # Maximum lines kept for OCPP logs
 
 # Timeout for all CMS API calls (in seconds)
 # Default: 300 seconds (5 minutes) - Maximum wait time for any transfer
@@ -709,10 +750,39 @@ session.mount('https://', requests.adapters.HTTPAdapter(
 
 # Docker/Yocto compatibility: Disable SSL warnings if needed
 try:
-    from requests.packages.urllib3.exceptions import InsecureRequestWarning
-    requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-except:
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+except ImportError:
     pass  # Not critical if this fails
+
+# ============================================================================
+# NOC_URL CONFIG OVERRIDE - Fetch SERVER_URL from hardware config if present
+# Retries for up to 5 minutes to allow hardware services time to start
+# ============================================================================
+_config_url = f"{HARDWARE_BASE_URL}/ocpp-client/config"
+_config_deadline = time.time() + 300  # 5 minutes
+_config_retry_interval = 30           # retry every 30 seconds
+_noc_url_fetched = False
+while time.time() < _config_deadline:
+    try:
+        _config_response = session.get(_config_url, timeout=5)
+        if _config_response.status_code == 200:
+            _config_data = _config_response.json()
+            _noc_url = _config_data.get("NOC_URL")
+            if _noc_url:
+                print(f"[Script] NOC_URL found in config, overriding SERVER_URL: {_noc_url}")
+                SERVER_URL = _noc_url
+            else:
+                print(f"[Script] NOC_URL not set in config, using default SERVER_URL: {SERVER_URL}")
+            _noc_url_fetched = True
+            break
+        else:
+            print(f"[Script] Hardware config returned status {_config_response.status_code}, retrying in {_config_retry_interval}s...")
+    except Exception as _e:
+        print(f"[Script] Hardware config not reachable ({_e}), retrying in {_config_retry_interval}s...")
+    time.sleep(_config_retry_interval)
+if not _noc_url_fetched:
+    print(f"[Script] Hardware config unreachable after 5 minutes, using default SERVER_URL: {SERVER_URL}")
 
 # Thread management (simplified — single polling thread, no WebSocket)
 thread_lock = threading.Lock()
@@ -744,8 +814,8 @@ INTERRUPT_WINDOW = 5  # Time window in seconds for multiple interrupts
 # DYNAMIC LINE LIMIT CONFIGURATION - Adaptive line reduction on errors
 # ============================================================================
 # Dynamic line limits that adjust on error/timeout
-current_state_log_lines = MAX_STATE_LOG_LINES  # Start with max (60,000)
-current_ocpp_log_lines = MAX_OCPP_LOG_LINES    # Start with max (60,000)
+current_state_log_lines = MAX_STATE_LOG_LINES  # Start with max (50,000)
+current_ocpp_log_lines = MAX_OCPP_LOG_LINES    # Start with max (50,000)
 MIN_LOG_LINES = 10000  # Minimum lines to send
 LINE_REDUCTION_STEP = 10000  # Reduce by 10k on each failure
 
@@ -776,6 +846,35 @@ last_session_state = {
     "A": {"active": False, "snapshot": {}, "phs": 0},
     "B": {"active": False, "snapshot": {}, "phs": 0},
 }
+
+SESSION_STATE_FILE = "session_state.json"
+
+def load_session_state():
+    global last_session_state
+    if os.path.exists(SESSION_STATE_FILE):
+        try:
+            with open(SESSION_STATE_FILE, "r") as f:
+                saved_state = json.load(f)
+                for gun in last_session_state.keys():
+                    if gun in saved_state:
+                        last_session_state[gun]["active"] = saved_state[gun].get("active", False)
+                        last_session_state[gun]["phs"] = saved_state[gun].get("phs", 0)
+            print(f"{time.ctime()} [Script] Loaded persistent session state: {last_session_state}")
+        except Exception as e:
+            print(f"{time.ctime()} [Script] Failed to load session state: {e}")
+
+def save_session_state():
+    try:
+        with open(SESSION_STATE_FILE, "w") as f:
+            state_to_save = {
+                gun: {
+                    "active": state["active"],
+                    "phs": state["phs"]
+                } for gun, state in last_session_state.items()
+            }
+            json.dump(state_to_save, f)
+    except Exception as e:
+        print(f"{time.ctime()} [Script] Failed to save session state: {e}")
 
 # Pending events for 3rd poll iteration (ensures fresh data and 2s timestamp gap)
 # Format: {"A": {"snapshot": {...}, "polls_remaining": 3}, "B": None}
@@ -942,7 +1041,7 @@ def LogVersion():
     while True:  # Run forever
         try:
             #DataTosend = {'Name': DeviceID, "Version": 'ador-intel-1-14-v6'}
-            DataTosend = {'Name': DeviceID, "Version": 'ador-samsung-1-23-v1'}
+            DataTosend = {'Name': DeviceID, "Version": 'ador-samsung-1-26-v1'}
             print(f"{time.ctime()} [Script->Server] Logging version to CMS")
             print(f"{time.ctime()} [Script->Server] GET {SERVER_URL}api/charger/LogVersion")
             print(f"{time.ctime()} [Script->Server] Params: {DataTosend}")
@@ -988,9 +1087,9 @@ def check_cms_connectivity():
     try:
         # Try to reach the CMS API with a lightweight request
         print(f"{time.ctime()} [Script->Server] Checking CMS connectivity...")
-        # Use GET request to the base API URL or a health check endpoint
-        test_url = SERVER_URL + "api/charger/LiveFeeds"
-        response = session.head(test_url, timeout=5, allow_redirects=True)
+        # Use GET request to the base server URL (lightweight connectivity check)
+        test_url = SERVER_URL.rstrip('/')
+        response = session.get(test_url, timeout=5, allow_redirects=True)
         
         with cms_lock:
             if response.status_code in [200, 401, 403, 404, 405, 500]:  # Server is reachable (including 500 errors)
@@ -1345,6 +1444,9 @@ def poll_loop():
                     if curr_active:
                         # Only update snapshot when session is active (preserve last active state for stop)
                         last_session_state[gun_label]["snapshot"] = dict(gun_state)
+                
+                # Persist the state across script restarts
+                save_session_state()
             
             # ==========================================
             # LIVEFEEDS (every POLLING_INTERVAL seconds)
@@ -2382,6 +2484,18 @@ def main_loop():
 
 
 if __name__ == "__main__":
+    import socket
+    try:
+        single_instance_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # Bind to a dedicated lock port. If another script is running, it will fail.
+        single_instance_socket.bind(('127.0.0.1', SINGLE_INSTANCE_LOCK_PORT))
+    except socket.error as e:
+        print(f"{time.ctime()} [Script] FATAL: Another instance of CMS_Script is already running on port {SINGLE_INSTANCE_LOCK_PORT}. Exiting.")
+        sys.exit(1)
+
+    # Load persistent session tracking state
+    load_session_state()
+
     # Detect if running in Docker/container environment
     is_docker = os.path.exists('/.dockerenv') or os.path.exists('/run/.containerenv')
     
@@ -2394,7 +2508,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Warning: Could not set signal handlers: {e}")
     
-    print(f"{time.ctime()} [Script] CMS NOC Integration v8 Starting - Polling-Only Architecture")
+    print(f"{time.ctime()} [Script] CMS NOC Integration v26 Starting - Polling-Only Architecture")
     print(f"Configuration:")
     print(f"  - Hardware URL: {HARDWARE_BASE_URL}")
     print(f"  - CMS Server URL: {SERVER_URL}")

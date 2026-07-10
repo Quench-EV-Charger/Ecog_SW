@@ -1,0 +1,12 @@
+
+config redirect 'EWAN5'
+	option name 'EWAN5'
+	option interface_status 'offline'
+	option internet_status 'offline'
+	option trackingstatus 'down'
+
+config redirect 'WIFI_WAN'
+	option name 'WIFI_WAN'
+	option interface_status 'online'
+	option internet_status 'online'
+	option trackingstatus 'active'

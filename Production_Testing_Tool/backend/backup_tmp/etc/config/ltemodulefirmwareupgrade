@@ -1,0 +1,9 @@
+
+config ltemodulefirmwareupgrade 'ltemodulefirmwareupgrade'
+	option Authenable '1'
+	option firmwareversion '1.0'
+	option user 'relysys'
+	option password 'relysyspassword'
+	option url '100.2.4.5'
+	option connectiontimeout '100'
+	option operationtimeout '20'

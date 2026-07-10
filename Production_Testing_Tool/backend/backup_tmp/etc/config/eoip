@@ -1,0 +1,7 @@
+
+config eoip 'eoip1'
+	option dst '192.168.99.100'
+	option dynamic '1'
+	option enabled '0'
+	option idtun '123'
+	option name '0'

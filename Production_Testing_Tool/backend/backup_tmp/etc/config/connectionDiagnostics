@@ -1,0 +1,11 @@
+
+config general 'general'
+	option checkInterval '120'
+	option packetSize '56'
+	option enable '0'
+	option numOfPings '5'
+	option tcpPort '1883'
+	option mqttBroker 'broker.hivemq.com'
+	option enableMqtt '1'
+	option running '0'
+	option mqttTopic '1/connectionDiagnostics'

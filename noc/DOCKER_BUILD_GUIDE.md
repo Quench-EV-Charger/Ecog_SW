@@ -347,14 +347,44 @@ HEALTHCHECK --interval=60s --timeout=30s --start-period=30s --retries=3 \
 
 ## Automated Build Script
 
-Use the provided `build.sh` script:
+Use the provided `build.sh` script to build **both** Samsung (ARM64) and Intel (AMD64) images in parallel and export them as `.tar` files.
+
+### Usage
+
 ```bash
-# Make executable
+# Make executable (first time only)
 chmod +x build.sh
 
-# Run build
-./build.sh
+# Run build — pass a version number
+./build.sh <version>
+
+# Example: build version 26
+./build.sh 26
 ```
+
+### What it produces
+
+For `./build.sh 26`, the script outputs:
+- `ador-samsung-1-26.tar` — ARM64 image (for Samsung hardware)
+- `ador-intel-1-26.tar`   — AMD64 image (for Intel hardware)
+
+Both builds run in parallel. Logs for each are written to `/tmp/build_samsung.log` and `/tmp/build_intel.log` if a build fails.
+
+### Build a single platform separately
+
+If you only need one architecture, run the underlying `docker buildx` command directly:
+
+```bash
+# ARM64 only (Samsung)
+docker buildx build --platform linux/arm64 -f Dockerfile -t ador-samsung-1-26:latest \
+    --output type=docker,dest=ador-samsung-1-26.tar .
+
+# AMD64 only (Intel)
+docker buildx build --platform linux/amd64 -f Dockerfile -t ador-intel-1-26:latest \
+    --output type=docker,dest=ador-intel-1-26.tar .
+```
+
+Replace `26` with your desired version number.
 
 ## Environment Variables
 
